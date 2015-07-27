@@ -56,7 +56,8 @@
    ```
 4. **Download and Customize Solr** (only 4.6.1 is tested, later it will support solr 5.x)
    Solr is available for download [here](https://archive.apache.org/dist/lucene/solr/4.6.1/).
-   After downloading you will need to expand it locally, then update the schema.xml and solrconfig.xml in the conf subdirectory as shown below:
+   After downloading you will need to expand it locally, then update the schema.xml and solrconfig.xml
+   in the conf subdirectory as shown below:
 
    ```
    tar xvzf solr-4.6.1.tgz
@@ -90,24 +91,24 @@
 
     ```
     <requestHandler name="/tag"
-          class="org.opensextant.solrtexttagger.TaggerRequestHandler">
+         class="org.opensextant.solrtexttagger.TaggerRequestHandler">
         <str name="indexedField">descr_tagged</str>
         <str name="storedField">descr_norm</str>
         <bool name="partialMatches">false</bool>
         <int name="valueMaxLen">5000</int>
         <str name="cacheFile">taggerCache.dat</str>
-      </requestHandler>
+     </requestHandler>
       ```
-      Finally, we create a lib directory and copy over the solr-text-tagger-1.3-SNAPSHOT.jar into it.
-      Then go up to the example directory and start Solr. Solr is now listening on port 8983 on localhost.
+     Finally, we create a lib directory and copy over the solr-text-tagger-1.3-SNAPSHOT.jar into it.
+     Then go up to the example directory and start Solr. Solr is now listening on port 8983 on localhost.
 
-      ```
-      cd solr-4.6.1/example/solr/collection1
-       mkdir lib
-       cp ${SolrTextTagger-path}/SolrTextTagger/target/*jar lib/
-       cd ../..
-       java -jar start.jar
-      ```
+     ```
+     cd solr-4.6.1/example/solr/collection1
+     mkdir lib
+     cp ${SolrTextTagger-path}/SolrTextTagger/target/*jar lib/
+     cd ../..
+     java -jar start.jar
+     ```
 5. Load Data and Build FST
     We use the same cuistr1.csv file that we downloaded from our MySQL UMLS database. I guess I could have
     written custom code to load the data into the index, but I had started experimenting with SolrTextTagger using curl,
@@ -118,7 +119,8 @@
 
     ```
     cd solr-4.6.1\example\exampledocs
-    java -Durl=http://localhost:8983/solr/update -Dtype=application/json -jar post.jar ${your-path}/first_10000.csv
+    java -Durl=http://localhost:8983/solr/update -Dtype=application/json \
+      -jar post.jar ${your-path}/first_10000.csv
     curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
     ```
 6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.
