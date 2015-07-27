@@ -4,11 +4,13 @@ import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
 import java.io.StringReader
+import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+import scala.io.Codec
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.lucene.analysis.Analyzer
@@ -35,6 +37,11 @@ class UmlsTagger2(val solrServerUrl: String) {
 
   def buildIndexJson(inputFile: File,
                      outputFile: File): Unit = {
+
+    implicit val codec = Codec("UTF-8")
+    codec.onMalformedInput(CodingErrorAction.REPLACE)
+    codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
+
     val writer = new PrintWriter(new FileWriter(outputFile))
     writer.println("[")
     var i = 0

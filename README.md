@@ -13,7 +13,7 @@
  - Takes the tokenization, parsing, chunking steps for the clinical text to get tags(maybe use cTAKES), then
  - Match the tags of clinical text with the tags of UMLS in Solr.
 
- **Concrete functions as flowing:**
+ ## Concrete functions as flowing:
 
  - Extract UMLS terms (AUIs or CUI and so on) from text. For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
   is the preferred term. It has many synonyms such as “heart attack” (A1303513), “coronary attack” (A18648338).
