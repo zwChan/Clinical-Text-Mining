@@ -78,4 +78,24 @@ class UmlsTagger2Test {
       })
     })
   }
+
+  @Test
+  def testStermWord(): Unit = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr")
+
+    val phrases = List("Sepsis (to) < a ,Man and another. man", "Biliary of disease", "Australia Antigen")
+    phrases.foreach(phrase => {
+      //Console.println(s"$phrase,${tagger.stemWords(phrase)}")
+      Console.println(s"$phrase,${tagger.normalizeCasePunct(phrase)}")
+
+    })
+
+  }
+
+  @Test
+  def testAnnotateFile(): Unit = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr")
+    tagger.annotateFile("C:\\fsu\\ra\\UmlsTagger\\data\\umls_output\\clinical_text.txt")
+  }
+
 }

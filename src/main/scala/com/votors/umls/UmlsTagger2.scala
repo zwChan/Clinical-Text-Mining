@@ -8,6 +8,8 @@ import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.immutable.Range
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.io.Codec
@@ -107,12 +109,17 @@ class UmlsTagger2(val solrServerUrl: String) {
     val stemmedWords = ArrayBuffer[String]()
     val tokenStream = getAnalyzer().tokenStream(
       "str_stemmed", new StringReader(str))
+
+    //Console.println(s"before stem:${str}")
+
     val ctattr = tokenStream.addAttribute(
       classOf[CharTermAttribute])
     tokenStream.reset()
     while (tokenStream.incrementToken()) {
       stemmedWords += ctattr.toString()
     }
+
+    //Console.println(s"after stem:${stemmedWords.mkString(" ")}")
     stemmedWords.mkString(" ")
   }
 
@@ -185,7 +192,12 @@ class UmlsTagger2(val solrServerUrl: String) {
   def computeScore(s: String,
                    candidates: List[String]): Float = {
     val levels = List(100.0F, 75.0F, 50.0F, 25.0F)
-    val candLevels = candidates.zip(levels).toMap
+    var candLevels = mutable.HashMap[String,  Float]()
+    candLevels.put(candidates(3),levels(3))
+    candLevels.put(candidates(2),levels(2))
+    candLevels.put(candidates(1),levels(1))
+    candLevels.put(candidates(0),levels(0))
+    //val candLevels = candidates.zip(levels).toMap
     val topscore = candidates.map(candidate => {
       val maxlen = Math.max(candidate.length(), s.length()).toFloat
       val dist = StringUtils.getLevenshteinDistance(candidate, s).toFloat
@@ -202,5 +214,34 @@ class UmlsTagger2(val solrServerUrl: String) {
   def formatSuggestion(sugg: Suggestion): String = {
     "[%6.2f%%] (%s) (%s) %s"
       .format(sugg.score, sugg.cui, sugg.aui, sugg.descr)
+  }
+
+  /////////////////// select for a text file ////////////////////
+
+  def annotateFile(file: String, ngram:Int=5): Unit = {
+    val source = Source.fromFile(file, "UTF-8")
+    val lineIterator = source.getLines
+    lineIterator.foreach(sentence =>{
+      if (sentence.length>0) {
+        annotateSentence(sentence)
+      }
+    })
+  }
+
+  def annotateSentence(sentence: String, ngram:Int=5): Unit = {
+    Console.println("\nsentence:" + sentence)
+    val sentenceNorm = normalizeCasePunct(sentence)
+    val tokens = sentenceNorm.split(" ")
+    for (n <- Range(ngram,0,-1)) {
+      Console.println("  gram:" + n)
+      if (tokens.length >= n)for (pos <- 0 to (tokens.length - n)) {
+        select(tokens.slice(pos,pos+n).mkString(" ")) match {
+          case Some(suggestion) => {
+            Console.println("    " + formatSuggestion(suggestion))
+          }
+          case None => ""
+        }
+      }
+    }
   }
 }

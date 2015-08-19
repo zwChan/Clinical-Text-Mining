@@ -1,0 +1,15 @@
+Criteria
+Inclusion Criteria:
+
+female
+>= 65 years old
+postmenopausal for > 5 years (WHO definition of menopause)
+Exclusion Criteria:
+
+currently taking osteoporosis related medication (HRT, SERM, bisphosphonate, PTH, calcitonin, fluoride)
+had cancer in past 10 years, likely to metastasize to bone (ie: breast, lung)
+have intrinsic bone disease (ie: Paget's Disease, Cushings syndrome)
+have untreated malabsorption syndrome (ie: Celiac Disease)
+renal insufficiency (CrCl <30ml/min)
+hyperparathyroidism, hypoparathyroidism
+chronic systemic glucocorticosteroid use > 3mos, dose>2.5mg daily
