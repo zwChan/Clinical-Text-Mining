@@ -32,7 +32,7 @@
    Then export the test data from using sql:
 
    ```
-    select CUI, STR from MRCONSO
+    select CUI, AUI, STR from MRCONSO
         where LAT = 'ENG'
         limit 10000
         into outfile 'your-path/first_10000.csv'
@@ -57,12 +57,15 @@
 4. **Download and Customize Solr** (only 4.6.1 is tested, later it will support solr 5.x)
    Solr is available for download [here](https://archive.apache.org/dist/lucene/solr/4.6.1/).
    After downloading you will need to expand it locally, then update the schema.xml and solrconfig.xml
-   in the conf subdirectory as shown below:
+   in the conf subdirectory as shown below:  
+  **(Tips: Instead of modify by yourself as following,, you can just copy the config files in
+  ${project-root}/conf directory to ${solr-4.6.1}/example/solr/collection1/conf)**
 
    ```
    tar xvzf solr-4.6.1.tgz
    cd solr-4.6.1/example/solr/collection1/conf
    ```
+
    Update the schema.xml to replace the field definitions with our own. Our fields list and the definition
    of the field type "tag" (copied from the documentation of SolrTextTagger) is shown. The "id" field is
     just a integer sequence (unique key for Solr), the "cui" and "descr" comes from the CUI and
