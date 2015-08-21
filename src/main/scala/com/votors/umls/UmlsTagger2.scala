@@ -1,9 +1,6 @@
 package com.votors.umls
 
-import java.io.File
-import java.io.FileWriter
-import java.io.PrintWriter
-import java.io.StringReader
+import java.io._
 import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 
@@ -26,6 +23,16 @@ import org.apache.solr.common.SolrDocumentList
 import org.apache.solr.common.params.CommonParams
 import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.util.ContentStreamBase
+
+import opennlp.tools.cmdline.BasicCmdLineTool
+import opennlp.tools.cmdline.CLI
+import opennlp.tools.cmdline.PerformanceMonitor
+import opennlp.tools.postag.POSModel
+import opennlp.tools.postag.POSSample
+import opennlp.tools.postag.POSTaggerME
+import opennlp.tools.tokenize.WhitespaceTokenizer
+import opennlp.tools.util.ObjectStream
+import opennlp.tools.util.PlainTextByLineStream
 
 class UmlsTagger2(val solrServerUrl: String) {
 
@@ -229,19 +236,50 @@ class UmlsTagger2(val solrServerUrl: String) {
   }
 
   def annotateSentence(sentence: String, ngram:Int=5): Unit = {
-    Console.println("\nsentence:" + sentence)
+    println("\nsentence:" + sentence)
     val sentenceNorm = normalizeCasePunct(sentence)
-    val tokens = sentenceNorm.split(" ")
+    val sentencePosFilter = posFilter(sentenceNorm)
+    println("sentence pos:" + sentencePosFilter.mkString(","))
+    val tokens = sentencePosFilter
     for (n <- Range(ngram,0,-1)) {
-      Console.println("  gram:" + n)
+      println("  gram:" + n)
       if (tokens.length >= n)for (pos <- 0 to (tokens.length - n)) {
         select(tokens.slice(pos,pos+n).mkString(" ")) match {
           case Some(suggestion) => {
-            Console.println("    " + formatSuggestion(suggestion))
+            println("    " + formatSuggestion(suggestion))
           }
           case None => ""
         }
       }
     }
   }
+
+  /**
+   * see:
+   * http://blog.pengyifan.com/how-to-use-opennlp-to-do-part-of-speech-tagging/
+   * http://paula.petcu.tm.ro/init/default/post/opennlp-part-of-speech-tags
+   *
+   * @param str
+   */
+  def posFilter(str: String) = {
+    // just let it run, though with performance concern.
+    val phraseNorm = normalizeCasePunct(str).split(" ")
+    //val phraseSorted = sortWords(phraseNorm)
+    //val phraseStemmed = stemWords(phraseNorm)
+
+    val modelIn = new FileInputStream("C:\\fsu\\ra\\UmlsTagger\\data\\en-pos-maxent.bin")
+    val model = new POSModel(modelIn)
+    val tagger = new POSTaggerME(model)
+    val retPos = tagger.tag(phraseNorm)
+    //println(phraseNorm.mkString(","))
+    //println(retPos.mkString(","))
+    val retFilter = phraseNorm.filter(item => {
+      val flag = retPos(phraseNorm.indexOf(item))
+      flag=="NN"
+    } )
+
+   // println(retFilter.mkString(","))
+    retFilter
+  }
+
 }

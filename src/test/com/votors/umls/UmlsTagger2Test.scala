@@ -98,4 +98,10 @@ class UmlsTagger2Test {
     tagger.annotateFile("C:\\fsu\\ra\\UmlsTagger\\data\\umls_output\\clinical_text.txt")
   }
 
+  @Test
+  def testPosFilter():Unit = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr")
+    tagger.posFilter("I am a big boy")
+  }
+
 }
