@@ -163,7 +163,8 @@
  - [SolrTextTagger](https://github.com/OpenSextant/SolrTextTagger)
  - UMLS data
 
-## Test Result using first all UMLM record of UMLS (if you use first 10,000 record of UMLS, the result should be less then this)
+## Test Result using all UMLM record of UMLS 
+(if you use first 10,000 record of UMLS, the result should be less then this)
 ```
 Query: Sepsis
 select get 19 result for [Sepsis].
