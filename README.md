@@ -7,18 +7,28 @@
  [Fuzzy String Matching against UMLS Data](http://sujitpal.blogspot.com/2014/02/fuzzy-string-matching-against-umls-data.html)
  and [Fuzzy String Matching with SolrTextTagger](http://sujitpal.blogspot.com/2014/02/fuzzy-string-matching-with.html).
 
- To put it simply, Currently plan, Clinical-Text-Mining includes three steps:
+ To put it simply, Currently plan, Clinical-Text-Mining includes steps:
 
- - Normalize the definition(string or other info) of UMLS,  and makes a custom index and tag using Solr, then
- - Takes the tokenization, parsing, chunking steps for the clinical text to get tags(maybe use cTAKES), then
- - Match the tags of clinical text with the tags of UMLS in Solr.
+ - Normalize(tokenization, parsing, chunking and so on, maybe use cTAKES or opennlp) 
+   the definition(string or other info) of UMLS(or any other metathesaurus) into several features,
+   then makes a custom index and tag using Solr, then
+ - Takes the same Normalization steps for the clinical text to get the features, then
+ - Match features of clinical text with the tags of UMLS in Solr.
+ - Evaluate the matching result, and find out the best result(s)
 
- ## Concrete functions as flowing:
+ ## Concrete functions as flowing(Tasks List):
 
- - Extract UMLS terms (AUIs or CUI and so on) from text. For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
+ - [x] Extract UMLS terms (AUIs or CUI and so on) from text, just a basic function as an example.
+  For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
   is the preferred term. It has many synonyms such as “heart attack” (A1303513), “coronary attack” (A18648338).
-  Each of the synonyms has a AUI (term unique identifier). From a plain text, it extracts the AUIs like A1303513, A18648338.
-- TO DO
+  Each of the synonyms has a AUI (term unique identifier). In this basic task, it extracts the AUIs
+  like A1303513, A18648338 according to the text.
+    - [x] Use sentence as the basic unit to apply the n-gram algorithm (currently use a line as unit). Using opennlp.
+    - [x] Concern the pos of a word when match.(if pos not match, 70% discount)
+    - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
+    - [x] Get all the resault from solr, sorted with the score
+    - [ ] Choose a best result.
+ 
 
 ## How to run
 
@@ -87,7 +97,22 @@
              omitTermFreqAndPositions="true" omitNorms="true"/>
         <copyField source="descr_norm" dest="descr_tagged"/>
         <dynamicField name="*" type="string" indexed="true" stored="true"/>
+        
         ...
+    </fields>
+    ...
+    <types>
+        <fieldType name="tag" class="solr.TextField" positionIncrementGap="100">
+          <analyzer>
+            <tokenizer class="solr.StandardTokenizerFactory"/>
+            <filter class="solr.EnglishPossessiveFilterFactory"/>
+            <filter class="solr.ASCIIFoldingFilterFactory"/>
+            <filter class="solr.LowerCaseFilterFactory"/>
+          </analyzer>
+        </fieldType>
+    ...
+    </types>        
+        
     ```
     We then add in the requestHandler definition for SolrTextTagger's tag service into the solrconfig.xml file (also in conf).
     The definition is shown below(add it above the first exists requestHandler):
@@ -127,6 +152,11 @@
     curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
     ```
 6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.
+   I suggest using the IDEA as your IDE, and mark the src/main as a source directory and src/test as the test directory. Then you can directly 
+   run the junit test function. Before you run it, set the UmlsTagger2Test.dataDir (in class UmlsTagger2Test) to the directory of the "data"
+   directory under the project directory.
+   
+7. Good luck and enjoy it!
 
 ## Dependency
  - [Solr](https://github.com/apache/solr)
