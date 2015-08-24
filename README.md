@@ -151,7 +151,7 @@
       -jar post.jar ${your-path}/first_10000.csv
     curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
     ```
-6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.
+6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.  
    I suggest using the IDEA as your IDE, and mark the src/main as a source directory and src/test as the test directory. Then you can directly 
    run the junit test function. Before you run it, set the UmlsTagger2Test.dataDir (in class UmlsTagger2Test) to the directory of the "data"
    directory under the project directory.
@@ -163,43 +163,57 @@
  - [SolrTextTagger](https://github.com/OpenSextant/SolrTextTagger)
  - UMLS data
 
-## Test Result using first 10,000 record of UMLS
+## Test Result using first all UMLM record of UMLS (if you use first 10,000 record of UMLS, the result should be less then this)
 ```
-///////// testGetFull /////////
 Query: Sepsis
+select get 19 result for [Sepsis].
+[100.00%] (C0243026) (A17943618) Sepsis
+[100.00%] (C0243026) (A16979314) Sepsis
+[100.00%] (C0243026) (A10862868) Sepsis
+[100.00%] (C0036690) (A23920704) Sepsis
+[100.00%] (C0036690) (A23943328) Sepsis
+[100.00%] (C0243026) (A23449659) Sepsis
+[100.00%] (C0243026) (A23635326) Sepsis
+[100.00%] (C0243026) (A21145176) Sepsis
+[100.00%] (C0243026) (A23037453) Sepsis
+[100.00%] (C0036690) (A7567979) Sepsis
 [100.00%] (C0243026) (A0000638) Sepsis
+[100.00%] (C0243026) (A0000640) Sepsis
+[100.00%] (C1090821) (A0000641) Sepsis
+[ 90.00%] (C0243026) (A18580070) sepsis
+[ 90.00%] (C0243026) (A1203207) sepsis
+[ 90.00%] (C0036690) (A23895141) sepsis
+[ 16.67%] (C0243026) (A0454607) SEPSIS
+[ 16.67%] (C0243026) (A0454608) SEPSIS
+[ 16.67%] (C0036690) (A23914386) SEPSIS
 
 Query: Biliary tract disease
+select get 7 result for [Biliary tract disease].
 [100.00%] (C0005424) (A0001596) Biliary tract disease
+[100.00%] (C0005424) (A0001597) Biliary tract disease
+[ 95.24%] (C0005424) (A18590143) biliary tract disease
+[ 90.48%] (C0005424) (A0394721) Biliary Tract Disease
+[ 50.00%] (C0005424) (A18571497) biliary disease tract
+[ 15.91%] (C0005424) (A0406938) Disease, Biliary Tract
+[ 12.73%] (C0005424) (A1933178) Tract Disease, Biliary
 
-Query: Australia Antigen
-[100.00%] (C0019168) (A0027970) Australia Antigen
-
-///////// testGetPartial /////////
-Query: Heart Attack and diabetes
-
-Query: carcinoma (small-cell) of lung
-Suggestion(20.0,Cell,C0007634,A0006517)
-[ 20.00%] (C0007634) (A0006517) Cell
-
-Query: side effects of Australia Antigen
-Suggestion(40.0,Australia Antigen,C0019168,A0027970)
-[ 40.00%] (C0019168) (A0027970) Australia Antigen
-
-///////// testAnnotateConcepts /////////
-ery: Lung Cancer
-
-Query: Heart Attack
-
-Query: Diabetes
-
-Query: Heart Attack and diabetes
-
-Query: carcinoma (small-cell) of lung
-[ 20.00%] (C0007634) (A0006517) Cell
-
-Query: asthma side effects
-[ 33.33%] (C0004096) (A0027330) Asthma
+Query: Progressive systemic sclerosis
+select get 15 result for [Progressive systemic sclerosis].
+[100.00%] (C0036421) (A17314189) Progressive systemic sclerosis
+[100.00%] (C1258104) (A17316705) Progressive systemic sclerosis
+[100.00%] (C0036421) (A8339669) Progressive systemic sclerosis
+[100.00%] (C0036421) (A0001403) Progressive systemic sclerosis
+[ 96.67%] (C0036421) (A18631043) progressive systemic sclerosis
+[ 96.67%] (C1258104) (A18663298) progressive systemic sclerosis
+[ 96.67%] (C0036421) (A4366684) progressive systemic sclerosis
+[ 93.33%] (C0036421) (A0449216) Progressive Systemic Sclerosis
+[ 93.33%] (C0036421) (A0449217) Progressive Systemic Sclerosis
+[ 93.33%] (C1258104) (A2783441) Progressive Systemic Sclerosis
+[ 20.32%] (C1258104) (A17921315) Sclerosis, Progressive Systemic
+[ 20.32%] (C1258104) (A2782910) Sclerosis, Progressive Systemic
+[ 17.74%] (C1258104) (A2782943) Systemic Sclerosis, Progressive
+[ 10.00%] (C0036421) (A0443846) PROGRESSIVE SYSTEMIC SCLEROSIS
+[ 10.00%] (C0036421) (A0443847) PROGRESSIVE SYSTEMIC SCLEROSIS
 
 ```
 
