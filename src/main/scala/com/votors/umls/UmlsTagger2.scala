@@ -101,7 +101,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
         .split("\t")
       // the string in a Glossary is always considered as a sentence. No sentence detecting step.
       val strNorm = normalizeCasePunct(str)
-      val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
       val strStemmed = stemWords(strNorm)
       val strSorted = sortWords(strNorm)
       val obuf = new StringBuilder()
@@ -114,7 +114,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
         .append("\"descr_norm\":\"").append(strNorm).append("\",")
         .append("\"descr_sorted\":\"").append(strSorted).append("\",")
         .append("\"desc_stemmed\":\"").append(strStemmed).append("\",")
-        .append("\"desc_pos\":\"").append(strPos).append("\"")
+        //.append("\"desc_pos\":\"").append(strPos).append("\"")
         .append("}")
       writer.println(obuf.toString)
       i += 1
