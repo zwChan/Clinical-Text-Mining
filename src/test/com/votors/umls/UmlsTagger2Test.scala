@@ -3,9 +3,6 @@ package com.votors.umls
 import java.io.File
 import com.votors.common.Utils.Trace
 import com.votors.common.Utils.Trace._
-
-import scala.sys
-
 import org.junit.Assert
 import org.junit.Test
 
@@ -25,8 +22,8 @@ class UmlsTagger2Test {
   def testBuildIndex(): Unit = {
     val tagger = new UmlsTagger2("",dataDir)
     tagger.buildIndexJson(
-      new File("C:\\fsu\\cuistr2.csv"),
-      new File("C:\\fsu\\cuistr2.json"))
+      new File("C:\\fsu\\all.csv"),
+      new File("C:\\fsu\\all.json"))
   }
 
   @Test
@@ -109,7 +106,7 @@ class UmlsTagger2Test {
   @Test
   def testAnnotateFile(): Unit = {
     val tagger = new UmlsTagger2("http://localhost:8983/solr")
-    tagger.annotateFile("C:\\fsu\\ra\\UmlsTagger\\data\\umls_output\\clinical_text.txt")
+    tagger.annotateFile("C:\\fsu\\ra\\UmlsTagger\\data\\umls_output\\text_from_min_sook.txt",3)
   }
 
   @Test

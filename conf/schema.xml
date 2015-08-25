@@ -72,6 +72,7 @@
       required="true"/>
     <field name="cui" type="string" indexed="true" stored="true"/>
     <field name="aui" type="string" indexed="true" stored="true"/>
+    <field name="sab" type="string" indexed="false" stored="true"/>
     <field name="descr" type="string" indexed="true" stored="true"/>
     <field name="descr_norm" type="string" indexed="true" stored="true"/>
     <field name="descr_sorted" type="string" indexed="true" stored="true"/>

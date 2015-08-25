@@ -47,7 +47,7 @@ import opennlp.tools.util.PlainTextByLineStream
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val aui: String)
+                      val descr: String, val cui: String, val sab: String, val aui: String)
 
 /**
  * Main entry of the project.
@@ -91,10 +91,11 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
     var i = 0
     var cntByte = 0
     var cntFile = 1
+    var newFile = true
     Source.fromFile(inputFile)
       .getLines()
       .foreach(line => {
-      val Array(cui, aui, str) = line
+      val Array(cui, aui, sab, str) = line
         .replace("\",\"", "\t")
         .replaceAll("\"", "")
         .replaceAll("\\\\", "")
@@ -105,16 +106,17 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
       val strStemmed = stemWords(strNorm)
       val strSorted = sortWords(strNorm)
       val obuf = new StringBuilder()
-      if (i > 0) obuf.append(",")
+      if (newFile == false) obuf.append(",")
+      newFile = false
       obuf.append("{")
         .append("\"id\":").append(i).append(",")
         .append("\"cui\":\"").append(cui).append("\",")
         .append("\"aui\":\"").append(aui).append("\",")
+        .append("\"sab\":\"").append(sab).append("\",")
         .append("\"descr\":\"").append(str).append("\",")
         .append("\"descr_norm\":\"").append(strNorm).append("\",")
         .append("\"descr_sorted\":\"").append(strSorted).append("\",")
-        .append("\"desc_stemmed\":\"").append(strStemmed).append("\",")
-        //.append("\"desc_pos\":\"").append(strPos).append("\"")
+        .append("\"desc_stemmed\":\"").append(strStemmed).append("\"")
         .append("}")
       writer.println(obuf.toString)
       i += 1
@@ -130,6 +132,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
         // create a new writer
         cntByte = 0
         cntFile += 1
+        newFile = true
         writer = new PrintWriter(new FileWriter(outputFile + s"($cntFile)"))
         writer.println("[")
       }
@@ -246,11 +249,12 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
         val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
         val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
         val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
+        val sab = sdoc.getFieldValue("sab").asInstanceOf[String]
         val descrNorm = normalizeCasePunct(descr)
         val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
         val score = computeScore(descr,
           List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos))
-        Suggestion(score, descr, cui, aui)
+        Suggestion(score, descr, cui, aui,sab)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
     } else Array()
@@ -281,6 +285,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
       val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
       val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
       val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
+      val sab = sdoc.getFieldValue("sab").asInstanceOf[String]
       val nWordsInDescr = descr.split(" ").length.toFloat
       val descrNorm = normalizeCasePunct(descr)
       val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
@@ -290,7 +295,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
       val score = (nwords / nwordsInPhrase) *
         computeScore(descr,
           List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos))
-      Suggestion(score, descr, cui, aui)
+      Suggestion(score, descr, cui, aui, sab)
     })
       .toList
       .groupBy(_.cui) // dedup by cui
@@ -345,8 +350,8 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
   //////////////// misc methods ////////////////
 
   def formatSuggestion(sugg: Suggestion): String = {
-    "[%6.2f%%] (%s) (%s) %s"
-      .format(sugg.score, sugg.cui, sugg.aui, sugg.descr)
+    "[%6.2f%%] (%s) (%s) (%s) %s"
+      .format(sugg.score, sugg.cui, sugg.aui, sugg.sab, sugg.descr)
   }
 
   /////////////////// select for a text file ////////////////////
@@ -364,7 +369,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
         val sents = getSent(line)
         sents.foreach(sent => {
           if (sent.length>0)
-            annotateSentence(sent)
+            annotateSentence(sent,ngram)
         })
       }
     })
