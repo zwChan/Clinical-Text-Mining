@@ -1,10 +1,12 @@
 package com.votors.umls
 
-import java.io.File
+import java.io.{FileWriter, PrintWriter, File}
 import com.votors.common.Utils.Trace
 import com.votors.common.Utils.Trace._
 import org.junit.Assert
 import org.junit.Test
+
+import scala.io.Source
 
 class UmlsTagger2Test {
 
@@ -106,7 +108,34 @@ class UmlsTagger2Test {
   @Test
   def testAnnotateFile(): Unit = {
     val tagger = new UmlsTagger2("http://localhost:8983/solr")
-    tagger.annotateFile("C:\\fsu\\ra\\UmlsTagger\\data\\umls_output\\text_from_min_sook.txt",3)
+    tagger.annotateFile(s"${dataDir}text_from_min_sook.txt",3)
+  }
+
+  // find terms from dictionary for a string
+  @Test
+  def annotateTag(): Unit = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr")
+    val source = Source.fromFile(s"${dataDir}text_tag_from_min_sook.txt", "UTF-8")
+    var writer = new PrintWriter(new FileWriter(s"${dataDir}text_tag_from_min_sook_ret_part_umls.csv"))
+    val lineIterator = source.getLines
+    lineIterator.foreach(line =>{
+      if (line.trim().length>0) {
+        val tokens = line.split(" ",2)
+        if (tokens.length>1) {
+          tagger.select(tokens(1).trim) match {
+            case suggestion: Array[Suggestion] => {
+              val str = "\"" + tokens(0) + "\",\"" + tokens(1).trim() + "\",\"" + suggestion.map(tagger.formatSuggestion(_)).mkString(";") + "\""
+              writer.print(str)
+              //println(str)
+            }
+            case _ => writer.print("\"" + tokens(0) + "\",\"" + tokens(1).trim() + "\",\"not found\"")
+          }
+          writer.print("\n")
+        }
+        }
+      })
+    writer.flush()
+    writer.close()
   }
 
   @Test

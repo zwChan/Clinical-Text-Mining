@@ -356,7 +356,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
 
   /////////////////// select for a text file ////////////////////
   /**
-   * select for a text file
+   * find terms for dictionary for a text file
    *
    * @param file
    * @param ngram the ngram limited
