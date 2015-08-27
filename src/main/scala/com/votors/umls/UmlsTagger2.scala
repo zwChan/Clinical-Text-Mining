@@ -3,6 +3,7 @@ package com.votors.umls
 import java.io._
 import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
+import java.util.Properties
 
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 
@@ -38,6 +39,8 @@ import opennlp.tools.tokenize.WhitespaceTokenizer
 import opennlp.tools.util.ObjectStream
 import opennlp.tools.util.PlainTextByLineStream
 
+import java.sql.{Statement, Connection, DriverManager, ResultSet}
+
 /**
  * Suggestion is the result of a match.
  *
@@ -47,25 +50,50 @@ import opennlp.tools.util.PlainTextByLineStream
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val sab: String, val aui: String)
+                      val descr: String, val cui: String, val aui: String, val sab: String) {
+  override
+  def toString(): String = {
+      "[%6.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
+  }
+}
 
 /**
  * Main entry of the project.
  * Currently, the @select method is the most important function.
  *
  * @param solrServerUrl: the solr server url.
- * @param dataDir the dir of model files for opennlp
+ * @param rootDir the dir of model files for opennlp
  */
-class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTagger\\data\\") {
+class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
 
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
   val solrServer = new HttpSolrServer(solrServerUrl)
 
   //opennlp models path
-  val modelRoot = dataDir //"C:\\fsu\\ra\\UmlsTagger\\data\\"
-  val posModlePath = s"${modelRoot}en-pos-maxent.bin"
-  val sentModlePath = s"${modelRoot}en-sent.bin"
+  val modelRoot = rootDir + "/data"
+  val posModlePath = s"${modelRoot}/en-pos-maxent.bin"
+  val sentModlePath = s"${modelRoot}/en-sent.bin"
+
+  // Load properties
+  val prop = new Properties()
+  prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
+  println("Current properties:\n" + prop.toString)
+
+  /**
+   *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
+   *  see: http://metamap.nlm.nih.gov/SemanticTypesAndGroups.shtml
+  */
+  val tuiMap = new mutable.HashMap[String, String]()
+  Source.fromFile(s"${rootDir}/data/SemGroups.txt")
+    .getLines()
+    .foreach(line => {
+      val tokens = line.split('|')
+      if (tokens.length>=4) {
+        tuiMap.put(tokens(2), tokens(1))
+      }
+  })
+  //println(tuiMap.mkString(";"))
 
   // debug level, default is INFO
   //Trace.currLevel = WARN
@@ -347,13 +375,6 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
       topscore._2
   }
 
-  //////////////// misc methods ////////////////
-
-  def formatSuggestion(sugg: Suggestion): String = {
-    "[%6.2f%%] (%s) (%s) (%s) %s"
-      .format(sugg.score, sugg.cui, sugg.aui, sugg.sab, sugg.descr)
-  }
-
   /////////////////// select for a text file ////////////////////
   /**
    * find terms for dictionary for a text file
@@ -395,7 +416,7 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
           if (posContains(gram," NN NNS NNP NNPS ")) {
             select(gram.mkString(" ")) match {
               case suggestion: Array[Suggestion] => {
-                suggestion.foreach(s => println("    " + formatSuggestion(s)))
+                suggestion.foreach(s => println("    " + s.toString()))
               }
               case _ => ""
             }
@@ -408,7 +429,75 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
     }
   }
 
-  /** Filer the words in a sentence by POS. Currently only noun is processed.
+  /*the output format for tag parsing*/
+  case class TagRow(val blogid: String, val hashTag: String,val umlsFlag: Boolean,
+                    val score: Float, val cui: String, val sab: String, val aui: String, val desc: String,
+                    val tui: String, val semName: String){
+    override def toString(): String = {
+      val str = s""""${blogid}","${hashTag}","${if(umlsFlag)'Y' else 'N'}","${score}","${cui}","${sab}","${aui}","${desc}","${tui}","${semName}"\n"""
+      trace(INFO, "Get Tag parsing result: " + str)
+      str
+    }
+    def getTitle(): String = {
+      """"blogId","hashTage","umlsFlag","score","cui","sab","aui","umlsStr","tui","semName"""" + "\n"
+    }
+  }
+  /**
+   * Match some 'tags' to dictionary(e.g. UMLS), and get their semantic type.
+   *
+   * @param tagFile
+   */
+  def annotateTag(tagFile: String, outputFile: String): Unit = {
+    val source = Source.fromFile(tagFile, "UTF-8")
+    var writer = new PrintWriter(new FileWriter(outputFile))
+    writer.print(TagRow("","",true,0,"","","","","","").getTitle())
+    val lineIterator = source.getLines
+    // for each tag, get the UMLS terms
+    lineIterator.foreach(line =>{
+      if (line.trim().length>0) {
+        val tokens = line.split(" ",2)
+        if (tokens.length>1) {
+          //get all terms from solr
+          select(tokens(1).trim) match {
+            case suggestions: Array[Suggestion] => {
+              // for each UMLS terms, get their TUI from MRSTY table
+              if (suggestions.length > 0) {
+                suggestions.foreach(suggestion => {
+                  //get all tui from mrsty table.
+                  val mrsty = getMrsty(suggestion.cui)
+                  while (mrsty.next) {
+                    //for each TUI, get their semantic type from SemGroups.txt
+                    val tui = mrsty.getString("TUI")
+                    val sty = tuiMap.get(tui)
+                    writer.print(TagRow(tokens(0), tokens(1).trim, true,
+                      suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
+                      tui, sty.getOrElse("")))
+                  }
+                })
+              } else {
+                writer.print(TagRow(tokens(0), tokens(1).trim, false, 0, "", "", "", "", "", ""))
+              }
+            }
+            case _ => writer.print(TagRow(tokens(0), tokens(1).trim, false,0,"","","","","",""))
+          }
+        }
+      }
+    })
+    writer.flush()
+    writer.close()
+  }
+
+  /**
+   *
+   * @param cui
+   * @return
+   */
+  def getMrsty(cui: String): ResultSet = {
+    execQuery(s"select * from mrsty where CUI='${cui}';")
+  }
+
+  /**
+   * Filer the words in a sentence by POS. Currently only noun is processed.
    * see:
    * http://blog.pengyifan.com/how-to-use-opennlp-to-do-part-of-speech-tagging/
    * http://paula.petcu.tm.ro/init/default/post/opennlp-part-of-speech-tags
@@ -448,5 +537,38 @@ class UmlsTagger2(val solrServerUrl: String, dataDir:String="C:\\fsu\\ra\\UmlsTa
     })
 
     hit
+  }
+
+  private var isInitJdbc = false
+  private var jdbcConnect: Connection = null
+  private var sqlStatement: Statement = null
+  def initJdbc() = {
+    if (isInitJdbc == false) {
+      isInitJdbc = true
+      // Database Config
+      val conn_str = prop.get("jdbcDriver").toString
+      println("jdbcDrive is: " + conn_str)
+      // Load the driver
+      val dirver = classOf[com.mysql.jdbc.Driver]
+      // Setup the connection
+      jdbcConnect = DriverManager.getConnection(conn_str)
+      // Configure to be Read Only
+      sqlStatement = jdbcConnect.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+    }
+  }
+
+  def jdbcClose() = {
+    if (isInitJdbc) {
+      isInitJdbc = false
+      jdbcConnect.close()
+    }
+  }
+  def execQuery (sql: String):ResultSet = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeQuery(sql)
+    rs
   }
 }

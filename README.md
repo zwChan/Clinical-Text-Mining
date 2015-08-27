@@ -28,12 +28,17 @@
     - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
     - [x] Get all the resault from solr, sorted with the score
     - [ ] Choose a best result.
+ - [x] Map the extracted CUI to a semantic type
+    - [x] Get all STY from MRSTY table by cui
+    - [x] Get semantic group name from semGroups.txt by TUI
  
 
 ## How to run
 
-1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
-   you use an IDE such as IDEA or Eclipse.
+1. Download this project use: `git clone http://somelab08.cci.fsu.edu/zc15d/Clinical-Text-Mining.git`. I recommend
+   you use an IDE such as IDEA or Eclipse.  
+   Modify the ${UmlsTagger2Test.rootDir} to the root directory of the project, e.g. val rootDir = "C:\\fsu\\ra\\UmlsTagger"  
+   Modify the file default.properties in /conf to the right property, 
 2. **Prepare the UMLS data for test**. **(This step may take lost of time, but if you just try to test
    the basic function of this project, just directly use the example data in data/umls/first_10000.csv)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
@@ -89,6 +94,7 @@
           required="true"/>
         <field name="cui" type="string" indexed="true" stored="true"/>
         <field name="aui" type="string" indexed="true" stored="true"/>
+        <field name="sab" type="string" indexed="false" stored="true"/>
         <field name="descr" type="string" indexed="true" stored="true"/>
         <field name="descr_norm" type="string" indexed="true" stored="true"/>
         <field name="descr_sorted" type="string" indexed="true" stored="true"/>
