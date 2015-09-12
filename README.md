@@ -28,6 +28,7 @@
     - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
     - [x] Get all the resault from solr, sorted with the score
     - [ ] Choose a best result.
+    - [ ] The case different should be concern less than other different when compare UMLS term and input term.
  - [x] Map the extracted CUI to a semantic type
     - [x] Get all STY from MRSTY table by cui
     - [x] Get semantic group name from semGroups.txt by TUI
@@ -37,7 +38,7 @@
 
 1. Download this project use: `git clone http://somelab08.cci.fsu.edu/zc15d/Clinical-Text-Mining.git`. I recommend
    you use an IDE such as IDEA or Eclipse.  
-   Modify the ${UmlsTagger2Test.rootDir} to the root directory of the project, e.g. val rootDir = "C:\\fsu\\ra\\UmlsTagger"  
+   Modify the ${UmlsTagger2Test.rootDir} in the test class to the root directory of the project, e.g. val rootDir = "C:\\fsu\\ra\\UmlsTagger"  
    Modify the file default.properties in /conf to the right property, 
 2. **Prepare the UMLS data for test**. **(This step may take lost of time, but if you just try to test
    the basic function of this project, just directly use the example data in data/umls/first_10000.csv)**

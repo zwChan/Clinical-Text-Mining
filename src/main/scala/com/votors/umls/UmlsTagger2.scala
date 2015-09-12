@@ -8,9 +8,9 @@ import java.util.Properties
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 
 import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.immutable.Range
+import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import scala.io.Source
 import scala.io.Codec
 
@@ -18,6 +18,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
+import org.apache.lucene.analysis.snowball.SnowballFilter
 import org.apache.lucene.util.Version
 import org.apache.solr.client.solrj.SolrRequest
 import org.apache.solr.client.solrj.impl.HttpSolrServer
@@ -35,11 +36,14 @@ import opennlp.tools.cmdline.PerformanceMonitor
 import opennlp.tools.postag.POSModel
 import opennlp.tools.postag.POSSample
 import opennlp.tools.postag.POSTaggerME
+import opennlp.tools.stemmer.PorterStemmer
+import opennlp.tools.stemmer.snowball.englishStemmer
 import opennlp.tools.tokenize.WhitespaceTokenizer
 import opennlp.tools.util.ObjectStream
 import opennlp.tools.util.PlainTextByLineStream
-
 import java.sql.{Statement, Connection, DriverManager, ResultSet}
+
+import org.apache.commons.csv._
 
 /**
  * Suggestion is the result of a match.
@@ -53,7 +57,7 @@ case class Suggestion(val score: Float,
                       val descr: String, val cui: String, val aui: String, val sab: String) {
   override
   def toString(): String = {
-      "[%6.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
+      "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
   }
 }
 
@@ -79,6 +83,8 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
   val prop = new Properties()
   prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
   println("Current properties:\n" + prop.toString)
+
+  val caseFactor = prop.get("caseFactor").toString.toFloat
 
   /**
    *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
@@ -200,6 +206,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     spacePattern.matcher(str_lps).replaceAll(" ").trim()
   }
 
+  val stemmer = new PorterStemmer()
   def sortWords(str: String): String = {
     val words = str.split(" ")
     words.sortWith(_ < _).mkString(" ")
@@ -214,13 +221,21 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
 
     val ctattr = tokenStream.addAttribute(
       classOf[CharTermAttribute])
+    //val snowAttr = tokenStream.addAttribute(classOf[SnowballFilter])
     tokenStream.reset()
     while (tokenStream.incrementToken()) {
-      stemmedWords += ctattr.toString()
+      stemmedWords +=  stemmer.stem(ctattr.toString())
     }
 
     trace(DEBUG,s"after stem :${stemmedWords.mkString(" ")}")
     stemmedWords.mkString(" ")
+  }
+
+  def normalizeAll(str: String, isSort:Boolean=true, isStem: Boolean=true): String = {
+    var ret = normalizeCasePunct(str)
+    if (isStem)ret = stemWords(ret)
+    if (isSort)ret = sortWords(ret)
+    ret
   }
 
   //get pos after case/punctuation delete(input has done this work)?  // XXX: This may be not a correct approach!
@@ -281,7 +296,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
         val descrNorm = normalizeCasePunct(descr)
         val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
         val score = computeScore(descr,
-          List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos))
+          scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), caseFactor)
         Suggestion(score, descr, cui, aui,sab)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
@@ -322,7 +337,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       val nwords = descrNorm.split(" ").length.toFloat
       val score = (nwords / nwordsInPhrase) *
         computeScore(descr,
-          List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos))
+          scala.collection.immutable.List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos), caseFactor)
       Suggestion(score, descr, cui, aui, sab)
     })
       .toList
@@ -341,11 +356,12 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
    *
    * @param s
    * @param candidates
+   * @param caseFactor how much you care about case(lowcase/upcase), [0,,1],,
    * @return
    */
-  def computeScore(s: String, candidates: List[String]): Float = {
+  def computeScore(s: String, candidates: List[String], caseFactor: Float=0.0f): Float = {
     trace(DEBUG, s"computeScore(): ${s}, " + candidates.mkString("[",",","]"))
-    val levels = List(100.0F, 90.0F, 70.0F, 50.0F, 0f, 0f)
+    val levels = scala.collection.immutable.List(100.0F, 90.0F, 70.0F, 50.0F, 0f, 0f)
     var candLevels = mutable.HashMap[String,  Float]()
     val posFlag = candidates(5) == candidates(4) //pos
 
@@ -361,7 +377,9 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       val level = cl._2
       if (candidate != null) {
         val maxlen = Math.max(candidate.length(), s.length()).toFloat
-        val dist = StringUtils.getLevenshteinDistance(candidate, s).toFloat
+        val dist_case = StringUtils.getLevenshteinDistance(candidate, s).toFloat
+        val dist_no_case = StringUtils.getLevenshteinDistance(candidate.toLowerCase, s.toLowerCase).toFloat
+        val dist = (dist_case * (1 - caseFactor) + dist_no_case * caseFactor)
         (candidate, (1.0F - (dist / maxlen)) * level)
       } else {
         ("", 0.0f)
@@ -375,24 +393,94 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       topscore._2
   }
 
+
+
   /////////////////// select for a text file ////////////////////
   /**
-   * find terms for dictionary for a text file
+   * find terms for dictionary for a field of cvs file.
    *
-   * @param file
+   *
+   * @param csvFile: Field order 0:blogId, 1: hash_tag,
    * @param ngram the ngram limited
    */
-  def annotateFile(file: String, ngram:Int=5): Unit = {
-    val source = Source.fromFile(file, "UTF-8")
-    val lineIterator = source.getLines
-    lineIterator.foreach(line =>{
-      if (line.length>0) {
-        val sents = getSent(line)
-        sents.foreach(sent => {
-          if (sent.length>0)
-            annotateSentence(sent,ngram)
-        })
+  def annotateFile(csvFile: String, outputFile:String, targetIndex: Int, ngram:Int=3, delimiter:Char=',',separator:Char='\n'): Unit = {
+    var writer = new PrintWriter(new FileWriter(outputFile))
+    writer.print(TagRow("","",true,0,"","","","","","","",0,0).getTitle())
+    //get text content from csv file
+    val in = new FileReader(csvFile)
+    val records = CSVFormat.DEFAULT
+      .withRecordSeparator(separator)
+      .withDelimiter(delimiter)
+      .withSkipHeaderRecord(true)
+      .parse(in)
+      .iterator()
+
+    var lastRecord: CSVRecord = null
+    val tagList = ListBuffer[String]()
+    // for each row of csv file
+    records.foreach(currRecord => {
+      // if the blogId not changed, it means the tags from the same blogId
+      var skipSameBlog = false
+      if (lastRecord == null || lastRecord.get(0) == currRecord.get(0)) {
+        skipSameBlog = true
+      } else {
+        skipSameBlog = false
       }
+      // if current record is the last record, we have to process it now.
+      if (!records.hasNext) {
+        skipSameBlog = false
+        // add current tag to the tag list
+        if (currRecord.size >= 2) tagList += normalizeAll(currRecord.get(1))
+        lastRecord = currRecord
+      }
+
+      val target = if (lastRecord != null)lastRecord.get(targetIndex) else ""
+      if (target.length > 0 && skipSameBlog == false) {
+         //segment the target into sentences
+          val sents = getSent(target)
+          var sentenceIndex = 0
+          sents.foreach(sent => {
+            if (sent.length > 0) {
+              //get tags based on sentence, the result is suggestions(list)  for each (noun) words in the sentence.
+              val suggestionsList = annotateSentence(sent, ngram)
+              if (suggestionsList != null && suggestionsList.length > 0) {
+                // word index in the sentence
+                var wordIndex_sent = 0
+                // process each word's suggestions(list)
+                suggestionsList.foreach(wordSuggestions => {
+                  // process eache suggestion for a word in the sentence
+                  wordSuggestions._2.foreach(suggestion =>{
+                    wordIndex_sent += 1
+                    //get the tagIndex of the word match. 0: not match. start from 1 if matched
+                    val tagIndex = tagList.indexOf(normalizeAll(wordSuggestions._1)) + 1
+                    //get all tui from mrsty table.
+                    val mrsty = getMrsty(suggestion.cui)
+                    while (mrsty.next) {
+                      //for each TUI, get their semantic type from SemGroups.txt
+                      val tui = mrsty.getString("TUI")
+                      val styname = mrsty.getString("STY")
+                      val sty = tuiMap.get(tui)
+                      writer.print(TagRow(lastRecord.get(0), wordSuggestions._1.trim, true,
+                        suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
+                        tui,styname, sty.getOrElse(""),
+                        tagIndex,sentenceIndex+wordIndex_sent,wordIndex_sent,
+                        normalizeAll(wordSuggestions._1.trim),tagList.mkString(" ")))
+                    }
+                  })
+
+                })
+                sentenceIndex += suggestionsList.length
+              }
+            }
+          })
+        }
+
+      // update last record to current record
+      lastRecord = currRecord
+      if (skipSameBlog == false) {
+        tagList.clear()
+      }
+      if (currRecord.size >= 2) tagList += normalizeAll(currRecord.get(1))
     })
   }
 
@@ -401,11 +489,13 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
    *
    * @param sentence
    * @param ngram
+   * @ return arry of (target-word, Suggestions-of-target-word)
    */
-  def annotateSentence(sentence: String, ngram:Int=5): Unit = {
+  def annotateSentence(sentence: String, ngram:Int=5): ListBuffer[(String,Array[Suggestion])] = {
     trace(INFO,"\nsentence:" + sentence)
     val sentenceNorm = normalizeCasePunct(sentence)
     //val sentencePosFilter = posFilter(sentenceNorm)
+    var retList = new ListBuffer[(String,Array[Suggestion])]()
     val tokens = sentenceNorm.split(" ")
     for (n <- Range(ngram,0,-1)) {
       trace(INFO,"  gram:" + n)
@@ -415,31 +505,50 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
           val pos = getPos(gram)
           if (posContains(gram," NN NNS NNP NNPS ")) {
             select(gram.mkString(" ")) match {
-              case suggestion: Array[Suggestion] => {
-                suggestion.foreach(s => println("    " + s.toString()))
+              case suggestions: Array[Suggestion] => {
+                retList :+= (gram.mkString(" "), suggestions)
               }
-              case _ => ""
+              case _ => null
             }
           }
           else {
-          ""
+            null
           }
         }
       }
     }
+    retList
   }
 
   /*the output format for tag parsing*/
-  case class TagRow(val blogid: String, val hashTag: String,val umlsFlag: Boolean,
-                    val score: Float, val cui: String, val sab: String, val aui: String, val desc: String,
-                    val tui: String, val semName: String){
+  /**
+   *
+   * @param blogid the blog id
+   * @param target the tag of the blog
+   * @param umlsFlag if it is matched by UMLS, TRUE; else false
+   * @param score the score to metric how much the target word match the AUI's string
+   * @param cui CUI
+   * @param sab source of the CUI
+   * @param aui auto unique id?
+   * @param desc the value of STR file in MRCONSON table
+   * @param tui the semantic type id
+   * @param styName the semantic type name
+   * @param semName the semantic group name
+   * @param tagId if the target word is a tag, this is the index of the tag; if not a tag, this is 0.
+   * @param position the position of the target word in the content
+   */
+  case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
+                    val score: Float, val cui: String, val sab: String="", val aui: String="", val desc: String="",
+                    val tui: String="", styName: String="", val semName: String="",
+                    val tagId: Int=0, val position: Int=0, val position_sent: Int=0,
+                    val targetNorm: String="", val tags: String=""){
     override def toString(): String = {
-      val str = s""""${blogid}","${hashTag}","${if(umlsFlag)'Y' else 'N'}","${score}","${cui}","${sab}","${aui}","${desc}","${tui}","${semName}"\n"""
+      val str = f""""${blogid.trim}","${target.trim}","${if(umlsFlag)'Y' else 'N'}","${score}%2.2f","${cui}","${sab}","${aui}","${desc}","${tui}","${styName}","${semName}","${tagId}","${position}","${position_sent}","${targetNorm}","${tags}"\n"""
       trace(INFO, "Get Tag parsing result: " + str)
       str
     }
     def getTitle(): String = {
-      """"blogId","hashTage","umlsFlag","score","cui","sab","aui","umlsStr","tui","semName"""" + "\n"
+      """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","position","position_sent","targetNorm","tags"""" + "\n"
     }
   }
   /**
@@ -450,15 +559,21 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
   def annotateTag(tagFile: String, outputFile: String): Unit = {
     val source = Source.fromFile(tagFile, "UTF-8")
     var writer = new PrintWriter(new FileWriter(outputFile))
-    writer.print(TagRow("","",true,0,"","","","","","").getTitle())
+    writer.print(TagRow("","",true,0,"","","","","","","",0,0).getTitle())
     val lineIterator = source.getLines
     // for each tag, get the UMLS terms
+    var tagId = 0
+    var lastBlogId = ""
     lineIterator.foreach(line =>{
       if (line.trim().length>0) {
-        val tokens = line.split(" ",2)
+        val tokens = line.split(",| ",2)
         if (tokens.length>1) {
           //get all terms from solr
-          select(tokens(1).trim) match {
+          val currTag = tokens(1).trim
+          val currBlogId = tokens(0).trim
+          tagId = if (lastBlogId == currBlogId) tagId + 1 else 1
+          lastBlogId = currBlogId
+          select(currTag) match {
             case suggestions: Array[Suggestion] => {
               // for each UMLS terms, get their TUI from MRSTY table
               if (suggestions.length > 0) {
@@ -468,17 +583,19 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
                   while (mrsty.next) {
                     //for each TUI, get their semantic type from SemGroups.txt
                     val tui = mrsty.getString("TUI")
+                    val styname = mrsty.getString("STY")
                     val sty = tuiMap.get(tui)
-                    writer.print(TagRow(tokens(0), tokens(1).trim, true,
+                    writer.print(TagRow(currBlogId, tokens(1).trim, true,
                       suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
-                      tui, sty.getOrElse("")))
+                      tui,styname, sty.getOrElse(""),
+                      tagId,0,0,normalizeAll(currTag),""))
                   }
                 })
               } else {
-                writer.print(TagRow(tokens(0), tokens(1).trim, false, 0, "", "", "", "", "", ""))
+                writer.print(TagRow(tokens(0), tokens(1).trim, false, 0, "", "", "", "", "", "", "",tagId,0))
               }
             }
-            case _ => writer.print(TagRow(tokens(0), tokens(1).trim, false,0,"","","","","",""))
+            case _ => writer.print(TagRow(tokens(0), tokens(1).trim, false,0,"","","","","","", "",tagId,0))
           }
         }
       }

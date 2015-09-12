@@ -29,7 +29,7 @@ class UmlsTagger2Test   {
     @Test
     def testGetFull(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
-      val phrases = List("Sepsis", "Biliary tract disease", "Progressive systemic sclerosis")
+      val phrases = List("Sepsis", "sEPSIS", "Progressive systemic sclerosis")
       phrases.foreach(phrase => {
         Console.println()
         Console.println("Query: %s".format(phrase))
@@ -94,10 +94,11 @@ class UmlsTagger2Test   {
     def testStermWord(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
 
-      val phrases = List("Sepsis (to) < a ,Man and another. man", "Biliary of disease", "Australia Antigen")
+      val phrases = List("the pets", "the men", "two dishes", "three Babies", "holidays"  ,"the datum",
+        "politics", "news ")
       phrases.foreach(phrase => {
-        //Console.println(s"$phrase,${tagger.stemWords(phrase)}")
-        Console.println(s"$phrase,${tagger.normalizeCasePunct(phrase)}")
+        Console.println(s"$phrase,${tagger.stemWords(phrase)}")
+       // Console.println(s"$phrase,${tagger.normalizeCasePunct(phrase)}")
 
       })
 
@@ -106,28 +107,29 @@ class UmlsTagger2Test   {
     @Test
     def testAnnotateFile(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
-      tagger.annotateFile(s"${rootDir}/data/text_from_min_sook.txt",3)
+      tagger.annotateFile(s"${rootDir}/data/data_content_tag_diabetes_0821.csv",
+        s"${rootDir}/data/data_content_tag_diabetes_0821_ret.csv",
+        4,
+        3,
+        ',','\n')
     }
 
     // find terms from dictionary for a string
     @Test
     def testAnnotateTag(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
-      tagger.annotateTag(s"${rootDir}/data/text_tag_from_min_sook.txt",s"${rootDir}/data/text_tag_from_min_sook_ret_part_umls.csv")
-      //tagger.annotateTag(s"${rootDir}/data/text_tag_from_min_sook.txt",s"${rootDir}/data/text_tag_from_min_sook_ret_all_umls.csv")
+      //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
+      tagger.annotateTag(s"${rootDir}/data/text_tag_from_min_sook.txt",
+        s"${rootDir}/data/text_tag_from_min_sook_ret_all_umls.csv")
 
       tagger.jdbcClose()
     }
 
     @Test
     def testPosFilter():Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
 
-      val input = "I am a big boy"
 
-      println("input: " + input)
-      val ret = tagger.posFilter(input.split(" "))
-      println("pos output: " + ret.mkString(","))
+
     }
 
     @Test
