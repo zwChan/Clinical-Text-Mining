@@ -445,12 +445,14 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
               val suggestionsList = annotateSentence(sent, ngram)
               if (suggestionsList != null && suggestionsList.length > 0) {
                 // word index in the sentence
-                var wordIndex_sent = 0
+                var wordIndex_in_sent = 0
                 // process each word's suggestions(list)
                 suggestionsList.foreach(wordSuggestions => {
+                  if (wordSuggestions._2.length > 0) {
+                    wordIndex_in_sent += 1
+                  }
                   // process eache suggestion for a word in the sentence
                   wordSuggestions._2.foreach(suggestion =>{
-                    wordIndex_sent += 1
                     //get the tagIndex of the word match. 0: not match. start from 1 if matched
                     val tagIndex = tagList.indexOf(normalizeAll(wordSuggestions._1)) + 1
                     //get all tui from mrsty table.
@@ -463,13 +465,13 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
                       writer.print(TagRow(lastRecord.get(0), wordSuggestions._1.trim, true,
                         suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
                         tui,styname, sty.getOrElse(""),
-                        tagIndex,sentenceIndex+wordIndex_sent,wordIndex_sent,
-                        normalizeAll(wordSuggestions._1.trim),tagList.mkString(" ")))
+                        tagIndex,sentenceIndex+wordIndex_in_sent,wordIndex_in_sent,
+                        normalizeAll(wordSuggestions._1.trim),tagList.mkString(",")))
                     }
                   })
 
                 })
-                sentenceIndex += suggestionsList.length
+                sentenceIndex += wordIndex_in_sent
               }
             }
           })
