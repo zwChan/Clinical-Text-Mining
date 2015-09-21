@@ -11,7 +11,7 @@ class UmlsTagger2Test   {
 
     // The root config dir of the opennlp models files and and
     val rootDir = "C:\\fsu\\ra\\UmlsTagger"
-    Trace.currLevel = INFO
+    Trace.currLevel = ERROR
 
     if (! new File(rootDir).exists()) {
       println("Error! You have to config a valid dataDir in class UmlsTagger2Test first")
@@ -119,16 +119,14 @@ class UmlsTagger2Test   {
     def testAnnotateTag(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
       //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
-      tagger.annotateTag(s"${rootDir}/data/text_tag_from_min_sook.txt",
-        s"${rootDir}/data/text_tag_from_min_sook_ret_all_umls.csv")
+      tagger.annotateTag(s"${rootDir}/data/tags_0920_final_ST.csv",
+        s"${rootDir}/data/tags_0920_final_ST_ret.csv")
 
       tagger.jdbcClose()
     }
 
     @Test
     def testPosFilter():Unit = {
-
-
 
     }
 

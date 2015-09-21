@@ -27,8 +27,8 @@
     - [x] Concern the pos of a word when match.(if pos not match, 70% discount)
     - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
     - [x] Get all the resault from solr, sorted with the score
-    - [ ] Choose a best result.
-    - [ ] The case different should be concern less than other different when compare UMLS term and input term.
+    - [ ] Choose a best result. It is about Word Sense Disambiguation.
+    - [x] The case different should be concern less than other different when compare UMLS term and input term.
  - [x] Map the extracted CUI to a semantic type
     - [x] Get all STY from MRSTY table by cui
     - [x] Get semantic group name from semGroups.txt by TUI

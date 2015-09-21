@@ -85,6 +85,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
   println("Current properties:\n" + prop.toString)
 
   val caseFactor = prop.get("caseFactor").toString.toFloat
+  val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
 
   /**
    *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
@@ -393,6 +394,12 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       topscore._2
   }
 
+  def transferExcelCvs(excelCsvFile: String, outputFile:String) = {
+    val in = new FileReader(excelCsvFile)
+    val records = CSVFormat.EXCEL
+      .parse(in)
+
+  }
 
 
   /////////////////// select for a text file ////////////////////
@@ -435,9 +442,22 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       }
 
       val target = if (lastRecord != null)lastRecord.get(targetIndex) else ""
+
+
       if (target.length > 0 && skipSameBlog == false) {
-         //segment the target into sentences
-          val sents = getSent(target)
+        // process the newline as configuration. 1: replace with space; 2: replace with '.'; 0: do nothing
+        val target_tmp = if (ignoreNewLine == 1) {
+           target.replace("\r\n"," ").replace("\r", " ").replace("\n", ". ").replace("\"", "\'")
+         } else if (ignoreNewLine == 2) {
+           target.replace("\r\n",". ").replace("\r", ". ").replace("\n", ". ").replace("\"", "\'")
+         } else {
+          target.replace("\"", "\'")
+        }
+
+        //segment the target into sentences
+        val sents = getSent(target_tmp)
+
+        var sentencePosition = 0
           var sentenceIndex = 0
           sents.foreach(sent => {
             if (sent.length > 0) {
@@ -446,6 +466,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
               if (suggestionsList != null && suggestionsList.length > 0) {
                 // word index in the sentence
                 var wordIndex_in_sent = 0
+                sentenceIndex += 1
                 // process each word's suggestions(list)
                 suggestionsList.foreach(wordSuggestions => {
                   if (wordSuggestions._2.length > 0) {
@@ -465,13 +486,13 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
                       writer.print(TagRow(lastRecord.get(0), wordSuggestions._1.trim, true,
                         suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
                         tui,styname, sty.getOrElse(""),
-                        tagIndex,sentenceIndex+wordIndex_in_sent,wordIndex_in_sent,
-                        normalizeAll(wordSuggestions._1.trim),tagList.mkString(",")))
+                        tagIndex,sentencePosition+wordIndex_in_sent,wordIndex_in_sent,sentenceIndex,
+                        normalizeAll(wordSuggestions._1.trim),tagList.mkString(","),sent))
                     }
                   })
 
                 })
-                sentenceIndex += wordIndex_in_sent
+                sentencePosition += wordIndex_in_sent
               }
             }
           })
@@ -537,20 +558,20 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
    * @param styName the semantic type name
    * @param semName the semantic group name
    * @param tagId if the target word is a tag, this is the index of the tag; if not a tag, this is 0.
-   * @param position the position of the target word in the content
+   * @param wordIndex the position of the target word in the content
    */
   case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
                     val score: Float, val cui: String, val sab: String="", val aui: String="", val desc: String="",
                     val tui: String="", styName: String="", val semName: String="",
-                    val tagId: Int=0, val position: Int=0, val position_sent: Int=0,
-                    val targetNorm: String="", val tags: String=""){
+                    val tagId: Int=0, val wordIndex: Int=0, val wordIndexInSentence: Int=0, val sentenceIndex: Int=0,
+                    val targetNorm: String="", val tags: String="", val sentence: String=""){
     override def toString(): String = {
-      val str = f""""${blogid.trim}","${target.trim}","${if(umlsFlag)'Y' else 'N'}","${score}%2.2f","${cui}","${sab}","${aui}","${desc}","${tui}","${styName}","${semName}","${tagId}","${position}","${position_sent}","${targetNorm}","${tags}"\n"""
+      val str = f""""${blogid.trim}","${target.trim}","${if(umlsFlag)'Y' else 'N'}","${score}%2.2f","${cui}","${sab}","${aui}","${desc}","${tui}","${styName}","${semName}","${tagId}","${wordIndex}","${wordIndexInSentence}","${sentenceIndex}","${targetNorm}","${tags}","${sentence}"\n"""
       trace(INFO, "Get Tag parsing result: " + str)
       str
     }
     def getTitle(): String = {
-      """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","position","position_sent","targetNorm","tags"""" + "\n"
+      """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","tags","sentence"""" + "\n"
     }
   }
   /**
@@ -590,7 +611,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
                     writer.print(TagRow(currBlogId, tokens(1).trim, true,
                       suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
                       tui,styname, sty.getOrElse(""),
-                      tagId,0,0,normalizeAll(currTag),""))
+                      tagId,0,0,0,normalizeAll(currTag),""))
                   }
                 })
               } else {
@@ -690,4 +711,24 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     val rs = sqlStatement.executeQuery(sql)
     rs
   }
+
+}
+
+object UmlsTagger2 {
+
+  def main(args: Array[String]) {
+    println(s"The input is: ${args.mkString(",")}")
+    if (args.length <3) {
+      println("Input  error: args should be: rootdir inputFile outputFile. ")
+      sys.exit(1)
+    }
+    val rootDir = args(0)
+    val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+    //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
+    tagger.annotateTag(s"${args(1)}",
+      s"${args(2)}")
+
+    tagger.jdbcClose()
+  }
+
 }
