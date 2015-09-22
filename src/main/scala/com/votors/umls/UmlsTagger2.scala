@@ -633,7 +633,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
    * @return
    */
   def getMrsty(cui: String): ResultSet = {
-    execQuery(s"select * from mrsty where CUI='${cui}';")
+    execQuery(s"select * from MRSTY where CUI='${cui}';")
   }
 
   /**
