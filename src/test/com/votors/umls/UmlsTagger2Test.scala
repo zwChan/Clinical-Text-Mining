@@ -107,10 +107,10 @@ class UmlsTagger2Test   {
     @Test
     def testAnnotateFile(): Unit = {
       val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
-      tagger.annotateFile(s"${rootDir}/data/data_content_tag_diabetes_0821.csv",
-        s"${rootDir}/data/data_content_tag_diabetes_0821_ret.csv",
+      tagger.annotateFile(s"${rootDir}/data/raw_data_CHV_study2_format.csv",
+        s"${rootDir}/data/raw_data_CHV_study2_format_ret.csv",
         4,
-        3,
+        5,
         ',','\n')
     }
 
@@ -143,7 +143,11 @@ class UmlsTagger2Test   {
     }
 
 
-
+  @Test
+  def testtransferExcelCvs(): Unit = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+    tagger.transferExcelCvs(s"${rootDir}/data/raw_data_CHV_study2.csv.txt", "")
+  }
 
     //  @AfterClass
 //  def cleanup():Unit = {

@@ -7,7 +7,7 @@
   <groupId>com.votors</groupId>
   <artifactId>Clinical-Text-Mining</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <packaging>jar</packaging>
+  <packaging>pom</packaging>
   <name>"Clinical-Text-Mining"</name>
   
   <repositories>
@@ -180,6 +180,23 @@
       <artifactId>commons-csv</artifactId>
       <version>1.2</version>
     </dependency>
+
+  <dependency>
+    <groupId>org.jgrapht</groupId>
+    <artifactId>jgrapht-core</artifactId>
+    <version>0.9.1</version>
+  </dependency>
+  <dependency>
+      <groupId>org.jgrapht</groupId>
+      <artifactId>jgrapht-ext</artifactId>
+      <version>0.9.1</version>
+  </dependency>
+
+  <dependency>
+      <groupId>org.tinyjee.jgraphx</groupId>
+      <artifactId>jgraphx</artifactId>
+      <version>1.10.1.3</version>
+  </dependency>
 
   </dependencies>
 
