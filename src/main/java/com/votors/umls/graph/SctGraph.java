@@ -223,7 +223,7 @@ public class SctGraph {
 
         frame = new JFrame();
         frame.getContentPane().add(applet);
-        frame.setTitle("Graph: single="+cntSingle+",root="+cntRoot+",rootNew="+cntRootNew+",chile="+cntChild);
+        frame.setTitle("Graph: single="+cntSingle+",root="+cntRoot+",rootNew="+cntRootNew+",child="+cntChild);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.pack();
         frame.setVisible(true);
