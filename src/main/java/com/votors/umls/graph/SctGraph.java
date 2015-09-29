@@ -6,7 +6,9 @@ import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 import com.mxgraph.layout.mxCircleLayout;
 import com.mxgraph.layout.mxFastOrganicLayout;
 import com.mxgraph.layout.mxGraphLayout;
+import com.mxgraph.model.mxICell;
 import com.mxgraph.swing.mxGraphComponent;
+import com.mxgraph.util.mxConstants;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -38,6 +40,8 @@ public class SctGraph {
     private static final Color DEFAULT_BG_COLOR = Color.decode("#FAFBFF");
     transient JFrame frame = null;
     transient JApplet applet = null;
+    transient JGraphXAdapter<UmlsVertex, IsaEdge> jgxAdapter;
+
     /*for jGraphX end*/
 
     public SctGraph(){};
@@ -126,8 +130,8 @@ public class SctGraph {
                 cntChild++;
             }
         }
-        System.out.println(g);
-        System.out.println(g.vertexSet().toString());
+        //System.out.println(g);
+        //System.out.println(g.vertexSet().toString());
         // second: allocate groupId to other vertex
         //UmlsVertex r = null;
         for (UmlsVertex v: g.vertexSet()) {
@@ -137,7 +141,7 @@ public class SctGraph {
                 //if (r!=null)System.out.println("compare:" + r.getAui() + " " + v.root.getAui() + " " + (r == v.root));
                 //r = v.root;
             }
-            System.out.println(v.toString2());
+            //System.out.println(v.toString2());
         }
     }
 
@@ -151,14 +155,11 @@ public class SctGraph {
      */
     UmlsVertex getRoot(UmlsVertex child) {
         for (IsaEdge e: g.outgoingEdgesOf(child)) {
-            UmlsVertex t = (UmlsVertex)e.getTarget();
+            UmlsVertex t = realVertex(e.getTarget());
             if (t.status == UmlsVertex.ROOT || t.status == UmlsVertex.ROOT_NEW) {
                 //System.out.println("root " + t.toString2());
                 // !!! t is not the same reference in vertex set. It is weird!!!
-                for (UmlsVertex v: g.vertexSet()) {
-                    if (v.getAui().equals(t.getAui()))
-                        return v;
-                }
+                return t;
             } else {
                 return getRoot(t);
             }
@@ -167,6 +168,17 @@ public class SctGraph {
         System.out.println("Warning: child more than one parent: " + child.getAui());
         return child;  // Should never reach here
 
+    }
+
+    /*Get the vertex in vertexSet of the graph. some time v is a copy of vertex and has no complete info.*/
+    public UmlsVertex realVertex(UmlsVertex v) {
+        for (UmlsVertex rv: g.vertexSet()) {
+            if (v.getAui().equals(rv.getAui()))
+                return rv;
+        }
+
+        System.out.println("!!Error, a vertex not found in vertexSet.!!");
+        return v;
     }
 
     /**
@@ -194,7 +206,6 @@ public class SctGraph {
      */
     public void initJGraphX()
     {
-        JGraphXAdapter<SctGraph, IsaEdge> jgxAdapter;
         if (frame != null) {
             frame.setVisible(false);
             frame.removeAll();
@@ -205,7 +216,8 @@ public class SctGraph {
         this.cleanSingleVertex();
 
         // create a visualization using JGraph, via an adapter
-        jgxAdapter = new JGraphXAdapter<SctGraph, IsaEdge>(this.getGraph());
+        jgxAdapter = new JGraphXAdapter<UmlsVertex, IsaEdge>(this.getGraph());
+
 
         // positioning via jgraphx layouts
         mxGraphLayout layout = null;
@@ -217,9 +229,12 @@ public class SctGraph {
             layout = new mxCircleLayout(jgxAdapter);  // as a circle
         }
         layout.execute(jgxAdapter.getDefaultParent());
+
         applet = new JApplet();
-        applet.getContentPane().add(new mxGraphComponent(jgxAdapter));
+        mxGraphComponent graphComponent = new mxGraphComponent(jgxAdapter);
+        applet.getContentPane().add(graphComponent);
         applet.resize(DEFAULT_SIZE);
+
 
         frame = new JFrame();
         frame.getContentPane().add(applet);
@@ -227,6 +242,7 @@ public class SctGraph {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.pack();
         frame.setVisible(true);
+        this.setGraphColor();
     }
 
     public void cleanFrame() {
@@ -237,6 +253,34 @@ public class SctGraph {
         if (applet != null) applet.removeAll();
     }
 
+    public void setGraphColor() {
+        if (jgxAdapter == null) return;
+
+        HashMap<UmlsVertex, mxICell> cells = jgxAdapter.getVertexToCellMap();
+        for (Map.Entry<UmlsVertex,mxICell> e: cells.entrySet()) {
+            //System.out.println(e.getValue().getStyle()); //null
+            if (e.getKey().status == UmlsVertex.ROOT) {
+                jgxAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, "green", new Object[]{e.getValue()});
+            } else if (e.getKey().status == UmlsVertex.ROOT_NEW) {
+                jgxAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, "red", new Object[]{e.getValue()});
+            }
+        }
+
+        HashMap<IsaEdge, mxICell> edgeCells = jgxAdapter.getEdgeToCellMap();
+        Set<IsaEdge> eSet = g.edgeSet();
+        for (Map.Entry<IsaEdge,mxICell> e: edgeCells.entrySet()) {
+            //System.out.println(realVertex(g.getEdgeSource(e.getKey())).toString2());
+            if (realVertex(g.getEdgeSource(e.getKey())).status == UmlsVertex.ROOT_NEW) {
+                //System.out.println(g.getEdgeSource(e.getKey()).toString2());
+                jgxAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, "red", new Object[]{e.getValue()});
+            }
+        }
+
+    }
+
+    @Override public String toString() {
+        return "SctGraph: layout: " +layoutType+ ",single="+cntSingle+",root="+cntRoot+",rootNew="+cntRootNew+",child="+cntChild;
+    }
     public static void main(String [] args)
     {
         System.out.println("your input is: " + args.toString());
@@ -270,7 +314,7 @@ public class SctGraph {
 
            if (!type.equals("graph")) {
                PrintWriter writer = new PrintWriter(new FileWriter(outputFile));
-               writer.append("\"stt\",\"sty\",\"cntTotal\",\"cntRoot\",\"cntSingle\",\"cntChile\",\"cntRootNew\",\"newRootFlag\",\"groupId\",\"aui\",\"auiStr\"\n");
+               writer.append("\"stt\",\"sty\",\"cntTotal\",\"cntRoot\",\"cntSingle\",\"cntChild\",\"cntRootNew\",\"newRootFlag\",\"groupId\",\"aui\",\"auiStr\"\n");
 
                // for each row of csv file
                while (records.hasNext()) {
@@ -312,7 +356,7 @@ public class SctGraph {
                System.out.println("Input semantic tag and semantic type:");
                while (true) {
                    try {
-                       System.out.println(">");
+                       System.out.print(">");
                        String line = br.readLine().replaceAll("\\W", "").toLowerCase();
                        //System.out.print(">:" + line);
                        //br.skip(1);
@@ -349,6 +393,7 @@ public class SctGraph {
                            sg.loadGraph(pairs, pair_str1, pair_str2);
                            sg.group();
                            sg.initJGraphX();
+                           System.out.println(sg.toString());
                            hit = true;
                        }
                        if (hit != true) {

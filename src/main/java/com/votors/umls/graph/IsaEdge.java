@@ -17,5 +17,6 @@ public class IsaEdge extends DefaultEdge{
         }
         return false;
     }
-    @Override public Object getTarget() {return super.getTarget();}
+    @Override public UmlsVertex getTarget() {return (UmlsVertex)super.getTarget();}
+    @Override public UmlsVertex getSource() {return (UmlsVertex)super.getSource();}
 }
