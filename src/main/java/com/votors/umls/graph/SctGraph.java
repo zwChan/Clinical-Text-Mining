@@ -241,7 +241,7 @@ public class SctGraph {
     {
         System.out.println("your input is: " + args.toString());
         if (args.length < 2) {
-           System.out.println("Input invalid: inputFile outputFile isDisplayGrap");
+           System.out.println("Input invalid: {inputFile} {outputFile} [result-type] [layout-type]");
            System.exit(1);
         }
 
@@ -311,53 +311,56 @@ public class SctGraph {
                BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
                System.out.println("Input semantic tag and semantic type:");
                while (true) {
-                   System.out.println(">");
-                   String line = br.readLine().replaceAll("\\W", "").toLowerCase();
-                   //System.out.print(">:" + line);
-                   //br.skip(1);
-                   if (line.length() <= 0) {
-                       continue;
-                   }
-                   if (line.trim().equals("quit")) {
-                       System.exit(0);
-                   }
+                   try {
+                       System.out.println(">");
+                       String line = br.readLine().replaceAll("\\W", "").toLowerCase();
+                       //System.out.print(">:" + line);
+                       //br.skip(1);
+                       if (line.length() <= 0) {
+                           continue;
+                       }
+                       if (line.trim().equals("quit")) {
+                           System.exit(0);
+                       }
 
-                   in = new FileReader(csvFile);
-                   records = CSVFormat.DEFAULT
-                           .withRecordSeparator('\n')
-                           .withDelimiter(',')
-                           .withSkipHeaderRecord(true)
-                           .withEscape('\\')
-                           .parse(in)
-                           .iterator();
-                   boolean hit = false;
-                   while (records.hasNext()) {
-                       CSVRecord r = records.next();
-                       String stt = r.get(0);
-                       String sty = r.get(1);
-                       String sttsty = (stt + sty).replaceAll("\\W", "").toLowerCase();
-                       //System.out.print("?:" + line);
-                       if (!sttsty.equals(line)) continue;
-                       int cntTotal = Integer.parseInt(r.get(2));
-                       int cntParent = Integer.parseInt(r.get(3));
-                       String pairs = r.get(4);
-                       String pair_str1 = r.get(5);
-                       String pair_str2 = r.get(6);
-                       sg.cleanFrame();
-                       sg.cleanGraph();
-                       sg.loadGraph(pairs, pair_str1, pair_str2);
-                       sg.group();
-                       sg.initJGraphX();
-                       hit = true;
-                   }
-                   if (hit != true) {
-                       System.out.println("the input semantic tag and semantic type cannot found in the input csv file.");
+                       in = new FileReader(csvFile);
+                       records = CSVFormat.DEFAULT
+                               .withRecordSeparator('\n')
+                               .withDelimiter(',')
+                               .withSkipHeaderRecord(true)
+                               .withEscape('\\')
+                               .parse(in)
+                               .iterator();
+                       boolean hit = false;
+                       while (records.hasNext()) {
+                           CSVRecord r = records.next();
+                           String stt = r.get(0);
+                           String sty = r.get(1);
+                           String sttsty = (stt + sty).replaceAll("\\W", "").toLowerCase();
+                           //System.out.print("?:" + line);
+                           if (!sttsty.equals(line)) continue;
+                           int cntTotal = Integer.parseInt(r.get(2));
+                           int cntParent = Integer.parseInt(r.get(3));
+                           String pairs = r.get(4);
+                           String pair_str1 = r.get(5);
+                           String pair_str2 = r.get(6);
+                           sg.cleanFrame();
+                           sg.cleanGraph();
+                           sg.loadGraph(pairs, pair_str1, pair_str2);
+                           sg.group();
+                           sg.initJGraphX();
+                           hit = true;
+                       }
+                       if (hit != true) {
+                           System.out.println("the input semantic tag and semantic type cannot found in the input csv file.");
+                       }
+                   } catch (java.lang.IllegalArgumentException ex) {
+                       System.out.println("Exception: " + ex.toString() + ". There may be a cycle. You can try layout: organic.");
                    }
                }
            }
 
-
-       }catch (Exception e) {
+       } catch (Exception e) {
             System.out.println("Exception: " + e.toString());
             e.printStackTrace();
        }
