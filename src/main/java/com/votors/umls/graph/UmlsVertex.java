@@ -15,13 +15,27 @@ public class UmlsVertex implements Serializable {
     public static final String ROOT = "root";
     public static final String ROOT_NEW = "new-root";
     public static final String CHILD = "child";
+    //public static final String RELAY = "relay";
+    public static final String COPY = "copy";
     public String status = ROOT;
     public UmlsVertex root = this;   // who is the root of this vertex
     public int groupId = 0;     // which group this vertex belong to; 0 is no group yet.
+    public int layer = 0;       // which layer do the vertex locate in? for method SctGraph.fix()
+    public boolean fix = false;
     transient private ListenableDirectedGraph g = null;
+    private static int copyCnt = 0;
 
     public UmlsVertex(String aui) {
         this.aui = aui;
+    }
+    public UmlsVertex(UmlsVertex cp) {
+        copyCnt++;
+        aui = cp.aui + "-copy-"+copyCnt;
+        root = cp.root;
+        groupId = cp.groupId;
+        status = UmlsVertex.COPY;
+        layer = cp.layer;
+        auiStr = cp.auiStr;
     }
     public String getAui() { return aui;}
     public void setGraph(ListenableDirectedGraph graph) {g = graph;}
@@ -41,7 +55,6 @@ public class UmlsVertex implements Serializable {
 
     public String toString2() {
         return "Aui:" + aui + ",\tstatus: " + status + ",\tgroupId: " + groupId + ",\troot: "
-                + root.getAui() + ",\tout: " + getOutDegree() + ",\tin: " + getInDegree() +",\tg: " + g.hashCode()
-                + ",\trootid: " + root.hashCode();
+                + root.getAui() + ",\tlayer: " + layer + ",\tout: " + getOutDegree() + ",\tin: " + getInDegree();
     }
 }

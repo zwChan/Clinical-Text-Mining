@@ -1,6 +1,5 @@
 package com.votors.umls.graph;
 
-
 import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 
 import com.mxgraph.layout.mxCircleLayout;
@@ -8,6 +7,7 @@ import com.mxgraph.layout.mxFastOrganicLayout;
 import com.mxgraph.layout.mxGraphLayout;
 import com.mxgraph.model.mxICell;
 import com.mxgraph.swing.mxGraphComponent;
+import com.mxgraph.util.mxCellRenderer;
 import com.mxgraph.util.mxConstants;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -15,10 +15,13 @@ import org.apache.commons.csv.CSVRecord;
 import org.jgrapht.ext.JGraphXAdapter;
 import org.jgrapht.graph.ListenableDirectedGraph;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
+import java.util.List;
 
 /**
  * Created by Jason on 2015/9/26 0026.
@@ -32,12 +35,13 @@ public class SctGraph {
     int cntRootNew = 0;
     int cntRoot = 0;
     int cntChild = 0;
+    int cntRelay = 0;
     public String layoutType = "hierarchy";  //default is hierarchy; others are organic; circle
+    HashSet<LinkedList<UmlsVertex>> fixEdgeSet = new HashSet<LinkedList<UmlsVertex>>();
 
     /*for jGraphX begin*/
     private static final long serialVersionUID = 2202072534703043194L;
     private static final Dimension DEFAULT_SIZE = new Dimension(530, 320);
-    private static final Color DEFAULT_BG_COLOR = Color.decode("#FAFBFF");
     transient JFrame frame = null;
     transient JApplet applet = null;
     transient JGraphXAdapter<UmlsVertex, IsaEdge> jgxAdapter;
@@ -46,7 +50,10 @@ public class SctGraph {
 
     public SctGraph(){};
     public SctGraph (String inputPairs) {
-        //String inputPairs = "A18785586 A3558430,A20828628 A3558430,A20828068 A3558430,A3806238 A3558430,A3347309 A3806238,A3896303 A3806238,A3033241 A3347309,A3896813 A3347309";
+        if (inputPairs == null) {
+            // for test
+            inputPairs ="664	939`664	244`244	165`649	165`548	244`369	262`369	775`775	374`374	649`119	120`548	120";
+        }
         this.loadGraph(inputPairs,null,null);
     }
 
@@ -89,8 +96,15 @@ public class SctGraph {
     /**
      * Clean the current graph, so that we can load a new graph, avoiding creating a new instance.
      */
+    public void clean() {
+        cleanFrame();
+        cleanGraph();
+    }
+
+    /* use a new ListenableDirectedGraph will significantly speed up the processing.*/
     public void cleanGraph() {
-        g.removeAllVertices(new HashSet(g.vertexSet()));
+        //g.removeAllVertices(new HashSet(g.vertexSet()));
+        g =  new ListenableDirectedGraph<UmlsVertex, IsaEdge>(IsaEdge.class);
         cntSingle = 0;
         cntRootNew = 0;
         cntRoot = 0;
@@ -101,6 +115,9 @@ public class SctGraph {
         HashSet<UmlsVertex> vSet = new HashSet(g.vertexSet());
         for (UmlsVertex v: vSet) {
             if (v.getInDegree() ==0 && v.getOutDegree() == 0) {
+                if (v.status == UmlsVertex.ROOT_NEW) {
+                    System.out.println("Clean new root: " + v.toString2());
+                }
                 g.removeVertex(v);
             }
         }
@@ -167,7 +184,6 @@ public class SctGraph {
 
         System.out.println("Warning: child more than one parent: " + child.getAui());
         return child;  // Should never reach here
-
     }
 
     /*Get the vertex in vertexSet of the graph. some time v is a copy of vertex and has no complete info.*/
@@ -200,6 +216,121 @@ public class SctGraph {
         return ret;
     }
 
+    private void removeSpecialVertex() {
+        Set<UmlsVertex> vSet = new HashSet<UmlsVertex>(g.vertexSet());
+
+        int b = 11;
+        int e = 11;
+        int cnt = 0;
+        for (UmlsVertex v : vSet) {
+            if (v.status == UmlsVertex.ROOT_NEW) {
+                cnt++;
+                if ((cnt > e || cnt < b) && cnt != 4 && cnt != 9) continue;
+                //System.out.println(cnt + " delete: " + v.toString2());
+                g.removeVertex(v);
+            }
+        }
+
+        return;
+    }
+
+    /*If there are new root that can be locate at different hierarchy, add temp vertex to fix this problem*/
+    /* It is fix by updating new jgraphx version!
+    * not used now. but this code may be useful*/
+    public void fix() {
+        Set<UmlsVertex> vSet = g.vertexSet();
+        // annotate all root and child vertex a layer
+        int layer = 1;
+        for (UmlsVertex v: vSet) {
+            if (v.status == UmlsVertex.ROOT) {
+                v.layer = layer;
+                setLayer(v, layer+1);
+            }
+        }
+        printVertic();
+
+        // if the parents of a new root vertex are in different layers, add temp vertex to solve it.
+        boolean modify = false;
+        while (true) {
+            //pick the topest new root vertex
+            UmlsVertex currV = null;
+            if (modify) vSet = g.vertexSet();
+            for (UmlsVertex v: vSet) {
+                if (v.status == UmlsVertex.ROOT_NEW && v.fix == false) {
+                    if(currV == null || currV.layer > v.layer) {
+                        currV = v;
+                    }
+                }
+            }
+            if (currV == null ) break;
+
+            // get all the parent
+            Set<IsaEdge> eSet = new HashSet<IsaEdge>(g.outgoingEdgesOf(currV));
+            modify = false;
+            for (IsaEdge e: eSet) {
+                UmlsVertex p = realVertex(e.getTarget());
+                int tempLayer = currV.layer - p.layer;
+                int relayLayer = p.layer + 1;
+                System.out.println("target "+p.toString2());
+                if (tempLayer>1) {
+                    // fix the layer differ to 1 by adding new vertic.
+                    while (tempLayer>1) {
+                        g.removeEdge(currV,p);  // remove old edge
+                        cntRelay++;
+                        UmlsVertex x = new UmlsVertex("x"+cntRelay);
+                        x.layer = relayLayer++;
+                        x.root = p.root;
+                        x.status = UmlsVertex.COPY;
+                        x.groupId = p.groupId;
+
+                        g.addVertex(x); //add a relay vertex
+                        g.addEdge(x,p); //add a edge between relay and parent
+                        p = x; // set teh relay vertex as the parent for nex relay vertex
+                        tempLayer--;
+                        modify = true;
+                        System.out.println("Add a relay vertex for " + currV);
+                    }
+                    g.addEdge(currV,p); // connect the current vertex to the relay vertex.
+                }
+            }
+            currV.fix = true;
+        }
+    }
+
+
+    /**
+     * remove the connection of the new root to its parents, and add a copy of the new root to the parents;
+     * */
+    public void splitNewRoot (boolean isCopy) {
+        Set<UmlsVertex> vSet = new HashSet<UmlsVertex>(g.vertexSet());
+        for (UmlsVertex v_tmp: vSet) {
+            UmlsVertex v = realVertex(v_tmp);
+            if (v.status == UmlsVertex.ROOT_NEW) {
+                Set<IsaEdge> eSet = new HashSet<IsaEdge>(g.outgoingEdgesOf(v));
+                for (IsaEdge e : eSet) {
+                    if (isCopy) {
+                        UmlsVertex cp = new UmlsVertex(v);
+                        g.addVertex(cp);
+                        g.addEdge(cp, realVertex(e.getTarget()));
+                    }
+                    //System.out.println("remove edg from source: " + v.toString2());
+                    g.removeEdge(e);
+                }
+            }
+        }
+    }
+
+    /*set the layer for the vertex of the graph. Not used now.*/
+    private void setLayer (UmlsVertex root, int layer) {
+        Set<IsaEdge> eSet = g.incomingEdgesOf(root);
+        for (IsaEdge e: eSet ) {
+            UmlsVertex rv = realVertex(e.getSource());
+            if (rv.layer < layer) {
+                rv.layer = layer;   // set it to be more deep layer.
+                setLayer(rv, layer+1);
+            }
+        }
+    }
     /**
      * Init graph display.
      * !! Note: It will delete the single vertex of the graph first.
@@ -218,15 +349,14 @@ public class SctGraph {
         // create a visualization using JGraph, via an adapter
         jgxAdapter = new JGraphXAdapter<UmlsVertex, IsaEdge>(this.getGraph());
 
-
         // positioning via jgraphx layouts
         mxGraphLayout layout = null;
         if (layoutType.equals("hierarchy")) {
-            layout = new mxHierarchicalLayout(jgxAdapter);  // hierarchy
+            layout = new mxHierarchicalLayout(jgxAdapter,SwingConstants.NORTH);  // hierarchy
         } else if (layoutType.equals("organic")) {
             layout = new mxFastOrganicLayout(jgxAdapter); //has center
         } else {
-            layout = new mxCircleLayout(jgxAdapter);  // as a circle
+            layout = new mxHierarchicalLayout(jgxAdapter);  // as a circle
         }
         layout.execute(jgxAdapter.getDefaultParent());
 
@@ -235,14 +365,24 @@ public class SctGraph {
         applet.getContentPane().add(graphComponent);
         applet.resize(DEFAULT_SIZE);
 
-
         frame = new JFrame();
         frame.getContentPane().add(applet);
         frame.setTitle("Graph: single="+cntSingle+",root="+cntRoot+",rootNew="+cntRootNew+",child="+cntChild);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.pack();
-        frame.setVisible(true);
         this.setGraphColor();
+        frame.setVisible(true);
+    }
+
+    /*Save the current graph to the file system.*/
+    private void saveGraph2File (String file, String format) {
+        if (jgxAdapter == null) return;
+        BufferedImage image = mxCellRenderer.createBufferedImage(jgxAdapter, null, 1, Color.WHITE, true, null);
+        try {
+            ImageIO.write(image, format.toUpperCase(), new File(file));
+        } catch (Exception e) {
+            System.out.println("write graph file fail." + e.toString());
+        }
     }
 
     public void cleanFrame() {
@@ -263,6 +403,8 @@ public class SctGraph {
                 jgxAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, "green", new Object[]{e.getValue()});
             } else if (e.getKey().status == UmlsVertex.ROOT_NEW) {
                 jgxAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, "red", new Object[]{e.getValue()});
+            } else if (e.getKey().status == UmlsVertex.COPY) {
+                jgxAdapter.setCellStyles(mxConstants.STYLE_FILLCOLOR, "blue", new Object[]{e.getValue()});
             }
         }
 
@@ -273,6 +415,9 @@ public class SctGraph {
             if (realVertex(g.getEdgeSource(e.getKey())).status == UmlsVertex.ROOT_NEW) {
                 //System.out.println(g.getEdgeSource(e.getKey()).toString2());
                 jgxAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, "red", new Object[]{e.getValue()});
+            } else if (realVertex(g.getEdgeSource(e.getKey())).status == UmlsVertex.COPY) {
+                //System.out.println(g.getEdgeSource(e.getKey()).toString2());
+                jgxAdapter.setCellStyles(mxConstants.STYLE_STROKECOLOR, "blue", new Object[]{e.getValue()});
             }
         }
 
@@ -281,24 +426,41 @@ public class SctGraph {
     @Override public String toString() {
         return "SctGraph: layout: " +layoutType+ ",single="+cntSingle+",root="+cntRoot+",rootNew="+cntRootNew+",child="+cntChild;
     }
+    public void printVertic() {
+        Set<UmlsVertex> vSet = new HashSet<UmlsVertex>(g.vertexSet());
+        System.out.println("\n***************start*****************");
+        for (UmlsVertex v: vSet) {
+            System.out.println(v.toString2());
+        }
+        System.out.println("\n##################end##############");
+
+    }
     public static void main(String [] args)
     {
-        System.out.println("your input is: " + args.toString());
+        for (String str: args)
+            System.out.println("your input is: " + str);
         if (args.length < 2) {
-           System.out.println("Input invalid: {inputFile} {outputFile} [result-type] [layout-type]");
+           System.out.println("Input invalid: {inputFile} {outputFile} [result-type] [layout-type] [no-split|split|split-copy] [graph-format] [output-graph path]");
            System.exit(1);
         }
 
         String csvFile = args[0];
         String outputFile = args[1];
-        String type = "all";
+        String resultType = "all";
         String layout = "hierarchy";
-        if (args.length>2)  type = args[2];
+        String splitType = "";
+        String format = null;
+        String graphDir = null;
+        if (args.length>2)  resultType = args[2];
         if (args.length>3)  layout = args[3];
+        if (args.length>4) splitType = args[4];
+        if (args.length>5) format = args[5];
+        if (args.length>6) graphDir = args[6];
 
        try {
-            //String input = "A3894737\tnull`A2932549\tnull`A3335714\tnull`A3043947\tnull`A3056048\tnull`A3009263\tnull`A3016398\tnull`A3018098\tnull`A2929870\tnull`A2929888\tnull`A3018901\tnull`A2881577\tnull`A2873252\tnull`A2935052\tnull`A3038774\tnull`A2990536\tnull`A3044324\tnull`A3588508\tnull`A3050220\tnull`A2873253\tnull`A2940329\tnull`A3054121\tnull`A3054171\tnull`A2885457\tnull`A2885469\tnull`A3650843\tnull`A2942956\tnull`A3061228\tnull`A3009264\tA2873252`A3122338\tA2873252`A3049658\tA2873252`A3124096\tnull`A3150157\tnull`A3182538\tnull`A3029410\tnull`A2940529\tnull`A3364346\tnull`A3009313\tnull`A3010999\tnull`A3033440\tnull`A3033442\tnull`A2878204\tnull`A2992312\tnull`A2873467\tnull`A2992457\tnull`A2992458\tnull`A2992462\tnull`A2923492\tnull`A3008523\tA2878204`A3120523\tA2878204`A3055085\tA2878204`A3202601\tA2878204`A2994384\tA2878204`A2873462\tnull`A3364337\tA3364346`A3364341\tA3364346`A3364349\tA3364346`A2992459\tnull`A2992465\tnull`A3061420\tnull`A3895649\tA3894737`A3899541\tA3894737`A3904024\tA3894737`A3905419\tA3894737";
-            SctGraph sg = new SctGraph();
+           Thread.setDefaultUncaughtExceptionHandler(new MyThreadExceptionHandler());
+
+           SctGraph sg = new SctGraph();
            sg.layoutType =layout;
 
             //get text content from csv file
@@ -309,10 +471,9 @@ public class SctGraph {
                 .withSkipHeaderRecord(true)
                 .withEscape('\\')
                 .parse(in);
-
            Iterator<CSVRecord> records = parser.iterator();
 
-           if (!type.equals("graph")) {
+           if (!resultType.equals("graph")) {
                PrintWriter writer = new PrintWriter(new FileWriter(outputFile));
                writer.append("\"stt\",\"sty\",\"cntTotal\",\"cntRoot\",\"cntSingle\",\"cntChild\",\"cntRootNew\",\"newRootFlag\",\"groupId\",\"aui\",\"auiStr\"\n");
 
@@ -344,14 +505,46 @@ public class SctGraph {
                        }
                    }
                    writer.append(sb);
-
-
                }
                writer.flush();
                writer.close();
            }
-           // Enter the show graph shell.
-           if (!type.equals("text")) {
+
+           /*write the graph to the file system.*/
+           if (format != null && graphDir != null) {
+               in = new FileReader(csvFile);
+               records = CSVFormat.DEFAULT
+                       .withRecordSeparator('\n')
+                       .withDelimiter(',')
+                       .withSkipHeaderRecord(true)
+                       .withEscape('\\')
+                       .parse(in)
+                       .iterator();
+               while (records.hasNext()) {
+                   CSVRecord r = records.next();
+                   String stt = r.get(0);
+                   String sty = r.get(1);
+                   //System.out.print("?:" + line);
+                   int cntTotal = Integer.parseInt(r.get(2));
+                   int cntParent = Integer.parseInt(r.get(3));
+                   String pairs = r.get(4);
+                   String pair_str1 = r.get(5);
+                   String pair_str2 = r.get(6);
+                   sg.clean();
+                   sg.loadGraph(pairs, pair_str1, pair_str2);
+                   sg.group();
+                   if (splitType.equals("split")) {
+                       sg.splitNewRoot(false);
+                   } else if (splitType.equals("split-copy")) {
+                       sg.splitNewRoot(true);
+                   }
+                   sg.initJGraphX();
+                   String file = (stt.replaceAll("\\W"," ") + "-" + sty.replaceAll("\\W"," ") + "."+format.toLowerCase());
+                   sg.saveGraph2File(graphDir+file,format);
+                   System.out.println("Save graph: " + sg.toString() + " to " + graphDir+file);
+               }
+           } else if (!resultType.equals("text")) {
+               // Enter the show graph shell.
                BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
                System.out.println("Input semantic tag and semantic type:");
                while (true) {
@@ -388,10 +581,14 @@ public class SctGraph {
                            String pairs = r.get(4);
                            String pair_str1 = r.get(5);
                            String pair_str2 = r.get(6);
-                           sg.cleanFrame();
-                           sg.cleanGraph();
+                           sg.clean();
                            sg.loadGraph(pairs, pair_str1, pair_str2);
                            sg.group();
+                           if (splitType.equals("split")) {
+                               sg.splitNewRoot(false);
+                           } else if (splitType.equals("split-copy")) {
+                               sg.splitNewRoot(true);
+                           }
                            sg.initJGraphX();
                            System.out.println(sg.toString());
                            hit = true;
@@ -401,10 +598,11 @@ public class SctGraph {
                        }
                    } catch (java.lang.IllegalArgumentException ex) {
                        System.out.println("Exception: " + ex.toString() + ". There may be a cycle. You can try layout: organic.");
+                       ex.printStackTrace();
+
                    }
                }
            }
-
        } catch (Exception e) {
             System.out.println("Exception: " + e.toString());
             e.printStackTrace();
@@ -413,5 +611,13 @@ public class SctGraph {
 //        sg.cleanGraph();
 //        try{Thread.sleep(5000);}catch(InterruptedException e){}
 //        sg.loadGraph("A18785586 A3558430,A20828628 A3558430,A20828068 null");
+        System.out.println("done!");
+        System.exit(0);
+    }
+
+    public static class MyThreadExceptionHandler implements Thread.UncaughtExceptionHandler {
+        public void uncaughtException(Thread t, Throwable e) {
+            System.out.println("Thread exception:" + e.toString());
+        }
     }
 }
