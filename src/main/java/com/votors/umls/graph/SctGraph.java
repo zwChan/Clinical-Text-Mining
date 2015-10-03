@@ -36,6 +36,7 @@ public class SctGraph {
     int cntRoot = 0;
     int cntChild = 0;
     int cntRelay = 0;
+    UmlsVertex nullVertex = null;
     public String layoutType = "hierarchy";  //default is hierarchy; others are organic; circle
     HashSet<LinkedList<UmlsVertex>> fixEdgeSet = new HashSet<LinkedList<UmlsVertex>>();
 
@@ -114,11 +115,13 @@ public class SctGraph {
     public void cleanSingleVertex() {
         HashSet<UmlsVertex> vSet = new HashSet(g.vertexSet());
         for (UmlsVertex v: vSet) {
-            if (v.getInDegree() ==0 && v.getOutDegree() == 0) {
+            if (v.getInDegree() ==0 && v.getOutDegree() == 0 && v.status == UmlsVertex.ROOT) {
                 if (v.status == UmlsVertex.ROOT_NEW) {
-                    System.out.println("Clean new root: " + v.toString2());
+//                    g.addVertex(UmlsVertex.getNULL());
+//                    g.addEdge(v, UmlsVertex.getNULL());
+                } else {
+                    g.removeVertex(v);
                 }
-                g.removeVertex(v);
             }
         }
     }
@@ -216,6 +219,7 @@ public class SctGraph {
         return ret;
     }
 
+    // for test only
     private void removeSpecialVertex() {
         Set<UmlsVertex> vSet = new HashSet<UmlsVertex>(g.vertexSet());
 

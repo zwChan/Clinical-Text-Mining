@@ -4,3 +4,4 @@ target/
 *dat.txt
 *.bak
 *.bk
+data/
