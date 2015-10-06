@@ -394,11 +394,21 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       topscore._2
   }
 
-  def transferExcelCvs(excelCsvFile: String, outputFile:String) = {
+  def transferExcelCvs(excelCsvFile: String, outputFile:String): Int = {
     val in = new FileReader(excelCsvFile)
-    val records = CSVFormat.EXCEL
-      .parse(in)
+    val records = CSVFormat.DEFAULT
+      .withDelimiter(' ')
+      .parse(in).iterator()
 
+    var cnt =10
+    records.foreach(r => {
+      println(r.toString)
+      cnt = cnt - 1
+      if (cnt < 0) {
+        return 0
+      }
+    })
+    0
   }
 
 
@@ -419,6 +429,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       .withRecordSeparator(separator)
       .withDelimiter(delimiter)
       .withSkipHeaderRecord(true)
+      .withEscape('\\')
       .parse(in)
       .iterator()
 

@@ -7,7 +7,7 @@
   <groupId>com.votors</groupId>
   <artifactId>Clinical-Text-Mining</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-  <packaging>jar</packaging>
+    <packaging>pom</packaging>
   <name>"Clinical-Text-Mining"</name>
   
   <repositories>
@@ -50,6 +50,19 @@
         <version>2.15.2</version>
         <executions>
           <execution>
+            <id>scala-compile-first</id>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>compile</phase>
             <goals>
               <goal>compile</goal>
             </goals>
@@ -179,6 +192,22 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
       <version>1.2</version>
+    </dependency>
+
+  <dependency>
+    <groupId>org.jgrapht</groupId>
+    <artifactId>jgrapht-core</artifactId>
+    <version>0.9.1</version>
+  </dependency>
+    <dependency>
+      <groupId>org.jgrapht</groupId>
+      <artifactId>jgrapht-ext</artifactId>
+      <version>0.9.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.tinyjee.jgraphx</groupId>
+      <artifactId>jgraphx</artifactId>
+      <version>2.3.0.5</version>
     </dependency>
 
   </dependencies>
