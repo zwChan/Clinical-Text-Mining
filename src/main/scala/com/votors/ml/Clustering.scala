@@ -61,6 +61,7 @@ object Conf {
   val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
 
   val solrServerUrl = prop.get("solrServerUrl")
+  val includePosTagger = prop.get("includePosTagger")
 }
 
 class Clustering {
