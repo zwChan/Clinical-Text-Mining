@@ -209,7 +209,11 @@
       <artifactId>jgraphx</artifactId>
       <version>2.3.0.5</version>
     </dependency>
-
+    <dependency>
+      <groupId>gov.nih.nlm.nls.lvg</groupId>
+      <artifactId>lvgdist</artifactId>
+      <version>2015</version>
+    </dependency>
   </dependencies>
 
 

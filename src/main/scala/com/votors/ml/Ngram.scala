@@ -2,6 +2,7 @@ package com.votors.ml
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.votors.common.Utils._
 import opennlp.tools.parser.Parse
 
 import scala.StringBuilder
@@ -62,69 +63,141 @@ import org.apache.commons.csv._
  * the first and the last token can not be punctuation or blank
  *
  */
-class Ngram (var text: String) {
-  var id = Ngram.idCnt.getAndAdd(1)                // identify of this gram
+class Ngram (var text: String) extends java.io.Serializable{
+  var id = -1                // identify of this gram  - looks like useless. forget it.
   //var text = ""         // final format of this gram. after stemmed/variant...
   var n: Int = 0            // number of word in this gram
   var hBlogId = new mutable.HashMap[Int, Stat]()       // save the blog id and one of its sentence id.
   var context = new Context()   // context of this gram
-  var tfAll = 0     // term frequency of all document
+  var tfAll:Long = 0     // term frequency of all document
   var df = 0        // document frequency
-
+  var tfdf = 0.0     // tfdf of this gram: tf-idf = log(1+ avg(tf)) * log(1+n(t)/N)
+  var cvalue = -1.0    // c-value
+  var nestedCnt = 0   // the number of term that contains this gram
+  var nestedTf: Long =0     // the total frequency of terms that contains this gram
+  var nestTerm = new mutable.HashSet[String]()         // nested term
   def updateBlog(blogId: Int, sentId: Int): Unit = {
     val stat = hBlogId.getOrElseUpdate((blogId),{df += 1; new Stat(blogId)})
     stat.tf += 1
     tfAll += 1
-
-  }
-  /**
-   * context of a Ngram. such as window, syntax tree
-   */
-  class Context {
-    var window = null
-    var syntex = null
   }
 
-  class Stat(var blogId: Int = 0, var sentId:Int = 0) {
-     //sentId: Only one sentenid will keep, for debug
-    var tf = 0    // term frequency
 
-    override def toString(): String = {
-      s"tf:${tf}"
+  def + (other: Ngram) = merge(other)
+  def merge (other: Ngram): Ngram = {
+    val newNgram = new Ngram(this.text)
+    newNgram.id = this.id
+    if (this.n != other.n) {
+      trace(ERROR, s"warn: Not the same n in merge Ngram ${this.text}, ${other.text}, ${this.n}, ${other.n}!")
     }
+
+    if (this.tfAll < other.tfAll)
+      newNgram.n = other.n
+    else
+      newNgram.n = this.n
+
+    traceFilter(INFO,this.text,s"${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll}")
+    other.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
+    this.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
+    //this.context = ?
+    newNgram.tfAll = this.tfAll + other.tfAll
+    newNgram.df = this.df + other.df  // this is safe
+    newNgram.nestedCnt = this.nestedCnt + other.nestedCnt
+    newNgram.nestedTf = this.nestedTf + other.nestedTf
+    //this.cvalue = ?
+    newNgram
+  }
+
+  def procTfdf(docNum: Long): Ngram = {
+    this.tfdf = log2(1+(log2(1+1.0*tfAll/docNum) * df))  // supress the affect of tfAll
+    // gram.tfidf = Math.log(1+gram.tfAll/gram.hBlogId.size) * Math.log(1+docNum/gram.hBlogId.size)
+    //gram.tfdf = Math.sqrt(gram.tfdf)
+    this
+  }
+
+  def updateAfterReduce(docNum: Long): Ngram = {
+    this.procTfdf(docNum)
+    this.getCValue()
+    this
+  }
+
+  def getNestInfo(hNgram: Seq[Ngram]): Ngram = {
+    val Ta = new ArrayBuffer[Ngram]()
+    hNgram.foreach(ngram =>{
+      // if it is nested
+      if (this != ngram && ngram.text.matches(".*\\b" + this.text + "\\b.*")) {
+        Ta.append(ngram)
+      }
+    })
+    this.nestedCnt = Ta.size
+    this.nestedTf = if (this.nestedCnt > 0) Ta.map(_.tfAll).reduce(_+_) else 0
+    this.nestTerm ++= Ta.map(_.text)
+    traceFilter(INFO,text,s" ${text} nested info: ${nestedCnt}, ${nestedTf}, ${nestTerm.mkString(",")}")
+    this
+  }
+
+  // calculate the cValue. Since log(1)==0, we should add 1 to the value put into log()
+  def getCValue() = {
+    this.cvalue = if (this.nestedCnt == 0) {
+      log2(this.n+1) * this.tfAll
+    }else{
+      log2(this.n+1) * (this.tfAll - (this nestedTf)/this.nestedCnt)
+    }
+    this
   }
 
   override def toString(): String = {
-    s"[${n}]${text}|id:${id},tfAll:${tfAll},df:${df},blogs:${hBlogId.toString()}"
+    toString(false)
+  }
+  def toString(detail: Boolean): String = {
+    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll},${df}),cvalue(${cvalue}%.2f,${nestedCnt},${nestedTf})," +
+      {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
 }
 
-class TokenState {
+/**
+ * context of a Ngram. such as window, syntax tree
+ */
+class Context extends java.io.Serializable{
+  var window = null
+  var syntex = null
+}
+
+class Stat(var blogId: Int = 0, var sentId:Int = 0) extends java.io.Serializable {
+  //sentId: Only one sentenid will keep, for debug
+  var tf = 0    // term frequency
+
+  override def toString(): String = {
+    s"tf:${tf}"
+  }
+}
+class TokenState extends java.io.Serializable {
   var delimiter = false
   override def toString(): String = {
     s"${if(delimiter)"d" else ""}"
   }
 }
-class Sentence {
+class Sentence extends java.io.Serializable {
   var blogId = 0
   var sentId = 0
   var words: Array[String] = null      // original words in the sentence. nothing is filtered.
   var tokens: Array[String] = null     // Token from openNlp
   var tokenSt: Array[TokenState] = null // the special status of the token. e.g. if it is a delimiter
   var pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
-  var chunk:Array[opennlp.tools.util.Span] = null
-  var parser: Parse = null
+  //var chunk:Array[opennlp.tools.util.Span] = null
+  //var parser: Parse = null
 
 
   override def toString (): String = {
     val parseStr = new StringBuffer()
-    if (parser != null)parser.show(parseStr)
+    //if (parser != null)parser.show(parseStr)
     s"${blogId}, ${sentId}\t" + "\n" +
-    "words: " + words.mkString(" $ ") + "\n" +
+      "sentence: " + words.mkString(" ") + "\n" +
+      "words: " + words.mkString(" $ ") + "\n" +
       "tokens: " +   tokens.mkString(" $ ") + "\n" +
       "token-State: " + tokenSt.mkString(" $ ") + "\n" +
       "POS: " + pos.mkString(" $ ") + "\n" +
-      "chunk: " + chunk.mkString(" $ ") + "\n" +
+      //"chunk: " + chunk.mkString(" $ ") + "\n" +
       "syntax: " + parseStr
   }
 
@@ -150,21 +223,33 @@ object Ngram {
   final val Delimiter = Pattern.compile("[,;\\:\\(\\)\\[\\]\\{\\}\"]+")   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
   val idCnt = new AtomicInteger()
 
-  val hSents = new mutable.LinkedHashMap[(Int,Int),Sentence]()  //(blogId, sentId)
-  val hNgrams = new mutable.LinkedHashMap[String,Ngram]()       // Ngram.text
-
+  @transient val  hSents = new mutable.LinkedHashMap[(Int,Int),Sentence]()  //(blogId, sentId)
+  @transient val hNgrams = new mutable.LinkedHashMap[String,Ngram]()       // Ngram.text
   /**
    * get a Ngram from the hashtable, add a new one if not exists
    * @param gram
    * @return
    */
-  def getNgram (gram: String): Ngram = {
-    hNgrams.getOrElseUpdate(gram, new Ngram(gram))
+  def getNgram (gram: String, hNgrams: mutable.LinkedHashMap[String,Ngram]): Ngram = {
+    hNgrams.getOrElseUpdate(gram, {
+      if (gram.equals("diabet"))println(s"create Ngram ${gram}")
+      new Ngram(gram)
+    })
   }
 
   def checkNgram(gram: String): Boolean = {
-    // check the stop word
-    return true
+    // check the stop word. if the gram contains any stop word
+    if (Nlp.checkStopword(gram) || (gram.contains(" ") && gram.split(" ").filter(Nlp.checkStopword(_)).size > 0))
+      false
+    else
+      true
+  }
+
+  def procTfdf(docNum: Long): Unit = {
+    hNgrams.foreach(kv => {
+      val gram = kv._2
+      gram.procTfdf(docNum)
+    })
   }
 
   def main (argv: Array[String]): Unit = {

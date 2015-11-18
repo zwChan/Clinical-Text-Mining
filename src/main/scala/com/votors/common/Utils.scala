@@ -1,12 +1,15 @@
 package com.votors.common
 
-import java.util.Date
+import java.io.FileInputStream
+import java.sql.{ResultSet, DriverManager, Statement, Connection}
+import java.util.{Properties, Date}
 
 
 /**
  * Created by chenzhiwei on 2/28/2015.
  */
 object Utils extends java.io.Serializable{
+  def log2(x:Double)=Math.log(x)/Math.log(2)
   def string2Int(s: String, default: Int=0): Int = {
     try{
       s.toFloat.toInt
@@ -46,7 +49,11 @@ object Utils extends java.io.Serializable{
     type TraceLevel = Value
     val DEBUG,INFO,WARN,ERROR,NEVER=Value
     var currLevel = INFO
-    def trace(level: TraceLevel, x: Any) = if (level >= currLevel)println(x)
+    var filter = ""
+    def trace(level: TraceLevel, x: Any) = traceFilter(level,null,x)
+    def traceFilter(level: TraceLevel, toFilter: String, x: Any) = {
+      if (level >= currLevel && (toFilter == null || toFilter.matches(filter)))println(x)
+    }
 
   }
 }
@@ -77,5 +84,55 @@ class InterObject(factor: Double=0.5, capacity: Int=3) extends java.io.Serializa
   def add(elm: Double) {
     valueList(pos) = elm
     counter += 1
+  }
+}
+
+object Conf extends java.io.Serializable{
+  // Load properties
+  val rootDir = sys.env.get("CTM_ROOT_PATH").get
+  val prop = new Properties()
+  prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
+  println("Current properties:\n" + prop.toString)
+
+  val caseFactor = prop.get("caseFactor").toString.toFloat
+  val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
+
+  val solrServerUrl = prop.get("solrServerUrl")
+  val includePosTagger = prop.get("includePosTagger")
+  val lvgdir = prop.get("lvgdir").toString
+}
+
+/**
+ * Process on data base, test on Mysql only
+ */
+class SqlUtils(driverUrl: String) extends java.io.Serializable{
+  private var isInitJdbc = false
+  private var jdbcConnect: Connection = null
+  private var sqlStatement: Statement = null
+  def initJdbc() = {
+    if (isInitJdbc == false) {
+      // Load the driver
+      val dirver = classOf[com.mysql.jdbc.Driver]
+      // Setup the connection
+      jdbcConnect = DriverManager.getConnection(driverUrl)
+      // Configure to be Read Only
+      sqlStatement = jdbcConnect.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+      isInitJdbc = true
+    }
+  }
+
+  def jdbcClose() = {
+    if (isInitJdbc) {
+      isInitJdbc = false
+      jdbcConnect.close()
+    }
+  }
+  def execQuery (sql: String):ResultSet = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeQuery(sql)
+    rs
   }
 }
