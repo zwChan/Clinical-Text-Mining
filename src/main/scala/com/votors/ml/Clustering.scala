@@ -117,7 +117,7 @@ class Clustering (sc: SparkContext) {
     ret
   }
 
-  def getNgramRdd(sentRdd: RDD[Array[Sentence]], tfFilter:Int=3): RDD[Ngram]= {
+  def getNgramRdd(sentRdd: RDD[Array[Sentence]], tfFilterInPartition:Int=3): RDD[Ngram]= {
     val ret = sentRdd.mapPartitions(itr => {
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
@@ -126,8 +126,8 @@ class Clustering (sc: SparkContext) {
         gramId.set(0)
         Nlp.generateNgram(sents, gramId,hNgrams)
       })
-      val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilter)
-      trace(INFO,s"number of ngram after filter > ${tfFilter} is ${sNgrams.size}")
+      val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
+      trace(INFO,s"number of ngram after filter > ${tfFilterInPartition} is ${sNgrams.size}")
       sNgrams.foreach(_.getNestInfo(sNgrams))
       sNgrams.iterator
     })
@@ -161,7 +161,7 @@ object Clustering {
     rootLogger.setLevel(Level.WARN);
 
     // printf more debug info thiat match the filter
-    Trace.filter = ".*diabet.*"
+    Trace.filter = "glucose level"
 
 
     //val sqlContext = new SQLContext(sc)
@@ -175,10 +175,11 @@ object Clustering {
       .map(gram=>(gram.text, gram))
       .reduceByKey(_+_)
       .map(_._2)
-      .map(_.updateAfterReduce(docNumber))
-      .filter(_.cvalue > 3)
+      .filter(_.tfAll>5)
+      .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber))
+      .filter(_.cvalue > -2)
 
-    rddNgram.foreach(gram => println(f"${gram}\t${gram.tfdf}%.2f\t${log2(gram.cvalue)}%.2f"))
+    rddNgram.filter(_.n>1).foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
 
 //    val rddVector = clustering.getVectorRdd(rddNgram).persist()
 

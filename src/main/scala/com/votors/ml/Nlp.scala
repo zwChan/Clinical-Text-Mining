@@ -240,7 +240,7 @@ object Nlp {
       sent_tmp.tokens = sent_tmp.words.map(t => {
         tokenIdx += 1; Nlp.normalizeAll(t, sent_tmp.tokenSt(tokenIdx))
       })
-      sent_tmp.pos = Nlp.getPos(sent_tmp.words)
+      sent_tmp.Pos = Nlp.getPos(sent_tmp.words)
       //sent_tmp.chunk = Nlp.getChunk(sent_tmp.words, sent_tmp.pos)
       //sent_tmp.parser = Nlp.getParser(sent_tmp.words)
 
@@ -264,12 +264,22 @@ object Nlp {
             if (pos + n < sent.tokens.length && hitDelimiter == false) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
-                if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text)) {
+                if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
                   // check if the gram is valid. e.g. stop words
                   val gram = Ngram.getNgram(gram_text, hNgrams)
-                  if (gram.id <0) gram.id = gramId.getAndAdd(1)
-                  gram.updateBlog(sent.blogId, sent.sentId)
-                  gram.n = n+1
+                  // some info have to update when the gram created
+                  if (gram.id < 0) {
+                    gram.id = gramId.getAndAdd(1)
+                    gram.n = n + 1
+                    gram.updateOnCreated(sent, pos, pos + n + 1)
+                  }
+                  // on create or found it again.
+                  gram.updateOnHit(sent.blogId, sent.sentId)
+                  if (gram.tfAll == 1) {
+                    traceFilter(INFO, gram.text, s"Creating gram ${gram}, sent:${sent}")
+                  } else {
+                    traceFilter(INFO, gram.text, s"Updating gram ${gram}, sent:${sent}")
+                  }
                 }
               } else {
                 hitDelimiter = true
@@ -290,10 +300,15 @@ object Nlp {
   def main(argv: Array[String]): Unit = {
 
     Trace.currLevel = DEBUG
-    val lvg =  new Lvg()
-    val ret = lvg.getNormTerm("glasses")
-    println(s"lvg out put ${ret}")
-
+//    val lvg =  new Lvg()
+//    val ret = lvg.getNormTerm("glasses")
+//    println(s"lvg out put ${ret}")
+//
+    val sent = """ Whats happening : Everyones sugar level goes through the roof when you eat food (esp pure sugar/drinks ) Some foods release faster , some slower ( as now measured by " G I" ) The body then works its whatsits off , to get that under control and stored as 'fat ' ( the fat is then used when you need to run/have no food ) A young person should get that done fast , an older person takes longer ...the older we get , the slower the process takes ."""
+    val words = Nlp.getToken(sent)
+    val Pos = Nlp.getPos(words)
+    val ret = words.zip(Pos)
+    ret.foreach(println)
 //    val s1 = Nlp.generateSentence(1,"""Hi, how are you going? My name is Jason, an (international student). Jason! jason? jason;jason:jason.""",Ngram.hSents)
 //    val s2 = Nlp.generateSentence(2,"""jason is study in fsu for more then 3 month. His Chinese name is zc..""",Ngram.hSents)
 //    val s3 = Nlp.generateSentence(3,"""As a international student, Jason have to study English hard..""",Ngram.hSents)

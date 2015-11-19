@@ -2,7 +2,9 @@ package com.votors.ml
 
 import java.util.concurrent.atomic.AtomicInteger
 
+import com.votors.common.Conf
 import com.votors.common.Utils._
+import com.votors.umls.UmlsTagger2
 import opennlp.tools.parser.Parse
 
 import scala.StringBuilder
@@ -73,40 +75,113 @@ class Ngram (var text: String) extends java.io.Serializable{
   var df = 0        // document frequency
   var tfdf = 0.0     // tfdf of this gram: tf-idf = log(1+ avg(tf)) * log(1+n(t)/N)
   var cvalue = -1.0    // c-value
-  var nestedCnt = 0   // the number of term that contains this gram
+  //var nestedCnt = 0   // the number of term that contains this gram.
   var nestedTf: Long =0     // the total frequency of terms that contains this gram
   var nestTerm = new mutable.HashSet[String]()         // nested term
-  def updateBlog(blogId: Int, sentId: Int): Unit = {
-    val stat = hBlogId.getOrElseUpdate((blogId),{df += 1; new Stat(blogId)})
-    stat.tf += 1
-    tfAll += 1
-  }
+  var umlsScore = (0.0,0.0,"","") // (score as CHV, score as "UMLS", CUI of the CHV term, CUI of the UMLS term)
+  var posString = ""
+  var isPosNN = false  // sytax pattern :Noun+Noun
+  var isPosAN = false  // sytax pattern : (Adj|Noun) +Noun
+  var isPosANAN = false  // sytax pattern : ((Adj|Noun) +|((Adj|Noun)?(NounP rep) ?)(Adj|Noun)?)Noun
 
+  /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
   def + (other: Ngram) = merge(other)
   def merge (other: Ngram): Ngram = {
     val newNgram = new Ngram(this.text)
     newNgram.id = this.id
-    if (this.n != other.n) {
-      trace(ERROR, s"warn: Not the same n in merge Ngram ${this.text}, ${other.text}, ${this.n}, ${other.n}!")
-    }
-
+    if (this.n != other.n)  trace(ERROR, s"warn: Not the same n in merge Ngram ${this.text}, ${other.text}, ${this.n}, ${other.n}!")
     if (this.tfAll < other.tfAll)
       newNgram.n = other.n
     else
       newNgram.n = this.n
 
-    traceFilter(INFO,this.text,s"${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll}")
     other.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
     this.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
     //this.context = ?
     newNgram.tfAll = this.tfAll + other.tfAll
     newNgram.df = this.df + other.df  // this is safe
-    newNgram.nestedCnt = this.nestedCnt + other.nestedCnt
+    //newNgram.nestedCnt = this.nestedCnt + other.nestedCnt   // not safe to calculate like this. use set operation
+    // tfdf   this is calculated after merge
+    // cvalue   this is calculated after merge
     newNgram.nestedTf = this.nestedTf + other.nestedTf
-    //this.cvalue = ?
+    newNgram.nestTerm ++= this.nestTerm
+    newNgram.nestTerm ++= other.nestTerm
+    newNgram.umlsScore = this.umlsScore  // this is calculated after merge
+    newNgram.posString = this.posString
+    newNgram.isPosAN = this.isPosAN
+    newNgram.isPosNN = this.isPosNN
+    newNgram.isPosANAN = this.isPosANAN
+
+    traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll} ${this.hBlogId.mkString(",")}, ${other.hBlogId.mkString(",")}")
     newNgram
   }
+  /**
+   * Update info on create or found the gram.
+   * @param blogId
+   * @param sentId
+   */
+  def updateOnHit(blogId: Int, sentId: Int): Unit = {
+    val stat = hBlogId.getOrElseUpdate(blogId,{df += 1; new Stat(blogId)})
+    stat.tf += 1
+    tfAll += 1
+  }
+  /**
+   * When the gram is create, we get some useful info from the sentence.
+   * gram is sentence.tokens[start, end)
+   * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+   * 6.	  IN	Preposition or subordinating conjunction
+   * 7.	  JJ	Adjective
+   * 8.	  JJR	Adjective, comparative
+   * 9.	  JJS	Adjective, superlative
+   * 12.	NN	Noun, singular or mass
+   * 13.	NNS	Noun, plural
+   * 14.	NNP	Proper noun, singular
+   * 15.	NNPS	Proper noun, plural
+   *
+   * @param sentence
+   * @param start [start, end)
+   * @param end [start, end)
+   * @return
+   */
+
+  def updateOnCreated(sentence: Sentence, start: Int, end: Int) = {
+
+    // update the pos pattern syntax of the gram.
+    val gramPos = Array() ++ sentence.Pos.slice(start, end)
+    /**
+    0. Noun, basic pattern, name N
+    1. Noun+Noun, named NN
+    2. (Adj|Noun)+Noun, named ANN
+    3. ((Adj|Noun)+|((Adj|Noun)?(NounPrep)?)(Adj|Noun)?)Noun, named ANAN
+      */
+    this.posString = gramPos.map(pos => {
+      if (pos == "NN" || pos == "NNS" || pos == "NNP" || pos == "NNPS")
+        "N" // noun
+      else if (pos == "JJ" || pos == "JJR" || pos == "JJS")
+        "A" // adjective
+      else if (pos == "IN")
+        "P" // preposition
+      else
+        "O" // others
+    }).mkString("")
+    traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is ${posString}")
+    if (posString.matches(".*N+N.*")) {
+      this.isPosNN = true
+      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is NN")
+    }
+    if (posString.matches("A+N")) {
+      this.isPosAN = true
+      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is AN")
+    }
+    if (posString.matches("((A|N)+|((A|N)*(NP)?)(A|N)*)N")) {
+      this.isPosANAN = true
+      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is ANAN")
+    }
+
+
+  }
+
 
   def procTfdf(docNum: Long): Ngram = {
     this.tfdf = log2(1+(log2(1+1.0*tfAll/docNum) * df))  // supress the affect of tfAll
@@ -115,11 +190,6 @@ class Ngram (var text: String) extends java.io.Serializable{
     this
   }
 
-  def updateAfterReduce(docNum: Long): Ngram = {
-    this.procTfdf(docNum)
-    this.getCValue()
-    this
-  }
 
   def getNestInfo(hNgram: Seq[Ngram]): Ngram = {
     val Ta = new ArrayBuffer[Ngram]()
@@ -129,28 +199,37 @@ class Ngram (var text: String) extends java.io.Serializable{
         Ta.append(ngram)
       }
     })
-    this.nestedCnt = Ta.size
-    this.nestedTf = if (this.nestedCnt > 0) Ta.map(_.tfAll).reduce(_+_) else 0
+    //this.nestedCnt = Ta.size
+    this.nestedTf = if (Ta.size > 0) Ta.map(_.tfAll).reduce(_+_) else 0
     this.nestTerm ++= Ta.map(_.text)
-    traceFilter(INFO,text,s" ${text} nested info: ${nestedCnt}, ${nestedTf}, ${nestTerm.mkString(",")}")
+    traceFilter(INFO,text,s"\n**** ${text} nested info: ${Ta.size}, ${nestedTf},terms:: ${nestTerm.mkString(",")},gram: ${Ta.mkString(",")}    *****\n")
     this
   }
 
   // calculate the cValue. Since log(1)==0, we should add 1 to the value put into log()
   def getCValue() = {
-    this.cvalue = if (this.nestedCnt == 0) {
+    this.cvalue = if (this.nestTerm.size == 0) {
       log2(this.n+1) * this.tfAll
     }else{
-      log2(this.n+1) * (this.tfAll - (this nestedTf)/this.nestedCnt)
+      log2(this.n+1) * (this.tfAll - (this nestedTf)/this.nestTerm.size)
     }
+
+    /**
+     *  c-value is negative, this is possible, b/c shorter term may be filter out by syntax filter, but the longer term will not.
+     *  That means tfAll may be less than nestedTf, so get a negative c-value.
+     *  In this case, it means the shorter term are less possible be a independent term(and, c-value=0 has this meaning too.)..
+     */
+    if (this.cvalue < 0)
+      this.cvalue = 0
     this
   }
 
   override def toString(): String = {
-    toString(false)
+    toString(if (text!="fat")false else true)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll},${df}),cvalue(${cvalue}%.2f,${nestedCnt},${nestedTf})," +
+    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f)" +
+     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${bool2Str(isPosANAN)}) " +
       {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
 }
@@ -183,7 +262,7 @@ class Sentence extends java.io.Serializable {
   var words: Array[String] = null      // original words in the sentence. nothing is filtered.
   var tokens: Array[String] = null     // Token from openNlp
   var tokenSt: Array[TokenState] = null // the special status of the token. e.g. if it is a delimiter
-  var pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+  var Pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
   //var chunk:Array[opennlp.tools.util.Span] = null
   //var parser: Parse = null
 
@@ -196,7 +275,7 @@ class Sentence extends java.io.Serializable {
       "words: " + words.mkString(" $ ") + "\n" +
       "tokens: " +   tokens.mkString(" $ ") + "\n" +
       "token-State: " + tokenSt.mkString(" $ ") + "\n" +
-      "POS: " + pos.mkString(" $ ") + "\n" +
+      "POS: " + Pos.mkString(" $ ") + "\n" +
       //"chunk: " + chunk.mkString(" $ ") + "\n" +
       "syntax: " + parseStr
   }
@@ -237,12 +316,40 @@ object Ngram {
     })
   }
 
-  def checkNgram(gram: String): Boolean = {
+  /**
+   * gram is sentence.tokens[start, end)
+   * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+   * 6.	  IN	Preposition or subordinating conjunction
+   * 7.	  JJ	Adjective
+   * 8.	  JJR	Adjective, comparative
+   * 9.	  JJS	Adjective, superlative
+   * 12.	NN	Noun, singular or mass
+   * 13.	NNS	Noun, plural
+   * 14.	NNP	Proper noun, singular
+   * 15.	NNPS	Proper noun, plural
+   *
+   * @param gram
+   * @param sentence
+   * @param start [start, end)
+   * @param end [start, end)
+   * @return
+   */
+  def checkNgram(gram: String, sentence: Sentence, start: Int, end: Int): Boolean = {
+    var ret = true
     // check the stop word. if the gram contains any stop word
     if (Nlp.checkStopword(gram) || (gram.contains(" ") && gram.split(" ").filter(Nlp.checkStopword(_)).size > 0))
-      false
-    else
-      true
+      ret &&= false
+
+    // check if the gram contain at least one noun
+    var containNoun = false
+    val nounPos = Conf.posInclusive.split(" ")
+    val gramPos = Array() ++ sentence.Pos.slice(start,end)
+    traceFilter(INFO,gram,s"${gram} 's Pos is ${gramPos.mkString(",")}, ${sentence}")
+    gramPos.foreach( p => {
+      if (nounPos.contains(p)) containNoun = true
+    })
+    ret &&= containNoun
+    ret
   }
 
   def procTfdf(docNum: Long): Unit = {
@@ -252,6 +359,19 @@ object Ngram {
     })
   }
 
+  def updateAfterReduce(itr: Iterator[Ngram], docNum: Long) = {
+    val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
+    val s = itr.toSeq
+    println(s"size itr ${s.size}")
+    s.foreach(gram => {
+      gram.procTfdf(docNum)
+      gram.getCValue()
+      gram.umlsScore = tagger.getUmlsScore(gram.text)
+      //println("update " +gram)
+      gram
+    })
+    s.iterator
+  }
   def main (argv: Array[String]): Unit = {
   }
 }

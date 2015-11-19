@@ -54,6 +54,9 @@ object Utils extends java.io.Serializable{
     def traceFilter(level: TraceLevel, toFilter: String, x: Any) = {
       if (level >= currLevel && (toFilter == null || toFilter.matches(filter)))println(x)
     }
+    def bool2Str(b: Boolean) = {
+      if (b) "T" else "F"
+    }
 
   }
 }
@@ -100,6 +103,8 @@ object Conf extends java.io.Serializable{
   val solrServerUrl = prop.get("solrServerUrl")
   val includePosTagger = prop.get("includePosTagger")
   val lvgdir = prop.get("lvgdir").toString
+  val posInclusive = prop.get("posInclusive").toString
+  val jdbcDriver = prop.get("jdbcDriver").toString
 }
 
 /**
