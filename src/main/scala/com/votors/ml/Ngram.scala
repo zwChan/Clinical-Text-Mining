@@ -6,6 +6,7 @@ import com.votors.common.Conf
 import com.votors.common.Utils._
 import com.votors.umls.UmlsTagger2
 import opennlp.tools.parser.Parse
+import org.apache.spark.broadcast.Broadcast
 
 import scala.StringBuilder
 import scala.collection.mutable.ArrayBuffer
@@ -78,11 +79,12 @@ class Ngram (var text: String) extends java.io.Serializable{
   //var nestedCnt = 0   // the number of term that contains this gram.
   var nestedTf: Long =0     // the total frequency of terms that contains this gram
   var nestTerm = new mutable.HashSet[String]()         // nested term
-  var umlsScore = (0.0,0.0,"","") // (score as CHV, score as "UMLS", CUI of the CHV term, CUI of the UMLS term)
+  var umlsScore = (0.0,0.0,"","") // (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term)
   var posString = ""
-  var isPosNN = false  // sytax pattern :Noun+Noun
-  var isPosAN = false  // sytax pattern : (Adj|Noun) +Noun
-  var isPosANAN = false  // sytax pattern : ((Adj|Noun) +|((Adj|Noun)?(NounP rep) ?)(Adj|Noun)?)Noun
+  var isPosNN = false  // sytax pattern :Noun.*Noun
+  var isPosAN = false  // sytax pattern : (Adj.*Noun) +Noun
+  var isPosPN = false  // sytax pattern : Pre.*Noun
+  var isPosANPN = false  // sytax pattern : ((Adj|Noun) +|((Adj|Noun)?(NounP rep) ?)(Adj|Noun)?)Noun
 
   /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
@@ -98,7 +100,7 @@ class Ngram (var text: String) extends java.io.Serializable{
 
     other.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
     this.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
-    //this.context = ?
+    newNgram.context = this.context + other.context
     newNgram.tfAll = this.tfAll + other.tfAll
     newNgram.df = this.df + other.df  // this is safe
     //newNgram.nestedCnt = this.nestedCnt + other.nestedCnt   // not safe to calculate like this. use set operation
@@ -111,40 +113,45 @@ class Ngram (var text: String) extends java.io.Serializable{
     newNgram.posString = this.posString
     newNgram.isPosAN = this.isPosAN
     newNgram.isPosNN = this.isPosNN
-    newNgram.isPosANAN = this.isPosANAN
+    newNgram.isPosANPN = this.isPosANPN
 
     traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll} ${this.hBlogId.mkString(",")}, ${other.hBlogId.mkString(",")}")
     newNgram
   }
+
+  def getInfoFromPrevious(other: Ngram) = {
+    this.umlsScore = other.umlsScore  // To get this info is expensive, it has to access database
+    // pos info get from stage 2 is not better than the stage 1
+    this.posString = other.posString
+    this.isPosNN = other.isPosNN
+    this.isPosAN = other.isPosAN
+    this.isPosPN = other.isPosPN
+    this.isPosANPN = other.isPosANPN
+  }
+
   /**
    * Update info on create or found the gram.
-   * @param blogId
-   * @param sentId
+   * @param sent
+   * @param firstStageNgram
    */
-  def updateOnHit(blogId: Int, sentId: Int): Unit = {
-    val stat = hBlogId.getOrElseUpdate(blogId,{df += 1; new Stat(blogId)})
+  def updateOnHit(sent: Sentence,firstStageNgram: mutable.HashMap[String, Ngram]=null): Unit = {
+    val stat = hBlogId.getOrElseUpdate(sent.blogId,{df += 1; new Stat(sent.blogId)})
     stat.tf += 1
     tfAll += 1
+    if (firstStageNgram != null) {
+
+    }
+
+
   }
+
   /**
-   * When the gram is create, we get some useful info from the sentence.
-   * gram is sentence.tokens[start, end)
-   * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
-   * 6.	  IN	Preposition or subordinating conjunction
-   * 7.	  JJ	Adjective
-   * 8.	  JJR	Adjective, comparative
-   * 9.	  JJS	Adjective, superlative
-   * 12.	NN	Noun, singular or mass
-   * 13.	NNS	Noun, plural
-   * 14.	NNP	Proper noun, singular
-   * 15.	NNPS	Proper noun, plural
    *
    * @param sentence
    * @param start [start, end)
    * @param end [start, end)
    * @return
    */
-
   def updateOnCreated(sentence: Sentence, start: Int, end: Int) = {
 
     // update the pos pattern syntax of the gram.
@@ -155,31 +162,21 @@ class Ngram (var text: String) extends java.io.Serializable{
     2. (Adj|Noun)+Noun, named ANN
     3. ((Adj|Noun)+|((Adj|Noun)?(NounPrep)?)(Adj|Noun)?)Noun, named ANAN
       */
-    this.posString = gramPos.map(pos => {
-      if (pos == "NN" || pos == "NNS" || pos == "NNP" || pos == "NNPS")
-        "N" // noun
-      else if (pos == "JJ" || pos == "JJR" || pos == "JJS")
-        "A" // adjective
-      else if (pos == "IN")
-        "P" // preposition
-      else
-        "O" // others
-    }).mkString("")
+    this.posString = gramPos.mkString("")
     traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is ${posString}")
-    if (posString.matches(".*N+N.*")) {
+    if (posString.matches(".*N.*N.*")) {
       this.isPosNN = true
-      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is NN")
     }
-    if (posString.matches("A+N")) {
+    if (posString.matches(".*A.*N.*")) {
       this.isPosAN = true
-      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is AN")
+    }
+    if (posString.matches(".*P.*N.*")) {
+      this.isPosPN = true
     }
     if (posString.matches("((A|N)+|((A|N)*(NP)?)(A|N)*)N")) {
-      this.isPosANAN = true
-      traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is ANAN")
+      this.isPosANPN = true
     }
-
-
+    traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is NN=${isPosNN},AN=${isPosAN},PN=${isPosPN},ANPN=${isPosANPN},")
   }
 
 
@@ -228,8 +225,8 @@ class Ngram (var text: String) extends java.io.Serializable{
     toString(if (text!="fat")false else true)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f)" +
-     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${bool2Str(isPosANAN)}) " +
+    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f),contex:${this.context}" +
+     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${bool2Str(isPosANPN)}) " +
       {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
 }
@@ -238,8 +235,39 @@ class Ngram (var text: String) extends java.io.Serializable{
  * context of a Ngram. such as window, syntax tree
  */
 class Context extends java.io.Serializable{
-  var window = null
-  var syntex = null
+  //context in the windown
+  var win_umlsCnt = 0   // number of umls term in its window
+  var win_chvCnt = 0    // number of chv term in its window
+  var win_nounCnt = 0   // number of noun term in its window
+
+
+  //context in the sentent
+  var sent_umlsCnt = 0  // number of umls term in its sentence
+  var sent_chvCnt = 0   // number of chv term in its sentence
+  var sent_nounCnt = 0  // number of noun term in its sentence
+
+  //context of other
+  var hasNounInUmls = false // if it contains at least a noun word that is found in umls
+  var umlsDist = -1       // the nearest distance with a umls term
+  var chvDist = -1        // the nearest distance with a chv term
+
+  def +(other: Context) = merge(other)
+  def merge(other: Context) = {
+    val newCx = new Context()
+    newCx.win_umlsCnt = this.win_umlsCnt+other.win_umlsCnt
+    newCx.win_chvCnt = this.win_chvCnt+other.win_chvCnt
+    newCx.win_nounCnt = this.win_nounCnt+other.win_nounCnt
+    newCx.sent_umlsCnt = this.sent_umlsCnt+other.sent_umlsCnt
+    newCx.sent_nounCnt = this.sent_nounCnt+other.sent_nounCnt
+    newCx.hasNounInUmls = this.hasNounInUmls || other.hasNounInUmls
+    newCx.umlsDist = this.umlsDist+other.umlsDist
+    newCx.chvDist = this.chvDist+other.chvDist
+    newCx
+  }
+
+  override def  toString() = {
+    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),all(${hasNounInUmls},${umlsDist},${chvDist})"
+  }
 }
 
 class Stat(var blogId: Int = 0, var sentId:Int = 0) extends java.io.Serializable {
@@ -263,6 +291,7 @@ class Sentence extends java.io.Serializable {
   var tokens: Array[String] = null     // Token from openNlp
   var tokenSt: Array[TokenState] = null // the special status of the token. e.g. if it is a delimiter
   var Pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+  //@transient val ngrams= new ArrayBuffer[Ngram]()
   //var chunk:Array[opennlp.tools.util.Span] = null
   //var parser: Parse = null
 
@@ -297,7 +326,6 @@ case class KV[K,V](val k:K, val v:V) {
 }
 
 object Ngram {
-  final val WinLen = 10
   final val N = 5
   final val Delimiter = Pattern.compile("[,;\\:\\(\\)\\[\\]\\{\\}\"]+")   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
   val idCnt = new AtomicInteger()
@@ -341,14 +369,9 @@ object Ngram {
       ret &&= false
 
     // check if the gram contain at least one noun
-    var containNoun = false
-    val nounPos = Conf.posInclusive.split(" ")
     val gramPos = Array() ++ sentence.Pos.slice(start,end)
     traceFilter(INFO,gram,s"${gram} 's Pos is ${gramPos.mkString(",")}, ${sentence}")
-    gramPos.foreach( p => {
-      if (nounPos.contains(p)) containNoun = true
-    })
-    ret &&= containNoun
+    ret &&= gramPos.contains("N")  // if contains noun
     ret
   }
 
@@ -359,17 +382,24 @@ object Ngram {
     })
   }
 
-  def updateAfterReduce(itr: Iterator[Ngram], docNum: Long) = {
-    val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
+  /**
+   * calculate tfdf, c-value, umls relative
+   * @param itr
+   * @param docNum
+   * @return
+   */
+  def updateAfterReduce(itr: Iterator[Ngram], docNum: Long, isStage2:Boolean=false) = {
     val s = itr.toSeq
-    println(s"size itr ${s.size}")
+    println(s"grams number after redusce (in this partition) is  ${s.size}")
+    val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
     s.foreach(gram => {
       gram.procTfdf(docNum)
       gram.getCValue()
-      gram.umlsScore = tagger.getUmlsScore(gram.text)
+      if (!isStage2)gram.umlsScore = tagger.getUmlsScore(gram.text)
       //println("update " +gram)
       gram
     })
+
     s.iterator
   }
   def main (argv: Array[String]): Unit = {

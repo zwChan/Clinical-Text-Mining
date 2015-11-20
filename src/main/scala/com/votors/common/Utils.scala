@@ -1,6 +1,7 @@
 package com.votors.common
 
-import java.io.FileInputStream
+import java.io.{FileOutputStream, ObjectOutputStream, FileInputStream}
+import java.lang.Exception
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Properties, Date}
 
@@ -49,16 +50,34 @@ object Utils extends java.io.Serializable{
     type TraceLevel = Value
     val DEBUG,INFO,WARN,ERROR,NEVER=Value
     var currLevel = INFO
+    //regrex format
     var filter = ""
     def trace(level: TraceLevel, x: Any) = traceFilter(level,null,x)
     def traceFilter(level: TraceLevel, toFilter: String, x: Any) = {
       if (level >= currLevel && (toFilter == null || toFilter.matches(filter)))println(x)
     }
-    def bool2Str(b: Boolean) = {
-      if (b) "T" else "F"
-    }
-
   }
+  def bool2Str(b: Boolean) = {
+    if (b) "T" else "F"
+  }
+  def writeObjectToFile(filename: String, obj: AnyRef) = {
+    // obj must have serialiazable trait
+    import java.io._
+    val fos = new FileOutputStream(filename)
+    val oos = new ObjectOutputStream(fos)
+    oos.writeObject(obj)
+    oos.close()
+  }
+  def readObjectFromFile[T](filename: String): T = {
+    import java.io._
+    val fis = new FileInputStream(filename)
+    val ois = new ObjectInputStream(fis)
+    val obj = ois.readObject()
+    ois.close()
+    obj.asInstanceOf[T]
+  }
+
+
 }
 /**
   This Class is designed for some "global" variance when we walk items of the RDD. It may not be the best idea for such function.
@@ -105,6 +124,8 @@ object Conf extends java.io.Serializable{
   val lvgdir = prop.get("lvgdir").toString
   val posInclusive = prop.get("posInclusive").toString
   val jdbcDriver = prop.get("jdbcDriver").toString
+  val fistStagResultFile = prop.get("fistStagResultFile").toString
+  val umlsLikehoodLimit = prop.get("umlsLikehoodLimit").toString.toDouble
 }
 
 /**

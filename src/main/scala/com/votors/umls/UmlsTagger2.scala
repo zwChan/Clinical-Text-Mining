@@ -579,35 +579,38 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     }
   }
 
-def getUmlsScore(currTag: String): (Double,Double,String,String) = {
-  var umlsScore = 0.0
-  var umlsCui = ""
-  var chvScore = 0.0
-  var chvCui = ""
-  select(currTag) match {
-    case suggestions: Array[Suggestion] => {
-      // for each UMLS terms, get their TUI from MRSTY table
+  /**
+   * (umlsScore,chvScore,umlsCui,chvCui)
+   * @param currTag
+   * @return (umlsScore,chvScore,umlsCui,chvCui)
+   */
+  def getUmlsScore(currTag: String): (Double,Double,String,String) = {
+    var umlsScore = 0.0
+    var umlsCui = ""
+    var chvScore = 0.0
+    var chvCui = ""
+    select(currTag) match {
+      case suggestions: Array[Suggestion] => {
+        // for each UMLS terms, get their TUI from MRSTY table
 
-      if (suggestions.length > 0) {
-        suggestions.foreach(suggestion => {
-          if (suggestion.sab.contains("CHV")){
-            if (suggestion.score>chvScore) {
-              chvScore = suggestion.score
-              chvCui = suggestion.cui
+        if (suggestions.length > 0) {
+          suggestions.foreach(suggestion => {
+            if (suggestion.sab.contains("CHV")){
+              if (suggestion.score>chvScore) {
+                chvScore = suggestion.score
+                chvCui = suggestion.cui
+              }
             }
-          }
-          if (suggestion.score>umlsScore) {
-            umlsScore = suggestion.score
-            umlsCui = suggestion.cui
-          }
-        })
+            if (suggestion.score>umlsScore) {
+              umlsScore = suggestion.score
+              umlsCui = suggestion.cui
+            }
+          })
+        }
       }
     }
+    (umlsScore,chvScore,umlsCui,chvCui)
   }
-  (umlsScore,chvScore,umlsCui,chvCui)
-}
-
-
 
   /**
    * Match some 'tags' to dictionary(e.g. UMLS), and get their semantic type.

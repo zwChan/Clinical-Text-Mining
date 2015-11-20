@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import opennlp.tools.chunker._
 import opennlp.tools.cmdline.parser.ParserTool
 import opennlp.tools.parser.{ParserFactory, ParserModel}
+import org.apache.spark.broadcast.Broadcast
 
 import scala.collection.mutable.ArrayBuffer
 import java.io._
@@ -89,6 +90,7 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
 }
 
 object Nlp {
+  final val WinLen = 10       // windown lenght for calculate ngram contex
   final val NotPos = "*"      // the char using indicating this is not a POS tagger, may be a punctuation
   //final val TokenEnd = "$$"
   val punctPattern = Pattern.compile("\\p{Punct}")
@@ -134,9 +136,7 @@ object Nlp {
    * @return
    */
   def getPos(phraseNorm: Array[String]) = {
-    val retPos = postagger.tag(phraseNorm)
-    //trace(DEBUG,phraseNorm + " pos is: " + retPos.mkString(","))
-    retPos
+    postagger.tag(phraseNorm).map(Nlp.posTransform(_))
   }
 
   val chunkerModeIn = new FileInputStream(s"${modelRoot}/en-chunker.bin")
@@ -261,7 +261,7 @@ object Nlp {
           // for each stat position, get the ngram
           var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
           Range(0, ngram).foreach(n => {
-            if (pos + n < sent.tokens.length && hitDelimiter == false) {
+            if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
                 if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
@@ -274,7 +274,7 @@ object Nlp {
                     gram.updateOnCreated(sent, pos, pos + n + 1)
                   }
                   // on create or found it again.
-                  gram.updateOnHit(sent.blogId, sent.sentId)
+                  gram.updateOnHit(sent)
                   if (gram.tfAll == 1) {
                     traceFilter(INFO, gram.text, s"Creating gram ${gram}, sent:${sent}")
                   } else {
@@ -286,13 +286,149 @@ object Nlp {
               }
             }
           })
+
         }
         pos += 1
       }
     })
   }
 
+  def generateNgramStage2(sentence: Seq[Sentence],
+                    gramId: AtomicInteger,
+                    hNgrams: mutable.LinkedHashMap[String,Ngram],
+                    firstStageNgram: Broadcast[mutable.HashMap[String, Ngram]]=null,
+                    ngram: Int = Ngram.N
+                    ): Unit = {
+    val hPreNgram =  firstStageNgram.value
+    //println(s"generateNgramStage2, pre gram # ${hPreNgram.size}")
+    sentence.foreach(sent => {
+      // process ngram
+      var pos = 0
+      val gramInSent = new ArrayBuffer[(Int,Ngram,Ngram)]()
+      //val grams = new ArrayBuffer[Ngram]()
+      // for each sentence
+      while (pos < sent.tokens.length) {
+        if (sent.tokens(pos).length > 0) {
+          // the start token should not be blank
+          // for each stat position, get the ngram
+          var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
+          Range(0, ngram).foreach(n => {
+            if (pos + n < sent.tokens.length && !hitDelimiter) {
+              if (sent.tokenSt(pos + n).delimiter == false) {
+                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
+                val pre_gram = hPreNgram.getOrElse(gram_text,null)
+                if ( (pre_gram != null) ) {
+                  //in stage 2, we can directly use result of stage 1
+                  val gram = Ngram.getNgram(gram_text, hNgrams)
+                  // some info have to update when the gram created
+                  if (gram.id < 0) {
+                    gram.id = gramId.getAndAdd(1)
+                    gram.n = n + 1
+                    gram.updateOnCreated(sent, pos, pos + n + 1)
+                    gram.getInfoFromPrevious(pre_gram)
+                  }
+                  // on create or found it again.
+                  gram.updateOnHit(sent,hPreNgram)
+                  traceFilter(INFO, gram.text, s"Updating gram ${gram}, sent:${sent}")
+                  gramInSent.append((pos,gram,pre_gram))
+                }
+              } else {
+                hitDelimiter = true
+              }
+            }
+          })
 
+        }
+        pos += 1
+      }
+      updateContex(sent,gramInSent)
+    })
+  }
+
+  def updateContex(sent:Sentence, gramInSent: ArrayBuffer[(Int,Ngram,Ngram)]): Unit = {
+    // the 'for' is roughly search for a window,
+    // and the (e._1>s._1 && (e._1-s._1+s._2.n)>Nlp.WinLen) will finally determin the actually window.
+    //for (win_center <- 0 to gramInSent.size; win_walker <-(win_center-Nlp.WinLen) to (win_center+Nlp.WinLen) if (win_walker>=0 && win_walker < gramInSent.size) ) {
+    for (start <- Range(0,gramInSent.size); end <- Range(0,gramInSent.size) if (start != end) ) {
+      val c = gramInSent(start)   // center gram in the windows
+      val w = gramInSent(end)  // grams walking around the center-gram in the range of window
+      val cGram = c._2      // the center gram, which is to be updated
+      val wPreGram = w._3  // result of stage 1 for walker gram
+
+      // update in the sentence
+      if (wPreGram.umlsScore._2 >Conf.umlsLikehoodLimit) {
+        // score of chv
+        cGram.context.sent_chvCnt += 1
+        cGram.context.sent_umlsCnt += 1
+      } else if (wPreGram.umlsScore._1 >Conf.umlsLikehoodLimit) {
+        //score of umls
+        cGram.context.sent_umlsCnt += 1
+      }
+
+      // update in the window
+      if ((w._1+w._2.n+Nlp.WinLen < c._1) || (c._1+c._2.n+Nlp.WinLen)<w._1) {
+        if (wPreGram.umlsScore._2 >Conf.umlsLikehoodLimit) {
+          // score of chv
+          cGram.context.win_chvCnt += 1
+          cGram.context.win_umlsCnt += 1
+        } else if (wPreGram.umlsScore._1 >Conf.umlsLikehoodLimit) {
+          //score of umls
+          cGram.context.win_umlsCnt += 1
+        }
+      }
+    }
+  }
+
+
+  /**
+   * When the gram is create, we get some useful info from the sentence.
+   * gram is sentence.tokens[start, end)
+   * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+   * 6.	  IN	Preposition or subordinating conjunction
+   * 7.	  JJ	Adjective
+   * 8.	  JJR	Adjective, comparative
+   * 9.	  JJS	Adjective, superlative
+   * 12.	NN	Noun, singular or mass
+   * 13.	NNS	Noun, plural
+   * 14.	NNP	Proper noun, singular
+   * 15.	NNPS	Proper noun, plural
+   */
+  def posTransform(pos: String) = {
+    /**
+    0. Noun, basic pattern, name N
+    1. Noun+Noun, named NN
+    2. (Adj|Noun)+Noun, named ANN
+    3. ((Adj|Noun)+|((Adj|Noun)?(NounPrep)?)(Adj|Noun)?)Noun, named ANAN
+      */
+    val nounPos = Conf.posInclusive.split(" ")
+    if (nounPos.contains(pos))
+      "N" // noun
+    else if (pos == "JJ" || pos == "JJR" || pos == "JJS")
+      "A" // adjective
+    else if (pos == "IN")
+      "P" // preposition or a conjunction that introduces a subordinate clause, e.g., although, because.
+    else if (pos == "RB"|pos == "RBR"|pos == "RBS")
+      "R" // Adverb
+    else if (pos == "VB"|pos == "VBD"|pos == "VBG"|pos=="VBN"|pos=="VBP"|pos=="VBZ")
+      "V" // verb
+    else if (pos == "TO")
+      "T" // to
+    else if (pos == "CC")
+      "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.
+    else
+      "O" // others
+  }
+
+  /**
+   * preprocessing the blog text. e.g. punctuation,
+   * @param blogId
+   * @param text
+   * @return
+   */
+  def textPreprocess(blogId: Int, text: String) = {
+    val ret = text.replaceAll("([~`=+<>,:|;/\"\\[\\]\\(\\)\\{\\}\\.!\\?\\|\\\\])"," $1 ").replaceAll("\\s+"," ")
+    (blogId, ret)
+  }
   /**
    * for test
    * @param argv
@@ -304,11 +440,12 @@ object Nlp {
 //    val ret = lvg.getNormTerm("glasses")
 //    println(s"lvg out put ${ret}")
 //
-    val sent = """ Whats happening : Everyones sugar level goes through the roof when you eat food (esp pure sugar/drinks ) Some foods release faster , some slower ( as now measured by " G I" ) The body then works its whatsits off , to get that under control and stored as 'fat ' ( the fat is then used when you need to run/have no food ) A young person should get that done fast , an older person takes longer ...the older we get , the slower the process takes ."""
-    val words = Nlp.getToken(sent)
-    val Pos = Nlp.getPos(words)
-    val ret = words.zip(Pos)
-    ret.foreach(println)
+    def textPreprocess(blogId: Int, text: String) = {
+      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
+      (blogId, ret)
+    }
+    println(textPreprocess(0,"I'm so (happy); ..."))
+
 //    val s1 = Nlp.generateSentence(1,"""Hi, how are you going? My name is Jason, an (international student). Jason! jason? jason;jason:jason.""",Ngram.hSents)
 //    val s2 = Nlp.generateSentence(2,"""jason is study in fsu for more then 3 month. His Chinese name is zc..""",Ngram.hSents)
 //    val s3 = Nlp.generateSentence(3,"""As a international student, Jason have to study English hard..""",Ngram.hSents)

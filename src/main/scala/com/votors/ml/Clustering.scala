@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.votors.aqi.Train
 import com.votors.common.SqlUtils
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
@@ -105,7 +106,7 @@ class Clustering (sc: SparkContext) {
       }
       sqlUtil.jdbcClose()
       texts
-    })
+    }).map(text=>Nlp.textPreprocess(text._1,text._2))
   }
 
   def getSentRdd(textRdd: RDD[(Int, String)])  = {
@@ -117,14 +118,18 @@ class Clustering (sc: SparkContext) {
     ret
   }
 
-  def getNgramRdd(sentRdd: RDD[Array[Sentence]], tfFilterInPartition:Int=3): RDD[Ngram]= {
+  def getNgramRdd(sentRdd: RDD[Array[Sentence]], tfFilterInPartition:Int=3, firstStageNgram: Broadcast[mutable.HashMap[String, Ngram]]=null): RDD[Ngram]= {
     val ret = sentRdd.mapPartitions(itr => {
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
       val gramId = new AtomicInteger()
       itr.foreach(sents => {
         gramId.set(0)
-        Nlp.generateNgram(sents, gramId,hNgrams)
+        if (firstStageNgram == null) {
+          Nlp.generateNgram(sents, gramId, hNgrams)
+        }else{
+          Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram)
+        }
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
       trace(INFO,s"number of ngram after filter > ${tfFilterInPartition} is ${sNgrams.size}")
@@ -160,8 +165,8 @@ object Clustering {
     val rootLogger = Logger.getRootLogger();
     rootLogger.setLevel(Level.WARN);
 
-    // printf more debug info thiat match the filter
-    Trace.filter = "glucose level"
+    // printf more debug info of the gram that match the filter
+    Trace.filter = "glucose level aaaaaaaa"
 
 
     //val sqlContext = new SQLContext(sc)
@@ -169,17 +174,42 @@ object Clustering {
     val rdd = clustering.getBlogIdRdd(2)
     val docsNum = rdd.count()
     val rddText = clustering.getBlogTextRdd(rdd)
-    val rddSent = clustering.getSentRdd(rddText)
+    val rddSent = clustering.getSentRdd(rddText).persist()
     val docNumber = clustering.docsNum
-    val rddNgram = clustering.getNgramRdd(rddSent,2)
+    val rddNgram = clustering.getNgramRdd(rddSent,0)
       .map(gram=>(gram.text, gram))
       .reduceByKey(_+_)
+      .sortByKey()
       .map(_._2)
-      .filter(_.tfAll>5)
+      .filter(_.tfAll>0)
       .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber))
-      .filter(_.cvalue > -2)
+      .filter(_.cvalue > -1)
+      .persist()
 
-    rddNgram.filter(_.n>1).foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+    rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+    println(s"number of gram is ${rddNgram.count}")
+
+    val firstStageRet = new mutable.HashMap[String,Ngram]()
+    firstStageRet ++= rddNgram.collect().map(gram=>(gram.text,gram))
+    //firstStageRet.foreach(println)
+
+    val firstStageNgram = sc.broadcast(firstStageRet)
+
+    val rddNgram2 = clustering.getNgramRdd(rddSent,0,firstStageNgram)
+      .map(gram=>(gram.text, gram))
+      .reduceByKey(_+_)
+      .sortByKey()
+      .map(_._2)
+      //.filter(_.tfAll>2)
+      .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber,true))
+      //.filter(_.cvalue > 0)
+      .persist()
+
+
+
+    //writeObjectToFile(Conf.fistStagResultFile, firstStageRet)
+    rddNgram2.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+    println(s"number of gram2 is ${rddNgram2.count}")
 
 //    val rddVector = clustering.getVectorRdd(rddNgram).persist()
 

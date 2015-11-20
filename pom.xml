@@ -214,6 +214,14 @@
       <artifactId>lvgdist</artifactId>
       <version>2015</version>
     </dependency>
+
+    <dependency>
+      <groupId>org.scala-lang.modules</groupId>
+      <artifactId>scala-pickling_2.10</artifactId>
+      <version>0.10.1</version>
+    </dependency>
+
+
   </dependencies>
 
 
