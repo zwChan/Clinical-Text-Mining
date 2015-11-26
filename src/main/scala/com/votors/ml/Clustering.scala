@@ -139,12 +139,34 @@ class Clustering (sc: SparkContext) {
     ret
   }
 
+  /**
+   *
+   * @param rddNgram
+   * @return
+   */
   def getVectorRdd(rddNgram: RDD[Ngram]): RDD[(Ngram,Vector)] = {
     rddNgram.map(gram => {
-      (gram,Vectors.dense(gram.tfdf))
+      val feature = new ArrayBuffer[Double]()
+      feature.append(gram.tfdf)     // tfdf
+      feature.append(log2(gram.cvalue+1)) // c-value, applied a log function
+      feature.append(gram.umlsScore._1/100) // simple similarity to umls
+      feature.append(gram.umlsScore._2/100) //simple similarity to chv
+      feature.append(bool2Double(gram.isPosNN))
+      feature.append(bool2Double(gram.isPosAN))
+      feature.append(bool2Double(gram.isPosPN))
+      feature.append(bool2Double(gram.isPosANPN))
+      feature.append(bool2Double(gram.isContainInUmls))
+      feature.append(bool2Double(gram.isContainInChv))
+      feature.append(log2(gram.context.win_umlsCnt+1))
+      feature.append(log2(gram.context.win_chvCnt+1))
+      feature.append(log2(gram.context.sent_umlsCnt+1))
+      feature.append(log2(gram.context.sent_chvCnt+1))
+      feature.append(log2(gram.context.umlsDist+1))
+      feature.append(log2(gram.context.chvDist+1))
+
+      (gram,Vectors.dense(feature.toArray))
     })
   }
-
 }
 
 object Clustering {
@@ -166,7 +188,7 @@ object Clustering {
     rootLogger.setLevel(Level.WARN);
 
     // printf more debug info of the gram that match the filter
-    Trace.filter = "glucose level aaaaaaaa"
+    Trace.filter = "type 1 aaaa"
 
 
     //val sqlContext = new SQLContext(sc)
@@ -176,23 +198,30 @@ object Clustering {
     val rddText = clustering.getBlogTextRdd(rdd)
     val rddSent = clustering.getSentRdd(rddText).persist()
     val docNumber = clustering.docsNum
-    val rddNgram = clustering.getNgramRdd(rddSent,0)
+    val rddNgram = clustering.getNgramRdd(rddSent,Conf.partitionTfFilter)
       .map(gram=>(gram.text, gram))
       .reduceByKey(_+_)
       .sortByKey()
       .map(_._2)
-      .filter(_.tfAll>0)
+      .filter(_.tfAll>Conf.stag1TfFilter)
       .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber))
-      .filter(_.cvalue > -1)
-      .persist()
+      .filter(_.cvalue > Conf.stag1CvalueFilter)
+      //.persist()
 
-    rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
-    println(s"number of gram is ${rddNgram.count}")
+    //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+    //println(s"number of gram is ${rddNgram.count}")
 
     val firstStageRet = new mutable.HashMap[String,Ngram]()
-    firstStageRet ++= rddNgram.collect().map(gram=>(gram.text,gram))
-    //firstStageRet.foreach(println)
+    if (Conf.topTfNgram>0)
+      firstStageRet ++= rddNgram.sortBy(_.tfAll * -1).take(Conf.topTfNgram).map(gram=>(gram.text,gram))
+    else if (Conf.topTfdfNgram>0)
+      firstStageRet ++= rddNgram.sortBy(_.tfdf * -1).take(Conf.topTfdfNgram).map(gram=>(gram.text,gram))
+    else if (Conf.topCvalueNgram>0)
+      firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram=>(gram.text,gram))
+    else
+      firstStageRet ++= rddNgram.collect().map(gram=>(gram.text,gram))
 
+    //firstStageRet.foreach(println)
     val firstStageNgram = sc.broadcast(firstStageRet)
 
     val rddNgram2 = clustering.getNgramRdd(rddSent,0,firstStageNgram)
@@ -200,25 +229,24 @@ object Clustering {
       .reduceByKey(_+_)
       .sortByKey()
       .map(_._2)
-      //.filter(_.tfAll>2)
+      .filter(_.tfAll>Conf.stag1TfFilter)
       .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber,true))
-      //.filter(_.cvalue > 0)
+      .filter(_.cvalue > Conf.stag2CvalueFilter)
       .persist()
-
-
 
     //writeObjectToFile(Conf.fistStagResultFile, firstStageRet)
     rddNgram2.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
     println(s"number of gram2 is ${rddNgram2.count}")
 
-//    val rddVector = clustering.getVectorRdd(rddNgram).persist()
+    val rddVector = clustering.getVectorRdd(rddNgram2.filter(ngram=>ngram.umlsScore._2 > 0.1)).persist()
+    rddVector.foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
 
-//    val model = KMeans.train(rddVector.map(_._2),10,10000,10)
-//    val ret = rddVector.sortBy(kv => kv._1.tfdf * -1).take(200).map(kv => (model.predict(kv._2), kv._1)).groupBy(_._1)
-//    ret.foreach(kv =>{
-//      println(s"clust ####${kv._1}#####")
-//      kv._2.foreach(kkvv => println(kkvv._2))
-//    })
+    val model = KMeans.train(rddVector.map(_._2),10,10000,10)
+    val ret = rddVector.sortBy(kv => kv._1.tfdf * -1).take(200).map(kv => (model.predict(kv._2), kv._1)).groupBy(_._1)
+    ret.foreach(kv =>{
+      println(s"clust ####${kv._1}#####")
+      kv._2.foreach(kkvv => println(kkvv._2))
+    })
     //rddSent.collect().take(10).foreach(a => println(a.mkString("\n")))
     //println(rddNgram.collect().take(10).mkString("\n"))
     //println(rddNgram.collect().filter(_.text.equals("diabet")).mkString("\n"))

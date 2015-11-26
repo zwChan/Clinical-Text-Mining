@@ -71,20 +71,22 @@ class Ngram (var text: String) extends java.io.Serializable{
   //var text = ""         // final format of this gram. after stemmed/variant...
   var n: Int = 0            // number of word in this gram
   var hBlogId = new mutable.HashMap[Int, Stat]()       // save the blog id and one of its sentence id.
-  var context = new Context()   // context of this gram
+  var context = new Context()   // ** context of this gram
   var tfAll:Long = 0     // term frequency of all document
   var df = 0        // document frequency
-  var tfdf = 0.0     // tfdf of this gram: tf-idf = log(1+ avg(tf)) * log(1+n(t)/N)
-  var cvalue = -1.0    // c-value
+  var tfdf = 0.0     // ** tfdf of this gram: tf-idf = log(1+ avg(tf)) * log(1+n(t)/N)
+  var cvalue = -1.0    // ** c-value
   //var nestedCnt = 0   // the number of term that contains this gram.
   var nestedTf: Long =0     // the total frequency of terms that contains this gram
   var nestTerm = new mutable.HashSet[String]()         // nested term
-  var umlsScore = (0.0,0.0,"","") // (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term)
-  var posString = ""
-  var isPosNN = false  // sytax pattern :Noun.*Noun
-  var isPosAN = false  // sytax pattern : (Adj.*Noun) +Noun
-  var isPosPN = false  // sytax pattern : Pre.*Noun
-  var isPosANPN = false  // sytax pattern : ((Adj|Noun) +|((Adj|Noun)?(NounP rep) ?)(Adj|Noun)?)Noun
+  var umlsScore = (0.0,0.0,"","") // ** (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term)
+  var posString = ""    // **
+  var isPosNN = false  // ** sytax pattern :Noun.*Noun
+  var isPosAN = false  // ** sytax pattern : (Adj.*Noun) +Noun
+  var isPosPN = false  // ** sytax pattern : Pre.*Noun
+  var isPosANPN = false  // ** sytax pattern : ((Adj|Noun) +|((Adj|Noun)?(NounP rep) ?)(Adj|Noun)?)Noun
+  var isContainInUmls = false // ** if it contains gram that is found in umls
+  var isContainInChv = false // ** if it contains gram that is found in chv
 
   /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
@@ -114,6 +116,8 @@ class Ngram (var text: String) extends java.io.Serializable{
     newNgram.isPosAN = this.isPosAN
     newNgram.isPosNN = this.isPosNN
     newNgram.isPosANPN = this.isPosANPN
+    newNgram.isContainInUmls = this.isContainInUmls || other.isContainInUmls
+    newNgram.isContainInChv = this.isContainInChv || other.isContainInChv
 
     traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll} ${this.hBlogId.mkString(",")}, ${other.hBlogId.mkString(",")}")
     newNgram
@@ -192,8 +196,10 @@ class Ngram (var text: String) extends java.io.Serializable{
     val Ta = new ArrayBuffer[Ngram]()
     hNgram.foreach(ngram =>{
       // if it is nested
-      if (this != ngram && ngram.text.matches(".*\\b" + this.text + "\\b.*")) {
+      if (this.n < ngram.n && ngram.text.matches(".*\\b" + this.text + "\\b.*")) {
         Ta.append(ngram)
+        if (this.isUmlsTerm()) ngram.isContainInUmls = true  // 'this' is conained by 'ngram'.
+        if (this.isUmlsTerm(true)) ngram.isContainInChv = true
       }
     })
     //this.nestedCnt = Ta.size
@@ -221,11 +227,19 @@ class Ngram (var text: String) extends java.io.Serializable{
     this
   }
 
+  def isUmlsTerm(isChv: Boolean=false): Boolean= {
+    if (!isChv && this.umlsScore._1 > Conf.umlsLikehoodLimit)
+      true
+    else if (isChv && this.umlsScore._2 > Conf.umlsLikehoodLimit)
+      true
+    else
+      false
+  }
   override def toString(): String = {
     toString(if (text!="fat")false else true)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f),contex:${this.context}" +
+    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}}),contex:${this.context}" +
      f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${bool2Str(isPosANPN)}) " +
       {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
@@ -236,37 +250,35 @@ class Ngram (var text: String) extends java.io.Serializable{
  */
 class Context extends java.io.Serializable{
   //context in the windown
-  var win_umlsCnt = 0   // number of umls term in its window
-  var win_chvCnt = 0    // number of chv term in its window
-  var win_nounCnt = 0   // number of noun term in its window
+  var win_umlsCnt = 0   // ** number of umls term in its window
+  var win_chvCnt = 0    // ** number of chv term in its window
+  //var win_nounCnt = 0   // ** number of noun term in its window
 
 
   //context in the sentent
-  var sent_umlsCnt = 0  // number of umls term in its sentence
-  var sent_chvCnt = 0   // number of chv term in its sentence
-  var sent_nounCnt = 0  // number of noun term in its sentence
+  var sent_umlsCnt = 0  // ** number of umls term in its sentence
+  var sent_chvCnt = 0   // ** number of chv term in its sentence
+  //var sent_nounCnt = 0  // ** number of noun term in its sentence
 
   //context of other
-  var hasNounInUmls = false // if it contains at least a noun word that is found in umls
-  var umlsDist = -1       // the nearest distance with a umls term
-  var chvDist = -1        // the nearest distance with a chv term
+  var umlsDist = 0       // ** the nearest distance with a umls term
+  var chvDist = 0        // ** the nearest distance with a chv term
 
   def +(other: Context) = merge(other)
   def merge(other: Context) = {
     val newCx = new Context()
     newCx.win_umlsCnt = this.win_umlsCnt+other.win_umlsCnt
     newCx.win_chvCnt = this.win_chvCnt+other.win_chvCnt
-    newCx.win_nounCnt = this.win_nounCnt+other.win_nounCnt
+    //newCx.win_nounCnt = this.win_nounCnt+other.win_nounCnt
     newCx.sent_umlsCnt = this.sent_umlsCnt+other.sent_umlsCnt
-    newCx.sent_nounCnt = this.sent_nounCnt+other.sent_nounCnt
-    newCx.hasNounInUmls = this.hasNounInUmls || other.hasNounInUmls
+    //newCx.sent_nounCnt = this.sent_nounCnt+other.sent_nounCnt
     newCx.umlsDist = this.umlsDist+other.umlsDist
     newCx.chvDist = this.chvDist+other.chvDist
     newCx
   }
 
   override def  toString() = {
-    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),all(${hasNounInUmls},${umlsDist},${chvDist})"
+    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist})"
   }
 }
 
@@ -326,8 +338,9 @@ case class KV[K,V](val k:K, val v:V) {
 }
 
 object Ngram {
+  final val WinLen = Conf.WinLen       // windown lenght for calculate ngram contex
   final val N = 5
-  final val Delimiter = Pattern.compile("[,;\\:\\(\\)\\[\\]\\{\\}\"]+")   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
+  final val Delimiter = Pattern.compile(Conf.delimiter)   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
   val idCnt = new AtomicInteger()
 
   @transient val  hSents = new mutable.LinkedHashMap[(Int,Int),Sentence]()  //(blogId, sentId)
@@ -365,7 +378,7 @@ object Ngram {
   def checkNgram(gram: String, sentence: Sentence, start: Int, end: Int): Boolean = {
     var ret = true
     // check the stop word. if the gram contains any stop word
-    if (Nlp.checkStopword(gram) || (gram.contains(" ") && gram.split(" ").filter(Nlp.checkStopword(_)).size > 0))
+    if (Nlp.checkStopword(gram,true) || (gram.contains(" ") && gram.split(" ").filter(Nlp.checkStopword(_)).size > 0))
       ret &&= false
 
     // check if the gram contain at least one noun

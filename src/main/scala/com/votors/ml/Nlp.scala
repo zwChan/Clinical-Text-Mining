@@ -1,61 +1,27 @@
 package com.votors.ml
 
+import java.io._
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.regex.Pattern
 
+import breeze.numerics.abs
+import com.votors.common.Utils.Trace._
+import com.votors.common.Utils._
+import com.votors.common._
+import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
 import opennlp.tools.chunker._
 import opennlp.tools.cmdline.parser.ParserTool
 import opennlp.tools.parser.{ParserFactory, ParserModel}
+import opennlp.tools.postag.{POSModel, POSTaggerME}
+import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
+import opennlp.tools.stemmer.PorterStemmer
+import opennlp.tools.tokenize.{TokenizerME, TokenizerModel}
 import org.apache.spark.broadcast.Broadcast
 
-import scala.collection.mutable.ArrayBuffer
-import java.io._
-import java.nio.charset.CodingErrorAction
-import java.util.regex.Pattern
-import java.util.Properties
-
-import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
-
-import scala.collection.JavaConversions.asScalaIterator
-import scala.collection.immutable.{List, Range}
+import scala.collection.immutable.Range
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
-import scala.io.Source
-import scala.io.Codec
-
-import org.apache.commons.lang3.StringUtils
-import org.apache.lucene.analysis.Analyzer
-import org.apache.lucene.analysis.standard.StandardAnalyzer
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute
-import org.apache.lucene.analysis.snowball.SnowballFilter
-import org.apache.lucene.util.Version
-import org.apache.solr.client.solrj.SolrRequest
-import org.apache.solr.client.solrj.impl.HttpSolrServer
-import org.apache.solr.client.solrj.request.ContentStreamUpdateRequest
-import org.apache.solr.common.SolrDocumentList
-import org.apache.solr.common.params.CommonParams
-import org.apache.solr.common.params.ModifiableSolrParams
-import org.apache.solr.common.util.ContentStreamBase
-import com.votors.common.Utils._
-import com.votors.common.Utils.Trace._
-
-import opennlp.tools.cmdline.BasicCmdLineTool
-import opennlp.tools.cmdline.CLI
-import opennlp.tools.cmdline.PerformanceMonitor
-import opennlp.tools.postag.POSModel
-import opennlp.tools.postag.POSSample
-import opennlp.tools.postag.POSTaggerME
-import opennlp.tools.stemmer.PorterStemmer
-import opennlp.tools.stemmer.snowball.englishStemmer
-import opennlp.tools.tokenize.{TokenizerME, TokenizerModel, WhitespaceTokenizer}
-import opennlp.tools.util.ObjectStream
-import opennlp.tools.util.PlainTextByLineStream
-import java.sql.{Statement, Connection, DriverManager, ResultSet}
-
-import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
-
-import com.votors.common._
-
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.io.File
 
 /**
@@ -90,11 +56,12 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
 }
 
 object Nlp {
-  final val WinLen = 10       // windown lenght for calculate ngram contex
   final val NotPos = "*"      // the char using indicating this is not a POS tagger, may be a punctuation
   //final val TokenEnd = "$$"
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
+  final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
+
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
 
@@ -135,8 +102,9 @@ object Nlp {
    * @param phraseNorm
    * @return
    */
-  def getPos(phraseNorm: Array[String]) = {
-    postagger.tag(phraseNorm).map(Nlp.posTransform(_))
+  def getPos(phraseNorm: Array[String], transfer: Boolean=true) = {
+    val orgPos = postagger.tag(phraseNorm)
+    if (transfer)orgPos.map(Nlp.posTransform(_)) else orgPos
   }
 
   val chunkerModeIn = new FileInputStream(s"${modelRoot}/en-chunker.bin")
@@ -208,8 +176,17 @@ object Nlp {
       stopwords.add(Nlp.getToken(line).map(t =>{Nlp.normalizeAll(t)}).mkString(" ").trim)
   }
 
-  def checkStopword(str: String):Boolean ={
-    stopwords.contains(str)
+  /**
+   * return true if it is a stop word.
+   * @param str
+   * @param withRegex check the stop word regex in addition the the stop word file.
+   * @return
+   */
+  def checkStopword(str: String, withRegex: Boolean=false):Boolean ={
+    var ret = false
+    ret ||= stopwords.contains(str)
+    if (withRegex) ret ||= StopwordRegex.matcher(str).matches()
+    ret
   }
 
   /**
@@ -349,33 +326,52 @@ object Nlp {
     // the 'for' is roughly search for a window,
     // and the (e._1>s._1 && (e._1-s._1+s._2.n)>Nlp.WinLen) will finally determin the actually window.
     //for (win_center <- 0 to gramInSent.size; win_walker <-(win_center-Nlp.WinLen) to (win_center+Nlp.WinLen) if (win_walker>=0 && win_walker < gramInSent.size) ) {
-    for (start <- Range(0,gramInSent.size); end <- Range(0,gramInSent.size) if (start != end) ) {
-      val c = gramInSent(start)   // center gram in the windows
-      val w = gramInSent(end)  // grams walking around the center-gram in the range of window
-      val cGram = c._2      // the center gram, which is to be updated
-      val wPreGram = w._3  // result of stage 1 for walker gram
+    for (start <- Range(0,gramInSent.size)) {
+      val c = gramInSent(start) // center gram in the windows
+      val cGram = c._2 // the center gram, which is to be updated
+      var nearestUmls = Ngram.WinLen
+      var nearestChv  = Ngram.WinLen
+      for (end <- Range(0, gramInSent.size) if (start != end)) {
+        val w = gramInSent(end) // grams walking around the center-gram in the range of window
+        val wPreGram = w._3 // result of stage 1 for walker gram
 
-      // update in the sentence
-      if (wPreGram.umlsScore._2 >Conf.umlsLikehoodLimit) {
-        // score of chv
-        cGram.context.sent_chvCnt += 1
-        cGram.context.sent_umlsCnt += 1
-      } else if (wPreGram.umlsScore._1 >Conf.umlsLikehoodLimit) {
-        //score of umls
-        cGram.context.sent_umlsCnt += 1
-      }
+        //exclude the term that is nested by cGram
+        if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
+          // update in the sentence
+          if (wPreGram.isUmlsTerm(true)) {
+            // score of chv
+            cGram.context.sent_chvCnt += 1
+            cGram.context.sent_umlsCnt += 1
+          } else if (wPreGram.isUmlsTerm(false)) {
+            //score of umls
+            cGram.context.sent_umlsCnt += 1
+          }
+        }
 
-      // update in the window
-      if ((w._1+w._2.n+Nlp.WinLen < c._1) || (c._1+c._2.n+Nlp.WinLen)<w._1) {
-        if (wPreGram.umlsScore._2 >Conf.umlsLikehoodLimit) {
-          // score of chv
-          cGram.context.win_chvCnt += 1
-          cGram.context.win_umlsCnt += 1
-        } else if (wPreGram.umlsScore._1 >Conf.umlsLikehoodLimit) {
-          //score of umls
-          cGram.context.win_umlsCnt += 1
+        // update the nearest umls term, exclude the term that is nested by cGram
+        if (wPreGram.isUmlsTerm() && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) && Math.abs(c._1 - w._1) < nearestUmls) {
+          traceFilter(INFO,cGram.text, s"umls dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+          nearestUmls = Math.abs(c._1 - w._1)
+        }
+        if (wPreGram.isUmlsTerm(true) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)  && Math.abs(c._1 - w._1) < nearestChv) {
+          traceFilter(INFO,cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+          nearestChv = Math.abs(c._1 - w._1)
+        }
+
+        // update in the window,  exclude the term that is nested by cGram
+        if (((w._1 + w._2.n + Ngram.WinLen > c._1) && (c._1 + c._2.n + Ngram.WinLen) < w._1) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)) {
+          if (wPreGram.isUmlsTerm(true)) {
+            // score of chv
+            cGram.context.win_chvCnt += 1
+            cGram.context.win_umlsCnt += 1
+          } else if (wPreGram.isUmlsTerm()) {
+            //score of umls
+            cGram.context.win_umlsCnt += 1
+          }
         }
       }
+      cGram.context.umlsDist += nearestUmls
+      cGram.context.chvDist += nearestChv
     }
   }
 
@@ -444,7 +440,15 @@ object Nlp {
       val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
       (blogId, ret)
     }
-    println(textPreprocess(0,"I'm so (happy); ..."))
+    val text = "Girls in FSU of Florida are hot"
+    //val orgPos = postagger.tag(text.split(" "))
+    //orgPos.map(Nlp.posTransform(_))
+
+    val ret = Nlp.getToken(text)
+    val ret2 = Nlp.getParser(ret)
+
+    ret2.show()
+//    println(ret2)
 
 //    val s1 = Nlp.generateSentence(1,"""Hi, how are you going? My name is Jason, an (international student). Jason! jason? jason;jason:jason.""",Ngram.hSents)
 //    val s2 = Nlp.generateSentence(2,"""jason is study in fsu for more then 3 month. His Chinese name is zc..""",Ngram.hSents)

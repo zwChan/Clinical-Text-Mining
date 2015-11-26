@@ -60,6 +60,9 @@ object Utils extends java.io.Serializable{
   def bool2Str(b: Boolean) = {
     if (b) "T" else "F"
   }
+  def bool2Double(b: Boolean): Double = {
+    if (b) 1.0 else 0.0
+  }
   def writeObjectToFile(filename: String, obj: AnyRef) = {
     // obj must have serialiazable trait
     import java.io._
@@ -118,14 +121,26 @@ object Conf extends java.io.Serializable{
 
   val caseFactor = prop.get("caseFactor").toString.toFloat
   val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
+  val partitionTfFilter = prop.get("partitionTfFilter").toString.toInt
+  val stag1TfFilter = prop.get("stag1TfFilter").toString.toInt
+  val stag1CvalueFilter = prop.get("stag1CvalueFilter").toString.toDouble
+  val stag2TfFilter = prop.get("stag2TfFilter").toString.toInt
+  val stag2CvalueFilter = prop.get("stag2CvalueFilter").toString.toDouble
+
+  val topTfNgram = prop.get("topTfNgram").toString.toInt
+  val topCvalueNgram = prop.get("topCvalueNgram").toString.toInt
+  val topTfdfNgram = prop.get("topTfdfNgram").toString.toInt
 
   val solrServerUrl = prop.get("solrServerUrl")
   val includePosTagger = prop.get("includePosTagger")
   val lvgdir = prop.get("lvgdir").toString
-  val posInclusive = prop.get("posInclusive").toString
+  val posInclusive = prop.get("posInclusive").toString.split(" ").filter(_.trim.length>0).mkString(" ")
   val jdbcDriver = prop.get("jdbcDriver").toString
-  val fistStagResultFile = prop.get("fistStagResultFile").toString
+  val featureResultFile = prop.get("featureResultFile").toString
   val umlsLikehoodLimit = prop.get("umlsLikehoodLimit").toString.toDouble
+  val WinLen = prop.get("WinLen").toString.toInt
+  val delimiter = prop.get("delimiter").toString.trim
+  val stopwordRegex = prop.get("stopwordRegex").toString.trim
 }
 
 /**
