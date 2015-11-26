@@ -5,6 +5,7 @@ import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 import java.util.Properties
 
+import com.votors.common.Conf
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 
 import scala.collection.JavaConversions.asScalaIterator
@@ -78,14 +79,6 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
   val modelRoot = rootDir + "/data"
   val posModlePath = s"${modelRoot}/en-pos-maxent.bin"
   val sentModlePath = s"${modelRoot}/en-sent.bin"
-
-  // Load properties
-  val prop = new Properties()
-  prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
-  println("Current properties:\n" + prop.toString)
-
-  val caseFactor = prop.get("caseFactor").toString.toFloat
-  val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
 
   /**
    *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
@@ -232,6 +225,19 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     stemmedWords.mkString(" ")
   }
 
+  def stemWordsOrg(str: String): String = {
+    val stemmedWords = ArrayBuffer[String]()
+    val tokenStream = getAnalyzer().tokenStream(
+      "str_stemmed", new StringReader(str))
+    val ctattr = tokenStream.addAttribute(
+      classOf[CharTermAttribute])
+    tokenStream.reset()
+    while (tokenStream.incrementToken()) {
+      stemmedWords += ctattr.toString()
+    }
+    stemmedWords.mkString(" ")
+  }
+
   def normalizeAll(str: String, isSort:Boolean=true, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str)
     if (isStem)ret = stemWords(ret)
@@ -288,7 +294,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     val rsp = solrServer.query(params)
     val results = rsp.getResults()
     if (results.getNumFound() > 0L) {
-      trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")
+      //trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")
       val ret = results.iterator().map(sdoc =>{
         val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
         val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
@@ -297,7 +303,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
         val descrNorm = normalizeCasePunct(descr)
         val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
         val score = computeScore(descr,
-          scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), caseFactor)
+          scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
         Suggestion(score, descr, cui, aui,sab)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
@@ -338,7 +344,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       val nwords = descrNorm.split(" ").length.toFloat
       val score = (nwords / nwordsInPhrase) *
         computeScore(descr,
-          scala.collection.immutable.List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos), caseFactor)
+          scala.collection.immutable.List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos), Conf.caseFactor)
       Suggestion(score, descr, cui, aui, sab)
     })
       .toList
@@ -457,9 +463,9 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
 
       if (target.length > 0 && skipSameBlog == false) {
         // process the newline as configuration. 1: replace with space; 2: replace with '.'; 0: do nothing
-        val target_tmp = if (ignoreNewLine == 1) {
+        val target_tmp = if (Conf.ignoreNewLine == 1) {
            target.replace("\r\n"," ").replace("\r", " ").replace("\n", ". ").replace("\"", "\'")
-         } else if (ignoreNewLine == 2) {
+         } else if (Conf.ignoreNewLine == 2) {
            target.replace("\r\n",". ").replace("\r", ". ").replace("\n", ". ").replace("\"", "\'")
          } else {
           target.replace("\"", "\'")
@@ -537,7 +543,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
         for (idx <- 0 to (tokens.length - n)) {
           val gram = tokens.slice(idx,idx+n)
           val pos = getPos(gram)
-          if (posContains(gram," NN NNS NNP NNPS ")) {
+          if (posContains(gram,Conf.posInclusive)) {
             select(gram.mkString(" ")) match {
               case suggestions: Array[Suggestion] => {
                 retList :+= (gram.mkString(" "), suggestions)
@@ -585,6 +591,40 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
       """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","tags","sentence"""" + "\n"
     }
   }
+
+  /**
+   * (umlsScore,chvScore,umlsCui,chvCui)
+   * @param currTag
+   * @return (umlsScore,chvScore,umlsCui,chvCui)
+   */
+  def getUmlsScore(currTag: String): (Double,Double,String,String) = {
+    var umlsScore = 0.0
+    var umlsCui = ""
+    var chvScore = 0.0
+    var chvCui = ""
+    select(currTag) match {
+      case suggestions: Array[Suggestion] => {
+        // for each UMLS terms, get their TUI from MRSTY table
+
+        if (suggestions.length > 0) {
+          suggestions.foreach(suggestion => {
+            if (suggestion.sab.contains("CHV")){
+              if (suggestion.score>chvScore) {
+                chvScore = suggestion.score
+                chvCui = suggestion.cui
+              }
+            }
+            if (suggestion.score>umlsScore) {
+              umlsScore = suggestion.score
+              umlsCui = suggestion.cui
+            }
+          })
+        }
+      }
+    }
+    (umlsScore,chvScore,umlsCui,chvCui)
+  }
+
   /**
    * Match some 'tags' to dictionary(e.g. UMLS), and get their semantic type.
    *
@@ -644,7 +684,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
    * @return
    */
   def getMrsty(cui: String): ResultSet = {
-    execQuery(s"select * from MRSTY where CUI='${cui}';")
+    execQuery(s"select * from mrsty where CUI='${cui}';")
   }
 
   /**
@@ -697,7 +737,7 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
     if (isInitJdbc == false) {
       isInitJdbc = true
       // Database Config
-      val conn_str = prop.get("jdbcDriver").toString
+      val conn_str = Conf.jdbcDriver
       println("jdbcDrive is: " + conn_str)
       // Load the driver
       val dirver = classOf[com.mysql.jdbc.Driver]
@@ -726,20 +766,25 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
 }
 
 object UmlsTagger2 {
+  val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
+
 
   def main(args: Array[String]) {
-    println(s"The input is: ${args.mkString(",")}")
-    if (args.length <3) {
-      println("Input  error: args should be: rootdir inputFile outputFile. ")
-      sys.exit(1)
-    }
-    val rootDir = args(0)
-    val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
-    //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
-    tagger.annotateTag(s"${args(1)}",
-      s"${args(2)}")
 
-    tagger.jdbcClose()
+    println(tagger.stemWordsOrg("the man is happy."))
+
+//    println(s"The input is: ${args.mkString(",")}")
+//    if (args.length <3) {
+//      println("Input  error: args should be: rootdir inputFile outputFile. ")
+//      sys.exit(1)
+//    }
+//    val rootDir = args(0)
+//
+//    //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
+//    tagger.annotateTag(s"${args(1)}",
+//      s"${args(2)}")
+//
+//    tagger.jdbcClose()
   }
 
 }

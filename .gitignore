@@ -5,3 +5,5 @@ target/
 *.bak
 *.bk
 data/
+lvg2015/
+lvg2015data/
