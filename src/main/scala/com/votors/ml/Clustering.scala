@@ -132,7 +132,7 @@ class Clustering (sc: SparkContext) {
         }
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
-      trace(INFO,s"number of ngram after filter > ${tfFilterInPartition} is ${sNgrams.size}")
+      trace(INFO,s"grams number before reduce (in this partition) > ${tfFilterInPartition} is ${sNgrams.size}")
       sNgrams.foreach(_.getNestInfo(sNgrams))
       sNgrams.iterator
     })
@@ -171,101 +171,118 @@ class Clustering (sc: SparkContext) {
 
 object Clustering {
   def main (args: Array[String]): Unit = {
-
-//    if (args.length <= 2){
-//      println("You should input option: original-file aqi-file!")
-//      return
-//    }
-
     // init spark
     val startTime = new Date()
-    val sc = new SparkContext(new SparkConf()
+    val conf = new SparkConf()
       .setAppName("NLP")
-      .setMaster("local")
-    )
+    if (Conf.sparkMaster.length>0)
+      conf .setMaster(Conf.sparkMaster)
+    val sc = new SparkContext(conf)
 
     val rootLogger = Logger.getRootLogger();
     rootLogger.setLevel(Level.WARN);
 
     // printf more debug info of the gram that match the filter
-    Trace.filter = "type 1 aaaa"
+    Trace.filter = Conf.debugFilterNgram
 
-
-    //val sqlContext = new SQLContext(sc)
     val clustering = new Clustering(sc)
-    val rdd = clustering.getBlogIdRdd(2)
-    val docsNum = rdd.count()
-    val rddText = clustering.getBlogTextRdd(rdd)
-    val rddSent = clustering.getSentRdd(rddText).persist()
-    val docNumber = clustering.docsNum
-    val rddNgram = clustering.getNgramRdd(rddSent,Conf.partitionTfFilter)
-      .map(gram=>(gram.text, gram))
-      .reduceByKey(_+_)
-      .sortByKey()
-      .map(_._2)
-      .filter(_.tfAll>Conf.stag1TfFilter)
-      .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber))
-      .filter(_.cvalue > Conf.stag1CvalueFilter)
+
+    val rddNgram4Train = if (Conf.clusteringFromFile == false) {
+      val rdd = clustering.getBlogIdRdd(Conf.partitionNumber)
+      val rddText = clustering.getBlogTextRdd(rdd)
+      val rddSent = clustering.getSentRdd(rddText).persist()
+      val docNumber = clustering.docsNum
+      val rddNgram = clustering.getNgramRdd(rddSent, Conf.partitionTfFilter)
+        .map(gram => (gram.text, gram))
+        .reduceByKey(_ + _)
+        //.sortByKey()
+        .map(_._2)
+        .filter(_.tfAll > Conf.stag1TfFilter)
+        .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber))
+        .filter(_.cvalue > Conf.stag1CvalueFilter)
+        //.persist()
+
+      //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+      //println(s"number of gram is ${rddNgram.count}")
+
+      val firstStageRet = new mutable.HashMap[String, Ngram]()
+      if (Conf.topTfNgram > 0)
+        firstStageRet ++= rddNgram.sortBy(_.tfAll * -1).take(Conf.topTfNgram).map(gram => (gram.text, gram))
+      else if (Conf.topTfdfNgram > 0)
+        firstStageRet ++= rddNgram.sortBy(_.tfdf * -1).take(Conf.topTfdfNgram).map(gram => (gram.text, gram))
+      else if (Conf.topCvalueNgram > 0)
+        firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram => (gram.text, gram))
+      else
+        firstStageRet ++= rddNgram.collect().map(gram => (gram.text, gram))
+
+      //firstStageRet.foreach(println)
+      val firstStageNgram = sc.broadcast(firstStageRet)
+
+      val rddNgram2 = clustering.getNgramRdd(rddSent, 0, firstStageNgram)
+        .map(gram => (gram.text, gram))
+        .reduceByKey(_ + _)
+        .sortByKey()
+        .map(_._2)
+        .filter(_.tfAll > Conf.stag2TfFilter)
+        .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, true))
+        .filter(_.cvalue > Conf.stag2CvalueFilter)
+        .persist()
+
+      Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
+
+      rddNgram2
+
+    }else {
+      println(s"start load ngram from file:")
+      val ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile)
+      val rddNgram2 = sc.parallelize(ngrams, Conf.partitionTfFilter).persist()
+      rddNgram2
+    }
+    //    rddNgram4Train.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+
+    if (Conf.runKmeans) {
+      val rddVector = if (Conf.trainOnlyChv)
+        clustering.getVectorRdd(rddNgram4Train.filter(_.isUmlsTerm(true)))
+      else
+        clustering.getVectorRdd(rddNgram4Train)
       //.persist()
 
-    //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
-    //println(s"number of gram is ${rddNgram.count}")
+      //    rddVector.foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
+      val rddVectorDbl = rddVector.map(_._2).persist()
 
-    val firstStageRet = new mutable.HashMap[String,Ngram]()
-    if (Conf.topTfNgram>0)
-      firstStageRet ++= rddNgram.sortBy(_.tfAll * -1).take(Conf.topTfNgram).map(gram=>(gram.text,gram))
-    else if (Conf.topTfdfNgram>0)
-      firstStageRet ++= rddNgram.sortBy(_.tfdf * -1).take(Conf.topTfdfNgram).map(gram=>(gram.text,gram))
-    else if (Conf.topCvalueNgram>0)
-      firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram=>(gram.text,gram))
-    else
-      firstStageRet ++= rddNgram.collect().map(gram=>(gram.text,gram))
+      var model: KMeansModel = null
 
-    //firstStageRet.foreach(println)
-    val firstStageNgram = sc.broadcast(firstStageRet)
+      val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
+        val startTimeTmp = new Date();
+        model = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
+        val cost = model.computeCost(rddVectorDbl)
+        System.out.println(s"###1 kMeans used time: "+(new Date().getTime()-startTimeTmp.getTime())+" ###")
+        println(s"$k,$cost")
+        (k, cost)
+      }
 
-    val rddNgram2 = clustering.getNgramRdd(rddSent,0,firstStageNgram)
-      .map(gram=>(gram.text, gram))
-      .reduceByKey(_+_)
-      .sortByKey()
-      .map(_._2)
-      .filter(_.tfAll>Conf.stag1TfFilter)
-      .mapPartitions(itr =>Ngram.updateAfterReduce(itr,docNumber,true))
-      .filter(_.cvalue > Conf.stag2CvalueFilter)
-      .persist()
+      println("###kcost####\n" + kCost.mkString(","))
 
-    //writeObjectToFile(Conf.fistStagResultFile, firstStageRet)
-    rddNgram2.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
-    println(s"number of gram2 is ${rddNgram2.count}")
+      if (Conf.runPredict) {
+        // TODO choose a "best" k?
 
-    val rddVector = clustering.getVectorRdd(rddNgram2.filter(ngram=>ngram.umlsScore._2 > 0.1)).persist()
-    rddVector.foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
-
-    val model = KMeans.train(rddVector.map(_._2),10,10000,10)
-    val ret = rddVector.sortBy(kv => kv._1.tfdf * -1).take(200).map(kv => (model.predict(kv._2), kv._1)).groupBy(_._1)
-    ret.foreach(kv =>{
-      println(s"clust ####${kv._1}#####")
-      kv._2.foreach(kkvv => println(kkvv._2))
-    })
-    //rddSent.collect().take(10).foreach(a => println(a.mkString("\n")))
-    //println(rddNgram.collect().take(10).mkString("\n"))
-    //println(rddNgram.collect().filter(_.text.equals("diabet")).mkString("\n"))
-
-//    val rddNgramMerged = rddNgram.map(gram => (gram.text,gram)).reduceByKey((a,b) =>a+b).map(_._2)
-//    val rddNgramTfdf = rddNgramMerged.map(gram => gram.procTfdf(docsNum))
-//
-//
-//    println(rddNgramTfdf.sortBy(_.tfAll * -1).take(10).mkString("\n"))
-//    println(rddNgramTfdf.sortBy(_.tfdf * -1).take(10).mkString("\n"))
-
-//    println(s" rdd ${rdd.count}")
-//    println(s" rddText ${rddText.count}")
-//    println(s" rddSent ${rddSent.count}")
-//    println(s" rddNgram ${rddNgram.count}")
-//    println(s" rddNgramMerged ${rddNgramMerged.count}")
+        val rddVector_all = clustering.getVectorRdd(rddNgram4Train).persist()
+        val ret = rddVector_all.map(kv => (model.predict(kv._2), kv._1)).sortBy(_._1).collect
+        ret.foreach(kkvv => {
+          val k = kkvv._1
+          val ngram = kkvv._2
+          if (ngram.isUmlsTerm(true))
+            print(s"${k}\tchv\t")
+          else if (ngram.isUmlsTerm(false))
+            print(s"${k}\tumls\t")
+          else
+            print(s"${k}\tother\t")
+          println(ngram.toStringVector())
+        })
+      }
+    }
 
     println("*******result is ******************")
-    val endTime = new Date()
-    System.out.println("### used time: "+(endTime.getTime()-startTime.getTime())+" ###")
+    System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
   }
 }

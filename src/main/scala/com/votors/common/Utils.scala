@@ -114,7 +114,7 @@ class InterObject(factor: Double=0.5, capacity: Int=3) extends java.io.Serializa
 
 object Conf extends java.io.Serializable{
   // Load properties
-  val rootDir = sys.env.get("CTM_ROOT_PATH").get
+  val rootDir = sys.props.get("CTM_ROOT_PATH").getOrElse(sys.env.getOrElse("CTM_ROOT_PATH",println("!!!!!!!!you need to set env CTM_ROOT_PATH!!!!!!!!"))).toString
   val prop = new Properties()
   prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
   println("Current properties:\n" + prop.toString)
@@ -131,16 +131,32 @@ object Conf extends java.io.Serializable{
   val topCvalueNgram = prop.get("topCvalueNgram").toString.toInt
   val topTfdfNgram = prop.get("topTfdfNgram").toString.toInt
 
-  val solrServerUrl = prop.get("solrServerUrl")
-  val includePosTagger = prop.get("includePosTagger")
+  val sparkMaster = prop.get("sparkMaster").toString.trim
+  val partitionNumber = prop.get("partitionNumber").toString.toInt
+
+  val solrServerUrl = prop.get("solrServerUrl").toString
   val lvgdir = prop.get("lvgdir").toString
   val posInclusive = prop.get("posInclusive").toString.split(" ").filter(_.trim.length>0).mkString(" ")
   val jdbcDriver = prop.get("jdbcDriver").toString
-  val featureResultFile = prop.get("featureResultFile").toString
   val umlsLikehoodLimit = prop.get("umlsLikehoodLimit").toString.toDouble
   val WinLen = prop.get("WinLen").toString.toInt
   val delimiter = prop.get("delimiter").toString.trim
   val stopwordRegex = prop.get("stopwordRegex").toString.trim
+  val debugFilterNgram = prop.get("debugFilterNgram").toString
+
+  val ngramSaveFile = prop.get("ngramSaveFile").toString.trim
+  val clusteringFromFile = prop.get("clusteringFromFile").toString.toBoolean
+
+  val runKmeans=prop.get("runKmeans").toString.toBoolean
+  val k_start=prop.get("k_start").toString.toInt
+  val k_end=prop.get("k_end").toString.toInt
+  val k_step=prop.get("k_step").toString.toInt
+  val maxIterations=prop.get("maxIterations").toString.toInt
+  val runs=prop.get("runs").toString.toInt
+
+  val runPredict=prop.get("runPredict").toString.toBoolean
+  val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
+
 }
 
 /**

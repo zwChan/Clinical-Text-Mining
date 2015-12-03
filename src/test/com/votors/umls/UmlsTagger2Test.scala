@@ -1,6 +1,7 @@
 package com.votors.umls
 
 import java.io.{FileWriter, PrintWriter, File}
+import com.votors.common.Conf
 import com.votors.common.Utils.Trace
 import com.votors.common.Utils.Trace._
 import org.junit.{AfterClass, Assert, Test}
@@ -28,7 +29,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testGetFull(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
       val phrases = List("Sepsis", "sEPSIS", "Progressive systemic sclerosis")
       phrases.foreach(phrase => {
         Console.println()
@@ -47,7 +48,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testGetPartial(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
       val phrases = List(
         "Heart Attack and diabetes",
         "carcinoma (small-cell) of lung",
@@ -72,7 +73,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testAnnotateConcepts(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
       val phrases = List("Lung Cancer",
         "Heart Attack",
         "Diabetes",
@@ -92,7 +93,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testStermWord(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr",rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
 
       val phrases = List("the pets", "the men", "two dishes", "three Babies", "holidays"  ,"the datum",
         "politics", "news ")
@@ -106,7 +107,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testAnnotateFile(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
       tagger.annotateFile(s"${rootDir}/data/raw_data_CHV_study2_format.csv",
         s"${rootDir}/data/raw_data_CHV_study2_format_ret.csv",
         4,
@@ -117,7 +118,7 @@ class UmlsTagger2Test   {
     // find terms from dictionary for a string
     @Test
     def testAnnotateTag(): Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
       //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
       tagger.annotateTag(s"${rootDir}/data/tags_0920_final_ST.csv",
         s"${rootDir}/data/tags_0920_final_ST_ret.csv")
@@ -132,7 +133,7 @@ class UmlsTagger2Test   {
 
     @Test
     def testSql():Unit = {
-      val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+      val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
       val rs = tagger.execQuery("select count(*) as cnt from mrsty")
 
       while (rs.next) {
@@ -145,7 +146,7 @@ class UmlsTagger2Test   {
 
   @Test
   def testtransferExcelCvs(): Unit = {
-    val tagger = new UmlsTagger2("http://localhost:8983/solr", rootDir)
+    val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
     tagger.transferExcelCvs(s"${rootDir}/data/raw_data_CHV_study2.csv.txt", "")
   }
 

@@ -69,7 +69,7 @@ case class Suggestion(val score: Float,
  * @param solrServerUrl: the solr server url.
  * @param rootDir the dir of model files for opennlp
  */
-class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
+class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=Conf.rootDir) {
 
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
@@ -766,25 +766,24 @@ class UmlsTagger2(val solrServerUrl: String, rootDir:String) {
 }
 
 object UmlsTagger2 {
-  val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
+  val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
 
 
   def main(args: Array[String]) {
 
-    println(tagger.stemWordsOrg("the man is happy."))
+//    println(tagger.stemWordsOrg("the man is happy."))
 
-//    println(s"The input is: ${args.mkString(",")}")
-//    if (args.length <3) {
-//      println("Input  error: args should be: rootdir inputFile outputFile. ")
-//      sys.exit(1)
-//    }
-//    val rootDir = args(0)
-//
-//    //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
-//    tagger.annotateTag(s"${args(1)}",
-//      s"${args(2)}")
-//
-//    tagger.jdbcClose()
+    println(s"The input is: ${args.mkString(",")}")
+    if (args.length <3) {
+      println("Input  error: args should be: rootdir inputFile outputFile. ")
+      sys.exit(1)
+    }
+    val rootDir = args(0)
+
+    //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
+    tagger.annotateTag(s"${args(1)}", s"${args(2)}")
+
+    tagger.jdbcClose()
   }
 
 }

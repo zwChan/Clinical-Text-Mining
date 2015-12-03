@@ -36,8 +36,8 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
   properties.put("LVG_DIR", lvgdir)
   println("lvgdir: " + Conf.lvgdir)
   //option see: http://lexsrv3.nlm.nih.gov/LexSysGroup/Projects/lvg/2015/docs/designDoc/UDF/flow/index.html
-  val lvgApi = if (File(Conf.lvgdir + "data\\config\\lvg.properties").exists) {
-    new LvgCmdApi("-f:g:o:t:l:B", Conf.lvgdir + "data\\config\\lvg.properties", properties)
+  val lvgApi = if (File(Conf.lvgdir + "data/config/lvg.properties").exists) {
+    new LvgCmdApi("-f:g:o:t:l:B", Conf.lvgdir + "data/config/lvg.properties", properties)
   }else{
     println("!!!!!lvg config not find, maybe something wrong, use PorterStemmer!!!!!!")
     null
@@ -58,6 +58,7 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
 object Nlp {
   final val NotPos = "*"      // the char using indicating this is not a POS tagger, may be a punctuation
   //final val TokenEnd = "$$"
+  //\p{Punct}	Punctuation: One of !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
