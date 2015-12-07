@@ -66,6 +66,7 @@ import org.apache.commons.csv._
  * the first and the last token can not be punctuation or blank
  *
  */
+@SerialVersionUID(-4956580178369639181L)
 class Ngram (var text: String) extends java.io.Serializable{
   var id = -1                // identify of this gram  - looks like useless. forget it.
   //var text = ""         // final format of this gram. after stemmed/variant...
@@ -94,8 +95,8 @@ class Ngram (var text: String) extends java.io.Serializable{
   def merge (other: Ngram): Ngram = {
     val newNgram = new Ngram(this.text)
     newNgram.id = this.id
-    if (this.n != other.n)  trace(ERROR, s"warn: Not the same n in merge Ngram ${this.text}, ${other.text}, ${this.n}, ${other.n}!")
-    if (this.tfAll < other.tfAll)
+    //if (this.n != other.n)  trace(ERROR, s"warn: Not the same n in merge Ngram ${this.text}, ${other.text}, ${this.n}, ${other.n}!")
+    if (this.n < other.n)
       newNgram.n = other.n
     else
       newNgram.n = this.n
@@ -185,7 +186,7 @@ class Ngram (var text: String) extends java.io.Serializable{
 
 
   def procTfdf(docNum: Long): Ngram = {
-    this.tfdf = log2(1+(log2(1+1.0*tfAll/docNum) * df))  // supress the affect of tfAll
+    this.tfdf = log2(1+(log2(1+1.0*tfAll/Math.sqrt(docNum)) * df))  // supress the affect of tfAll
     // gram.tfidf = Math.log(1+gram.tfAll/gram.hBlogId.size) * Math.log(1+docNum/gram.hBlogId.size)
     //gram.tfdf = Math.sqrt(gram.tfdf)
     this
@@ -236,18 +237,23 @@ class Ngram (var text: String) extends java.io.Serializable{
       false
   }
   override def toString(): String = {
-    toString(if (text!="fat")false else true)
+    toString(if (text.matches(Trace.filter)) false else true)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-12s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}}),contex:${this.context}" +
-     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${bool2Str(isPosANPN)}) " +
+    f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}}),contex:${this.context}" +
+     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}) " +
       {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
+  }
+  def toStringVector(): String = {
+    f"${text}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${this.nestTerm.size}\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
+      s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}"
   }
 }
 
 /**
  * context of a Ngram. such as window, syntax tree
  */
+@SerialVersionUID(7038468614128803385L)
 class Context extends java.io.Serializable{
   //context in the windown
   var win_umlsCnt = 0   // ** number of umls term in its window
@@ -271,7 +277,7 @@ class Context extends java.io.Serializable{
     newCx.win_chvCnt = this.win_chvCnt+other.win_chvCnt
     //newCx.win_nounCnt = this.win_nounCnt+other.win_nounCnt
     newCx.sent_umlsCnt = this.sent_umlsCnt+other.sent_umlsCnt
-    //newCx.sent_nounCnt = this.sent_nounCnt+other.sent_nounCnt
+    newCx.sent_chvCnt = this.sent_chvCnt+other.sent_chvCnt
     newCx.umlsDist = this.umlsDist+other.umlsDist
     newCx.chvDist = this.chvDist+other.chvDist
     newCx
@@ -279,6 +285,9 @@ class Context extends java.io.Serializable{
 
   override def  toString() = {
     f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist})"
+  }
+  def  toStringVector() = {
+    s"${win_umlsCnt}\t${win_chvCnt}\t${sent_umlsCnt}\t${sent_chvCnt}\t${umlsDist}\t${chvDist}"
   }
 }
 
@@ -342,6 +351,7 @@ object Ngram {
   final val N = 5
   final val Delimiter = Pattern.compile(Conf.delimiter)   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
   val idCnt = new AtomicInteger()
+  final val serialVersionUID:Long = -4956580178369639181L
 
   @transient val  hSents = new mutable.LinkedHashMap[(Int,Int),Sentence]()  //(blogId, sentId)
   @transient val hNgrams = new mutable.LinkedHashMap[String,Ngram]()       // Ngram.text
@@ -352,7 +362,6 @@ object Ngram {
    */
   def getNgram (gram: String, hNgrams: mutable.LinkedHashMap[String,Ngram]): Ngram = {
     hNgrams.getOrElseUpdate(gram, {
-      if (gram.equals("diabet"))println(s"create Ngram ${gram}")
       new Ngram(gram)
     })
   }
@@ -404,7 +413,7 @@ object Ngram {
   def updateAfterReduce(itr: Iterator[Ngram], docNum: Long, isStage2:Boolean=false) = {
     val s = itr.toSeq
     println(s"grams number after redusce (in this partition) is  ${s.size}")
-    val tagger = new UmlsTagger2("http://localhost:8983/solr", Conf.rootDir)
+    val tagger = new UmlsTagger2()
     s.foreach(gram => {
       gram.procTfdf(docNum)
       gram.getCValue()
