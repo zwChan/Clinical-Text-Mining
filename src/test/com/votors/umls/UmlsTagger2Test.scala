@@ -11,7 +11,7 @@ import scala.io.Source
 class UmlsTagger2Test   {
 
     // The root config dir of the opennlp models files and and
-    val rootDir = "C:\\fsu\\ra\\UmlsTagger"
+    val rootDir = Conf.rootDir
     Trace.currLevel = ERROR
 
     if (! new File(rootDir).exists()) {

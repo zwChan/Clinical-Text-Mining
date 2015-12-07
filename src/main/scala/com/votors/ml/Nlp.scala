@@ -9,6 +9,7 @@ import breeze.numerics.abs
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
 import com.votors.common._
+import com.votors.umls.UmlsTagger2
 import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
 import opennlp.tools.chunker._
 import opennlp.tools.cmdline.parser.ParserTool
@@ -103,7 +104,7 @@ object Nlp {
    * @param phraseNorm
    * @return
    */
-  def getPos(phraseNorm: Array[String], transfer: Boolean=true) = {
+  def getPos(phraseNorm: Array[String], transfer: Boolean=false) = {
     val orgPos = postagger.tag(phraseNorm)
     if (transfer)orgPos.map(Nlp.posTransform(_)) else orgPos
   }
@@ -135,7 +136,7 @@ object Nlp {
    * @param str
    * @return
    */
-  def normalizeCasePunct(str: String, tokenSt: TokenState): String = {
+  def normalizeCasePunct(str: String, tokenSt: TokenState=null): String = {
     var ret = Ngram.Delimiter.matcher(str.toLowerCase()).replaceAll(" ").trim()
     if (ret.length > 0) {
       val str_lps = punctPattern.matcher(ret).replaceAll(" ")
@@ -148,21 +149,21 @@ object Nlp {
     ret
   }
 
-  def sortWords(str: Array[String], tokenSt: TokenState)  = {
+  def sortWords(str: Array[String], tokenSt: TokenState=null)  = {
     str.sortWith(_ < _)
   }
   val lvg = new Lvg()
-  def stemWords(str: String,tokenSt: TokenState): String = {
+  def stemWords(str: String,tokenSt: TokenState=null): String = {
     val ret = lvg.getNormTerm(str)
     if (ret.length > 0) {
       ret
     }else{
-      stemWordsPoter(str,null)
+      stemWordsPorter(str,null)
     }
 
   }
   val stemmer = new PorterStemmer()
-  def stemWordsPoter(str: String,tokenSt: TokenState): String = {
+  def stemWordsPorter(str: String,tokenSt: TokenState=null): String = {
     stemmer.stem(str)
   }
   def normalizeAll(str: String, tokenSt: TokenState=null, isStem: Boolean=true): String = {
@@ -173,7 +174,7 @@ object Nlp {
 
   val stopwords = new mutable.HashSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
-    if (line.trim.length > 0)
+    if (line.trim.length > 0 && !line.trim.startsWith("#"))
       stopwords.add(Nlp.getToken(line).map(t =>{Nlp.normalizeAll(t)}).mkString(" ").trim)
   }
 
@@ -183,7 +184,7 @@ object Nlp {
    * @param withRegex check the stop word regex in addition the the stop word file.
    * @return
    */
-  def checkStopword(str: String, withRegex: Boolean=false):Boolean ={
+  def checkStopword(str: String, withRegex: Boolean=true):Boolean ={
     var ret = false
     ret ||= stopwords.contains(str)
     if (withRegex) ret ||= StopwordRegex.matcher(str).matches()
@@ -218,7 +219,7 @@ object Nlp {
       sent_tmp.tokens = sent_tmp.words.map(t => {
         tokenIdx += 1; Nlp.normalizeAll(t, sent_tmp.tokenSt(tokenIdx))
       })
-      sent_tmp.Pos = Nlp.getPos(sent_tmp.words)
+      sent_tmp.Pos = Nlp.getPos(sent_tmp.words,true)
       //sent_tmp.chunk = Nlp.getChunk(sent_tmp.words, sent_tmp.pos)
       //sent_tmp.parser = Nlp.getParser(sent_tmp.words)
 
@@ -437,19 +438,24 @@ object Nlp {
 //    val ret = lvg.getNormTerm("glasses")
 //    println(s"lvg out put ${ret}")
 //
+    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
     def textPreprocess(blogId: Int, text: String) = {
       val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
       (blogId, ret)
     }
-    val text = "Girls in FSU of Florida are hot"
+    val text = "Impaired fasting glucose"
     //val orgPos = postagger.tag(text.split(" "))
     //orgPos.map(Nlp.posTransform(_))
 
     val ret = Nlp.getToken(text)
-    val ret2 = Nlp.getParser(ret)
+    val ret2 = ret.map(Nlp.normalizeAll(_))
 
-    ret2.show()
-//    println(ret2)
+    println(s"Nlp result: ${ret2.mkString(" ")}")
+    println("nlp then old tool result: " + tagger.normalizeAll(text,false))
+    println("select result: " + tagger.select(text).mkString(","))
+    println("select result: " + tagger.getUmlsScore(text))
+
+
 
 //    val s1 = Nlp.generateSentence(1,"""Hi, how are you going? My name is Jason, an (international student). Jason! jason? jason;jason:jason.""",Ngram.hSents)
 //    val s2 = Nlp.generateSentence(2,"""jason is study in fsu for more then 3 month. His Chinese name is zc..""",Ngram.hSents)
