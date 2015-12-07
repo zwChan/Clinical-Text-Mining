@@ -3,13 +3,14 @@ package com.votors.common
 import java.io.{FileOutputStream, ObjectOutputStream, FileInputStream}
 import java.lang.Exception
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
-import java.util.{Properties, Date}
+import java.util.{Random, Properties, Date}
 
 
 /**
  * Created by chenzhiwei on 2/28/2015.
  */
 object Utils extends java.io.Serializable{
+  val random = new Random()
   def log2(x:Double)=Math.log(x)/Math.log(2)
   def string2Int(s: String, default: Int=0): Int = {
     try{
@@ -153,9 +154,18 @@ object Conf extends java.io.Serializable{
   val k_step=prop.get("k_step").toString.toInt
   val maxIterations=prop.get("maxIterations").toString.toInt
   val runs=prop.get("runs").toString.toInt
+  val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
+  val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
+  val testSample=prop.get("testSample").toString.toInt
+  val useFeatures=prop.get("useFeatures").toString.trim.split(",")
 
   val runPredict=prop.get("runPredict").toString.toBoolean
   val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
+  val runRank=prop.get("runRank").toString.toBoolean
+  val rankGranular=prop.get("rankGranular").toString.toInt
+  val fscoreBeta=prop.get("fscoreBeta").toString.toDouble
+  val showDetailRankPt=prop.get("showDetailRankPt").toString.toInt
+  val rankWithTrainData=prop.get("rankWithTrainData").toString.toBoolean
 
 }
 

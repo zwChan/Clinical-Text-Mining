@@ -69,6 +69,7 @@ import org.apache.commons.csv._
 @SerialVersionUID(-4956580178369639181L)
 class Ngram (var text: String) extends java.io.Serializable{
   var id = -1                // identify of this gram  - looks like useless. forget it.
+  var isTrain: Boolean = false  // if this gram is chosen as trainning data
   //var text = ""         // final format of this gram. after stemmed/variant...
   var n: Int = 0            // number of word in this gram
   var hBlogId = new mutable.HashMap[Int, Stat]()       // save the blog id and one of its sentence id.
@@ -241,11 +242,11 @@ class Ngram (var text: String) extends java.io.Serializable{
   }
   def toString(detail: Boolean): String = {
     f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}}),contex:${this.context}" +
-     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}) " +
+     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}),test:${isTrain}} " +
       {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
   def toStringVector(): String = {
-    f"${text}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${this.nestTerm.size}\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
+    f"${text}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${this.nestTerm.size}\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
       s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}"
   }
 }

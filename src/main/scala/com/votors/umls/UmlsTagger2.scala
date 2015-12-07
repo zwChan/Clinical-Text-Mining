@@ -6,6 +6,7 @@ import java.util.regex.Pattern
 import java.util.Properties
 
 import com.votors.common.Conf
+import com.votors.ml.Nlp
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 
 import scala.collection.JavaConversions.asScalaIterator
@@ -71,8 +72,6 @@ case class Suggestion(val score: Float,
  */
 class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=Conf.rootDir) {
 
-  val punctPattern = Pattern.compile("\\p{Punct}")
-  val spacePattern = Pattern.compile("\\s+")
   val solrServer = new HttpSolrServer(solrServerUrl)
 
   //opennlp models path
@@ -132,7 +131,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val strNorm = normalizeCasePunct(str)
       //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
       val strStemmed = stemWords(strNorm)
-      val strSorted = sortWords(strNorm)
+      val strSorted = sortWords(strStemmed)
       val obuf = new StringBuilder()
       if (newFile == false) obuf.append(",")
       newFile = false
@@ -144,7 +143,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         .append("\"descr\":\"").append(str).append("\",")
         .append("\"descr_norm\":\"").append(strNorm).append("\",")
         .append("\"descr_sorted\":\"").append(strSorted).append("\",")
-        .append("\"desc_stemmed\":\"").append(strStemmed).append("\"")
+        .append("\"descr_stemmed\":\"").append(strStemmed).append("\"")
         .append("}")
       writer.println(obuf.toString)
       i += 1
@@ -194,37 +193,23 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   ///////////// phrase munging methods //////////////
 
   def normalizeCasePunct(str: String): String = {
-    val str_lps = punctPattern
-      .matcher(str.toLowerCase())
-      .replaceAll(" ")
-    spacePattern.matcher(str_lps).replaceAll(" ").trim()
+    Nlp.normalizeCasePunct(str,null)
   }
 
   val stemmer = new PorterStemmer()
   def sortWords(str: String): String = {
-    val words = str.split(" ")
-    words.sortWith(_ < _).mkString(" ")
+    val words = Nlp.getToken(str)
+    Nlp.sortWords(words).mkString(" ")
   }
 
   def stemWords(str: String): String = {
-    val stemmedWords = ArrayBuffer[String]()
-    val tokenStream = getAnalyzer().tokenStream(
-      "str_stemmed", new StringReader(str))
-
     trace(DEBUG,s"before stem:${str}")
-
-    val ctattr = tokenStream.addAttribute(
-      classOf[CharTermAttribute])
-    //val snowAttr = tokenStream.addAttribute(classOf[SnowballFilter])
-    tokenStream.reset()
-    while (tokenStream.incrementToken()) {
-      stemmedWords +=  stemmer.stem(ctattr.toString())
-    }
-
-    trace(DEBUG,s"after stem :${stemmedWords.mkString(" ")}")
-    stemmedWords.mkString(" ")
+    val stemmedWords = Nlp.getToken(str).filter(false == Nlp.checkStopword(_)).map(Nlp.stemWords(_)).mkString(" ")
+    trace(DEBUG,s"after stem :${stemmedWords}")
+    stemmedWords
   }
-
+  // please not use it again
+/*
   def stemWordsOrg(str: String): String = {
     val stemmedWords = ArrayBuffer[String]()
     val tokenStream = getAnalyzer().tokenStream(
@@ -236,7 +221,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       stemmedWords += ctattr.toString()
     }
     stemmedWords.mkString(" ")
-  }
+  }*/
 
   def normalizeAll(str: String, isSort:Boolean=true, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str)
@@ -246,27 +231,17 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   }
 
   //get pos after case/punctuation delete(input has done this work)?  // XXX: This may be not a correct approach!
-  val posmodelIn = new FileInputStream(posModlePath)
-  val posmodel = new POSModel(posmodelIn)
-  val postagger = new POSTaggerME(posmodel)
   def getPos(phraseNorm: Array[String]) = {
-    val retPos = postagger.tag(phraseNorm)
-    //trace(DEBUG,phraseNorm + " pos is: " + retPos.mkString(","))
-    retPos
+    Nlp.getPos(phraseNorm,false)
   }
   //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
-  val sentmodelIn = new FileInputStream(sentModlePath)
-  val sentmodel = new SentenceModel(sentmodelIn)
-  val sentDetector = new SentenceDetectorME(sentmodel)
   def getSent(phrase: String) = {
-    val retSent = sentDetector.sentDetect(phrase)
-    trace(DEBUG,retSent.mkString(","))
-    retSent
+    Nlp.getSent(phrase)
   }
 
-  def getAnalyzer(): Analyzer = {
+/*  def getAnalyzer(): Analyzer = {
     new StandardAnalyzer(Version.LUCENE_46)
-  }
+  }*/
 
   ///////////////// solr search methods //////////////
   /**
@@ -282,7 +257,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     val phraseNorm = normalizeCasePunct(phrase)
     val queryPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
     val phraseStemmed = stemWords(phraseNorm)
-    val phraseSorted = sortWords(phraseNorm)
+    val phraseSorted = sortWords(phraseStemmed)
 
     // construct query. boost different score to stress fields.
     val query = """descr:"%s"^10 descr_norm:"%s"^5 descr_sorted:"%s" descr_stemmed:"%s"^2"""
@@ -297,6 +272,10 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       //trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")
       val ret = results.iterator().map(sdoc =>{
         val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
+        val descr_norm = sdoc.getFieldValue("descr_norm").asInstanceOf[String]
+        val descr_sorted = sdoc.getFieldValue("descr_sorted").asInstanceOf[String]
+        val descr_stemmed = sdoc.getFieldValue("descr_stemmed").asInstanceOf[String]
+        trace(DEBUG,s"result from solr: $descr, $descr_norm, $descr_sorted, $descr_stemmed")
         val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
         val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
         val sab = sdoc.getFieldValue("sab").asInstanceOf[String]
@@ -339,8 +318,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val nWordsInDescr = descr.split(" ").length.toFloat
       val descrNorm = normalizeCasePunct(descr)
       val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
-      val descrSorted = sortWords(descrNorm)
       val descrStemmed = stemWords(descrNorm)
+      val descrSorted = sortWords(descrStemmed)
       val nwords = descrNorm.split(" ").length.toFloat
       val score = (nwords / nwordsInPhrase) *
         computeScore(descr,
@@ -368,7 +347,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    */
   def computeScore(s: String, candidates: List[String], caseFactor: Float=0.0f): Float = {
     trace(DEBUG, s"computeScore(): ${s}, " + candidates.mkString("[",",","]"))
-    val levels = scala.collection.immutable.List(100.0F, 90.0F, 70.0F, 50.0F, 0f, 0f)
+    val levels = scala.collection.immutable.List(100.0F, 90.0F, 80.0F, 80.0F, 0f, 0f)
     var candLevels = mutable.HashMap[String,  Float]()
     val posFlag = candidates(5) == candidates(4) //pos
 
@@ -696,7 +675,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param phraseNorm
    */
   def posFilter(phraseNorm: Array[String], filter:String=" NN ") = {
-    val retPos = postagger.tag(phraseNorm)
+    val retPos = Nlp.getPos(phraseNorm)
     val retFilter = if (filter.length>0) {
       phraseNorm.filter(item => {
         val flag = retPos(phraseNorm.indexOf(item))
@@ -718,7 +697,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return true if eligible, else false
    */
   def posContains(phraseNorm: Array[String], filter:String="NN"):Boolean = {
-    val retPos = postagger.tag(phraseNorm)
+    val retPos = Nlp.getPos(phraseNorm)
     trace(DEBUG, phraseNorm.mkString(",") + " pos is: " + retPos.mkString(","))
 
     var hit = false
