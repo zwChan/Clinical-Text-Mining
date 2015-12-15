@@ -63,6 +63,7 @@ object Nlp {
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
+  final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
 
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
@@ -169,10 +170,11 @@ object Nlp {
   def normalizeAll(str: String, tokenSt: TokenState=null, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str,tokenSt)
     if (isStem)ret = stemWords(ret,tokenSt)
+    //println(s"norm: $str\t$ret")
     ret
   }
 
-  val stopwords = new mutable.HashSet[String]()
+  val stopwords = new mutable.TreeSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
       stopwords.add(Nlp.getToken(line).map(t =>{Nlp.normalizeAll(t)}).mkString(" ").trim)
@@ -180,15 +182,34 @@ object Nlp {
 
   /**
    * return true if it is a stop word.
+   * how does ngram  match the stop words list?
+   * 0:exactly matching;
+   * 1: ngram contains any stop word;
+   * 2. ngram start or end with any stop word
    * @param str
    * @param withRegex check the stop word regex in addition the the stop word file.
    * @return
    */
   def checkStopword(str: String, withRegex: Boolean=true):Boolean ={
     var ret = false
-    ret ||= stopwords.contains(str)
+    if (Conf.stopwordMatchType == 0)
+      ret ||= stopwords.contains(str)
+    else if (Conf.stopwordMatchType == 1) {
+      //ret ||= stopwords.exists(s=> str.matches(s".*\\b${s}\\b.*"))
+      ret ||= stopwords.exists(s => s == str || str.startsWith(s + " ") || str.endsWith(" " + s) || str.contains(" " + s + " "))
+    }else if (Conf.stopwordMatchType == 2)
+      ret ||= stopwords.exists(s=> s==str || str.startsWith(s+" ") || str.endsWith(" "+s))
+
     if (withRegex) ret ||= StopwordRegex.matcher(str).matches()
     ret
+  }
+
+  def checkPosFilter(posString: String): Boolean = {
+    PosFilterRegex.foreach(p => {
+      if (p.matcher(posString).matches())
+        return true
+    })
+    return false
   }
 
   /**
@@ -253,7 +274,7 @@ object Nlp {
                     gram.updateOnCreated(sent, pos, pos + n + 1)
                   }
                   // on create or found it again.
-                  gram.updateOnHit(sent)
+                  gram.updateOnHit(sent,pos,pos+n+1)
                   if (gram.tfAll == 1) {
                     traceFilter(INFO, gram.text, s"Creating gram ${gram}, sent:${sent}")
                   } else {
@@ -307,7 +328,7 @@ object Nlp {
                     gram.getInfoFromPrevious(pre_gram)
                   }
                   // on create or found it again.
-                  gram.updateOnHit(sent,hPreNgram)
+                  gram.updateOnHit(sent,pos,pos+n+1,hPreNgram)
                   traceFilter(INFO, gram.text, s"Updating gram ${gram}, sent:${sent}")
                   gramInSent.append((pos,gram,pre_gram))
                 }
@@ -351,15 +372,16 @@ object Nlp {
         }
 
         // update the nearest umls term, exclude the term that is nested by cGram
-        if (wPreGram.isUmlsTerm() && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) && Math.abs(c._1 - w._1) < nearestUmls) {
-          traceFilter(INFO,cGram.text, s"umls dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
-          nearestUmls = Math.abs(c._1 - w._1)
+        if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
+          if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
+            traceFilter(INFO, cGram.text, s"umls dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+            nearestUmls = Math.abs(c._1 - w._1)
+          }
+          if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
+            traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+            nearestChv = Math.abs(c._1 - w._1)
+          }
         }
-        if (wPreGram.isUmlsTerm(true) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)  && Math.abs(c._1 - w._1) < nearestChv) {
-          traceFilter(INFO,cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
-          nearestChv = Math.abs(c._1 - w._1)
-        }
-
         // update in the window,  exclude the term that is nested by cGram
         if (((w._1 + w._2.n + Ngram.WinLen > c._1) && (c._1 + c._2.n + Ngram.WinLen) < w._1) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)) {
           if (wPreGram.isUmlsTerm(true)) {
@@ -374,7 +396,15 @@ object Nlp {
       }
       cGram.context.umlsDist += nearestUmls
       cGram.context.chvDist += nearestChv
+
+      val posWinStart = if (c._1-Conf.WinLen>0) c._1-Conf.WinLen else 0
+      val posWinEnd = if (c._1+Conf.WinLen>sent.Pos.size) sent.Pos.size else c._1+Conf.WinLen
+      sent.Pos.slice(posWinStart,posWinEnd).foreach(p => {
+        val index = Conf.posInWindown.indexOf(p)
+        if (index>=0) cGram.context.win_pos(index) += 1
+      })
     }
+
   }
 
 
@@ -405,12 +435,22 @@ object Nlp {
       "A" // adjective
     else if (pos == "IN")
       "P" // preposition or a conjunction that introduces a subordinate clause, e.g., although, because.
-    else if (pos == "RB"|pos == "RBR"|pos == "RBS")
+    else if (pos == "RB"|pos == "RBR"|pos == "RBS"| pos=="WRB")
       "R" // Adverb
     else if (pos == "VB"|pos == "VBD"|pos == "VBG"|pos=="VBN"|pos=="VBP"|pos=="VBZ")
       "V" // verb
     else if (pos == "TO")
       "T" // to
+    else if ("DT" ==pos|"PDT"==pos|"WDT"==pos)
+      "D" // determiner
+    else if (pos == "EX")
+      "E" // existential
+    else if (pos == "FW")
+      "F" // foreign word
+    else if (pos == "CD")
+      "M" // cardinal number
+    else if (pos == "RPR"|pos == "RPR$"|pos == "WP"|pos == "WP$")
+      "U" // pronoun
     else if (pos == "CC")
       "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.
     else
@@ -434,26 +474,36 @@ object Nlp {
   def main(argv: Array[String]): Unit = {
 
     Trace.currLevel = DEBUG
+
+    println(Nlp.checkStopword("all"))
+    println(Nlp.checkStopword("alldiabetes"))
+    println(Nlp.checkStopword("diabetesall"))
+    println(Nlp.checkStopword("diabetesalldiabetest"))
+    println(Nlp.checkStopword("all diabetes"))
+    println(Nlp.checkStopword("diabetes all"))
+    println(Nlp.checkStopword("all diabetes all"))
+    println(Nlp.checkStopword("diabetes all diabetes"))
+
 //    val lvg =  new Lvg()
 //    val ret = lvg.getNormTerm("glasses")
 //    println(s"lvg out put ${ret}")
 //
-    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
-    def textPreprocess(blogId: Int, text: String) = {
-      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
-      (blogId, ret)
-    }
-    val text = "Impaired fasting glucose"
-    //val orgPos = postagger.tag(text.split(" "))
-    //orgPos.map(Nlp.posTransform(_))
-
-    val ret = Nlp.getToken(text)
-    val ret2 = ret.map(Nlp.normalizeAll(_))
-
-    println(s"Nlp result: ${ret2.mkString(" ")}")
-    println("nlp then old tool result: " + tagger.normalizeAll(text,false))
-    println("select result: " + tagger.select(text).mkString(","))
-    println("select result: " + tagger.getUmlsScore(text))
+//    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
+//    def textPreprocess(blogId: Int, text: String) = {
+//      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
+//      (blogId, ret)
+//    }
+//    val text = "Impaired fasting glucose"
+//    //val orgPos = postagger.tag(text.split(" "))
+//    //orgPos.map(Nlp.posTransform(_))
+//
+//    val ret = Nlp.getToken(text)
+//    val ret2 = ret.map(Nlp.normalizeAll(_))
+//
+//    println(s"Nlp result: ${ret2.mkString(" ")}")
+//    println("nlp then old tool result: " + tagger.normalizeAll(text,false))
+//    println("select result: " + tagger.select(text).mkString(","))
+//    println("select result: " + tagger.getUmlsScore(text))
 
 
 

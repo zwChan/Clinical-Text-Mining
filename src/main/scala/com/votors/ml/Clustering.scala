@@ -66,22 +66,17 @@ import com.votors.common._
  */
 
 class Clustering (sc: SparkContext) {
-  val dbUrl = Conf.prop.get("blogDbUrl").toString
-  val blogTbl = Conf.prop.get("blogTbl").toString
-  val blogIdCol = Conf.prop.get("blogIdCol").toString
-  val blogTextCol = Conf.prop.get("blogTextCol").toString
-  val blogLimit = Conf.prop.get("blogLimit").toString.toInt
   var docsNum = 0L
 
-  if (dbUrl.length==0 || blogTbl.length==0 || blogIdCol.length==0 || blogTextCol.length==0) {
+  if (Conf.dbUrl.length==0 || Conf.blogTbl.length==0 || Conf.blogIdCol.length==0 || Conf.blogTextCol.length==0) {
     trace(ERROR, "Some database config not exist.")
     sys.exit(1)
   }
 
   def getBlogIdRdd(parallelism: Int): RDD[Int] = {
-  val limit = blogLimit
-  val sqlUtil = new SqlUtils(dbUrl.toString)
-    val ret = sqlUtil.execQuery(s"select ${blogIdCol.toString} as blogId from ${blogTbl.toString} limit ${limit}")
+  val limit = Conf.blogLimit
+  val sqlUtil = new SqlUtils(Conf.dbUrl.toString)
+    val ret = sqlUtil.execQuery(s"select ${Conf.blogIdCol.toString} as blogId from ${Conf.blogTbl.toString} limit ${limit}")
     val blogIds = new ArrayBuffer[Int]()
     while (ret.next()) blogIds.append(ret.getInt(1))
     sqlUtil.jdbcClose()
@@ -90,10 +85,10 @@ class Clustering (sc: SparkContext) {
   }
 
   def getBlogTextRdd(rdd: RDD[Int]): RDD[(Int, String)] = {
-    val url = dbUrl
-    val textCol = blogTextCol
-    val tbl = blogTbl
-    val idCol = blogIdCol
+    val url = Conf.dbUrl
+    val textCol = Conf.blogTextCol
+    val tbl = Conf.blogTbl
+    val idCol = Conf.blogIdCol
     rdd.mapPartitions(iter=> {
       println(s"getBlogTextRdd ***")
       val sqlUtil = new SqlUtils(url)
@@ -151,7 +146,7 @@ class Clustering (sc: SparkContext) {
         //.sortByKey()
         .map(_._2)
         .filter(_.tfAll > Conf.stag1TfFilter)
-        .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber))
+        .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
         .filter(_.cvalue > Conf.stag1CvalueFilter)
       //.persist()
 
@@ -174,21 +169,21 @@ class Clustering (sc: SparkContext) {
       val rddNgram2 = this.getNgramRdd(rddSent, 0, firstStageNgram)
         .map(gram => (gram.text, gram))
         .reduceByKey(_ + _)
-        .sortByKey()
+        //.sortByKey()
         .map(_._2)
         .filter(_.tfAll > Conf.stag2TfFilter)
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, true))
         .filter(_.cvalue > Conf.stag2CvalueFilter)
-
+      rddSent.unpersist()
       if(Conf.ngramSaveFile.trim.length>0) {
         Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
       }
 
       if (Conf.trainNgramCnt>0) {
         val tmp = sc.parallelize( rddNgram2.take(Conf.trainNgramCnt), Conf.partitionNumber)
-        trainSample(tmp)
+        trainSampleMark(tmp)
       }else{
-        trainSample(rddNgram2)
+        trainSampleMark(rddNgram2)
       }
 
     }else {
@@ -196,21 +191,31 @@ class Clustering (sc: SparkContext) {
       var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile)
       if (Conf.trainNgramCnt>0)ngrams = ngrams.take(Conf.trainNgramCnt)
       val rddNgram2 = sc.parallelize(ngrams, Conf.partitionNumber)
-      trainSample(rddNgram2)
+      trainSampleMark(rddNgram2)
     }
   }
 
-  def trainSample(ngramRdd: RDD[Ngram]):RDD[Ngram] = {
-    if (Conf.testSample>0)
+  /**
+   * Just mark a Ngram as 'trainning' status, do not remove the non-training Ngram.
+   * @param ngramRdd
+   * @return
+   */
+  def trainSampleMark(ngramRdd: RDD[Ngram]):RDD[Ngram] = {
       ngramRdd.map(ngram=>{
-        if (Utils.random.nextInt(100) >= Conf.testSample && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
-          ngram.isTrain = true
-        else
-          ngram.isTrain = false
+        if (Conf.testSample>0) {
+          if (Utils.random.nextInt(100) >= Conf.testSample && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
+            ngram.isTrain = true
+          else
+            ngram.isTrain = false
+        }else{
+          if (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)) {
+            ngram.isTrain = true
+          }else{
+            ngram.isTrain = false
+          }
+        }
         ngram
       })
-    else
-      ngramRdd
   }
   /**
    *
@@ -218,18 +223,28 @@ class Clustering (sc: SparkContext) {
    * @return
    */
   def getVectorRdd(rddNgram: RDD[Ngram]): RDD[(Ngram,Vector)] = {
-    rddNgram.map(gram => {
+    val tmp_vecter = rddNgram.map(gram => {
       val feature = new ArrayBuffer[Double]()
       if(Conf.useFeatures.contains("tfdf"))feature.append(gram.tfdf)     // tfdf
       if(Conf.useFeatures.contains("cvalue"))feature.append(log2(gram.cvalue+1)) // c-value, applied a log function
+
       if(Conf.useFeatures.contains("umls_score"))feature.append(gram.umlsScore._1/100) // simple similarity to umls
+      if(Conf.useFeatures.contains("contain_umls"))feature.append(bool2Double(gram.isContainInUmls))
+      if(Conf.useFeatures.contains("contain_chv"))feature.append(bool2Double(gram.isContainInChv))
       if(Conf.useFeatures.contains("chv_score"))feature.append(gram.umlsScore._2/100) //simple similarity to chv
+
       if(Conf.useFeatures.contains("nn"))feature.append(bool2Double(gram.isPosNN))
       if(Conf.useFeatures.contains("an"))feature.append(bool2Double(gram.isPosAN))
       if(Conf.useFeatures.contains("pn"))feature.append(bool2Double(gram.isPosPN))
       if(Conf.useFeatures.contains("anpn"))feature.append(bool2Double(gram.isPosANPN))
-      if(Conf.useFeatures.contains("contain_umls"))feature.append(bool2Double(gram.isContainInUmls))
-      if(Conf.useFeatures.contains("contain_chv"))feature.append(bool2Double(gram.isContainInChv))
+
+      if(Conf.useFeatures.contains("stys"))feature.appendAll(gram.stys.map(bool2Double(_)))
+      if(Conf.useFeatures.contains("win_pos"))feature.appendAll(gram.context.win_pos.map(p=>log2(p+1)))
+
+      if(Conf.useFeatures.contains("capt_first"))feature.append(log2(gram.capt_first/gram.tfAll+1))
+      if(Conf.useFeatures.contains("capt_all"))feature.append(log2(gram.capt_all/gram.tfAll+1))
+      if(Conf.useFeatures.contains("capt_term"))feature.append(log2(gram.capt_term/gram.tfAll+1))
+
       if(Conf.useFeatures.contains("win_umls"))feature.append(log2(gram.context.win_umlsCnt+1))
       if(Conf.useFeatures.contains("win_chv"))feature.append(log2(gram.context.win_chvCnt+1))
       if(Conf.useFeatures.contains("sent_umls"))feature.append(log2(gram.context.sent_umlsCnt+1))
@@ -237,8 +252,49 @@ class Clustering (sc: SparkContext) {
       if(Conf.useFeatures.contains("umls_dist"))feature.append(log2(gram.context.umlsDist+1))
       if(Conf.useFeatures.contains("chv_dist"))feature.append(log2(gram.context.chvDist+1))
 
-      (gram,Vectors.dense(feature.toArray))
+      //(gram,Vectors.dense(feature.toArray))
+      (gram,feature)
     })
+    if (Conf.normalizeFeature) {
+      tmp_vecter.persist()
+      // get minimum
+      val min = tmp_vecter.map(_._2).reduce((a1, a2) => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(a1.size)(0.0))
+        Range(0, a1.size).foreach(index => {
+          f(index) = if (a1(index) < a2(index)) a1(index) else a2(index)
+        })
+        f
+      })
+      // get maximum
+      val max = tmp_vecter.map(_._2).reduce((a1, a2) => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(a1.size)(0.0))
+        Range(0, a1.size).foreach(index => {
+          f(index) = if (a1(index) > a2(index)) a1(index) else a2(index)
+        })
+        f
+      })
+      // normalization to (0,1)
+      val vecter = tmp_vecter.map(kv => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(min.size)(0.0))
+        val a = kv._2
+        Range(0, a.size).foreach(index => {
+          f(index) = if (max(index) != min(index))
+            (a(index) - min(index)) / (max(index) - min(index))
+          else
+            a(index)
+        })
+        (kv._1, Vectors.dense(f.toArray))
+      })
+
+      //
+      tmp_vecter.unpersist()
+      vecter
+    }else{
+      tmp_vecter.map(kv=>(kv._1,Vectors.dense(kv._2.toArray)))
+    }
   }
 }
 
@@ -260,19 +316,29 @@ object Clustering {
 
     val clustering = new Clustering(sc)
 
-    val rddNgram4Train = clustering.getTrainNgramRdd().persist()
-    //    rddNgram4Train.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
+    val rddNgram4Train = if (Conf.trainedNgramFilterPosRegex.length>0)
+        clustering.getTrainNgramRdd().filter(gram=>Ngram.TrainedNgramFilterPosRegex.matcher(gram.posString).matches()).persist()
+      else
+        clustering.getTrainNgramRdd().persist()
+    val ngramCntAll = rddNgram4Train.count()
+    val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
+    val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
+
+    println(s"** ngramCntAll ${ngramCntAll} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
+    if (Conf.showOrgNgramNum>0)rddNgram4Train.filter(gram => {
+      Conf.showOrgNgramOfN.contains(gram.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(gram.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(gram.text).matches()
+    }).take(Conf.showOrgNgramNum).foreach(gram => println(f"${gram.toStringVector()}"))
 
     if (Conf.runKmeans) {
-      val ngramCntAll = rddNgram4Train.count()
-      val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
-      val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
-      val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain))
-        //.persist()
-      val ngranCntTrain = rddVector.count
+      val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain)).persist()
 
-      //    rddVector.foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
+      if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
+        Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
+      }).take(Conf.showOrgNgramNum).foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
+
       val rddVectorDbl = rddVector.map(_._2).persist()
+      rddVector.unpersist()
+      val ngramCntTrain = rddVectorDbl.count
 
       var model: KMeansModel = null
 
@@ -298,10 +364,11 @@ object Clustering {
            * In fact, it looks like using clustering to get classification goal.
            **/
           if (Conf.runRank) {
-            /* exclude the centers that contain small number of ngram*/
+            val rddVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData) rddNgram4Train else rddNgram4Train.filter(_.isTrain==false)).persist()
+            /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
             val retPredictFiltered = retPridict.map(k => (k, 1L)).reduceByKey(_ + _).collect.filter(kv => {
-              val filter = kv._2 * 100.0 / ngranCntTrain > Conf.clusterThresholdPt
-              if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngranCntTrain}, so it is excluded.")
+              val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
+              if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain/k}, so it is excluded.")
               filter
             }).map(_._1)
             // get new centers
@@ -311,7 +378,6 @@ object Clustering {
             // update model
             model = new KMeansModel(newCenter)
 
-            val rddVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData) rddNgram4Train else rddNgram4Train.filter(_.isTrain==false)).persist()
             val ngramCntRank = rddVector_all.count()
             val bcCenters = MyKmean.broadcastMode(rddVector_all.context, model)
             val ret = rddVector_all.map(kv => (kv._1, MyKmean.computeCost(bcCenters.value, kv._2))).sortBy(_._2._2).collect
@@ -319,37 +385,45 @@ object Clustering {
             var cntUmls = 0
             var cntChvAll = 0
             var cntChvTest= 0
-            recallVsRank = Array.fill(100/Conf.rankGranular)(-1.0)
-            precisionVsRank = Array.fill(100/Conf.rankGranular)(-1.0)
-            fscoreVsRank = Array.fill(100/Conf.rankGranular)(-1.0)
+            recallVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+            precisionVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+            fscoreVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
             ret.foreach(kkvv => {
               val kk = kkvv._2._1
               val cost = kkvv._2._2
               val ngram = kkvv._1
               cnt += 1
-              val topPercent = 1.0*cnt/ngramCntRank*100
+              val rankBase =
+                if (Conf.rankLevelBase>0){
+                  Conf.rankLevelBase
+                } else if (ngramCntChvTest>0)
+                  ngramCntChvTest
+                else
+                  ngramCntRank
+              val topPercent = 1.0*cnt/rankBase*100
 
               if (ngram.isUmlsTerm(true)) {
                 cntChvAll += 1
                 if (!ngram.isTrain)cntChvTest += 1
-                if (Conf.showDetailRankPt>topPercent)print(f"${kk}\t${cost}%.1f\tchv\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tchv\t")
               }else if (ngram.isUmlsTerm(false)) {
                 cntUmls += 1
-                if (Conf.showDetailRankPt>topPercent)print(f"${kk}\t${cost}%.1f\tumls\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tumls\t")
               }else {
-                if (Conf.showDetailRankPt>topPercent)print(f"${kk}\t${cost}%.1f\tother\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tother\t")
               }
               val rankLevel = topPercent.floor.toInt/Conf.rankGranular
               val recall = if (ngramCntChvTest>0)1.0*cntChvTest/ngramCntChvTest else -1
               val precision = 1.0*cntChvAll/cnt
+              val precision_umls = 1.0*cntChvAll/cnt
               val fscore = (1+Conf.fscoreBeta*Conf.fscoreBeta)*(precision*recall)/(Conf.fscoreBeta*Conf.fscoreBeta*precision+recall)
-              if(rankLevel>0 && recallVsRank(rankLevel-1)<0) {
+              if(rankLevel>0 && rankLevel<=Conf.rankLevelNumber && recallVsRank(rankLevel-1)<0) {
                 recallVsRank(rankLevel - 1) = recall*100
                 precisionVsRank(rankLevel - 1) = precision*100
                 fscoreVsRank(rankLevel - 1) = fscore
               }
-              if (Conf.showDetailRankPt>topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t")
-              if (Conf.showDetailRankPt>topPercent)println(ngram.toStringVector())
+              if (Conf.showDetailRankPt>=topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t${precision_umls*100}%.2f\t")
+              if (Conf.showDetailRankPt>=topPercent)println(ngram.toStringVector())
 
             })
           }
