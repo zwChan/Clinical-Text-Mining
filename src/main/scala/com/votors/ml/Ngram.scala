@@ -73,6 +73,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   var isTrain: Boolean = false  // if this gram is chosen as trainning data
   //var text = ""         // final format of this gram. after stemmed/variant...
   var n: Int = 0            // number of word in this gram
+  @transient
   var hBlogId = new mutable.HashMap[Int, Stat]()       // save the blog id and one of its sentence id.
   var context = new Context()   // ** context of this gram
   var tfAll:Long = 0     // term frequency of all document
@@ -81,6 +82,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   var cvalue = -1.0    // ** c-value
   //var nestedCnt = 0   // the number of term that contains this gram.
   var nestedTf: Long =0     // the total frequency of terms that contains this gram
+  //@transient
   var nestTerm = new mutable.HashSet[String]()         // nested term
   var umlsScore = (-1.0,-1.0,"","") // ** (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term)
   var posString = ""    // **
@@ -106,9 +108,9 @@ class Ngram (var text: String) extends java.io.Serializable{
       newNgram.n = other.n
     else
       newNgram.n = this.n
-
-    other.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
-    this.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
+    // don't need hBlogId, for saving memory
+    //other.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
+    //this.hBlogId.foreach(kv => newNgram.hBlogId.put(kv._1,kv._2)) //safe, because blogId could not be the same
     newNgram.context = this.context + other.context
     newNgram.tfAll = this.tfAll + other.tfAll
     newNgram.df = this.df + other.df  // this is safe
@@ -132,7 +134,7 @@ class Ngram (var text: String) extends java.io.Serializable{
     newNgram.capt_all = this.capt_all + other.capt_all
     newNgram.capt_term = this.capt_term + other.capt_term
 
-    traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll} ${this.hBlogId.mkString(",")}, ${other.hBlogId.mkString(",")}")
+    traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll}")
     newNgram
   }
 
@@ -265,13 +267,13 @@ class Ngram (var text: String) extends java.io.Serializable{
     toString(if (text.matches(Trace.filter)) true else false)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${this.nestTerm.size}%2d,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${umlsScore._3},${umlsScore._4},${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}),contex:${this.context}" +
+    f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${umlsScore._3},${umlsScore._4},${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}),contex:${this.context}" +
      f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}),train:${isTrain},capt:(${capt_first},${capt_term},${capt_all}),stys:${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null} " +
     s"textOrg:${textOrg}" +
-      {if (detail) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
+      {if (detail && hBlogId!=null) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
   def toStringVector(): String = {
-    f"${text}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${this.nestTerm.size}\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${umlsScore._3}\t${umlsScore._4}\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
+    f"${text}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${umlsScore._3}\t${umlsScore._4}\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
       s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}\t${isTrain}\t${capt_first}\t${capt_term}\t${capt_all}\t${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}\t${textOrg}"
   }
 }

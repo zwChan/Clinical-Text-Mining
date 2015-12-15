@@ -184,7 +184,15 @@ object Conf extends java.io.Serializable{
   val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
   val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
   val testSample=prop.get("testSample").toString.toInt
-  val useFeatures=prop.get("useFeatures").toString.trim.split(",")
+  val useFeatures4Train=prop.get("useFeatures4Train").toString.trim.split(",").map(fw=>{
+    val afw = fw.split(":").filter(_.trim.length>0)
+    (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
+  })
+  val useFeatures4Test=prop.get("useFeatures4Test").toString.trim.split(",").map(fw=>{
+    val afw = fw.split(":").filter(_.trim.length>0)
+    (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
+  })
+  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
   val semanticType=prop.get("semanticType").toString.trim.split(",")
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
