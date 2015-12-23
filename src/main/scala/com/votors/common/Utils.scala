@@ -211,6 +211,7 @@ object Conf extends java.io.Serializable{
   val showOrgNgramOfPosRegex=prop.get("showOrgNgramOfPosRegex").toString.trim
   val showOrgNgramOfTextRegex=prop.get("showOrgNgramOfTextRegex").toString.trim
   val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
+  val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
 
 }
 

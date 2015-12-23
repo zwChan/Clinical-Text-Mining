@@ -74,7 +74,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   //var text = ""         // final format of this gram. after stemmed/variant...
   var n: Int = 0            // number of word in this gram
   @transient
-  var hBlogId = new mutable.HashMap[Int, Stat]()       // save the blog id and one of its sentence id.
+  var hBlogId = new mutable.HashMap[Long, Stat]()       // save the blog id and one of its sentence id.
   var context = new Context()   // ** context of this gram
   var tfAll:Long = 0     // term frequency of all document
   var df = 0        // document frequency
@@ -268,13 +268,14 @@ class Ngram (var text: String) extends java.io.Serializable{
   }
   def toString(detail: Boolean): String = {
     f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${umlsScore._3},${umlsScore._4},${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}),contex:${this.context}" +
-     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}),train:${isTrain},capt:(${capt_first},${capt_term},${capt_all}),stys:${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null} " +
+     f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}),train:${isTrain},capt:(${capt_first},${capt_term},${capt_all}),stys:${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}, "+
     s"textOrg:${textOrg}" +
       {if (detail && hBlogId!=null) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
   def toStringVector(): String = {
     f"${text}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${umlsScore._3}\t${umlsScore._4}\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
-      s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}\t${isTrain}\t${capt_first}\t${capt_term}\t${capt_all}\t${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}\t${textOrg}"
+      s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}\t${isTrain}\t${capt_first}\t${capt_term}\t${capt_all}\t${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}\t"+
+    f"${textOrg}"
   }
 }
 
@@ -288,6 +289,10 @@ class Context extends java.io.Serializable{
   var win_chvCnt = 0    // ** number of chv term in its window
   //var win_nounCnt = 0   // ** number of noun term in its window
   var win_pos= Array.fill(Conf.posInWindown.length)(0)
+
+  var win_prefix= Array.fill(Nlp.prefixs.length)(0)
+  var win_suffix= Array.fill(Nlp.suffixs.length)(0)
+
 
   //context in the sentent
   var sent_umlsCnt = 0  // ** number of umls term in its sentence
@@ -309,18 +314,20 @@ class Context extends java.io.Serializable{
     newCx.umlsDist = this.umlsDist+other.umlsDist
     newCx.chvDist = this.chvDist+other.chvDist
     arrayAddInt(this.win_pos,other.win_pos,newCx.win_pos)
+    arrayAddInt(this.win_prefix,other.win_prefix,newCx.win_prefix)
+    arrayAddInt(this.win_suffix,other.win_suffix,newCx.win_suffix)
     newCx
   }
 
   override def  toString() = {
-    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist}),posWin(${win_pos.mkString(",")}})"
+    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist}),posWin(${win_pos.mkString(",")}}),pre/suffix:(${win_prefix.count(_>0)},${win_suffix.count(_>0)})"
   }
   def  toStringVector() = {
-    s"${win_umlsCnt}\t${win_chvCnt}\t${sent_umlsCnt}\t${sent_chvCnt}\t${umlsDist}\t${chvDist}\t${win_pos.mkString(",")}"
+    s"${win_umlsCnt}\t${win_chvCnt}\t${sent_umlsCnt}\t${sent_chvCnt}\t${umlsDist}\t${chvDist}\t${win_pos.mkString(",")}\t${win_prefix.count(_>0)}\t${win_suffix.count(_>0)}"
   }
 }
 
-class Stat(var blogId: Int = 0, var sentId:Int = 0) extends java.io.Serializable {
+class Stat(var blogId: Long = 0, var sentId:Int = 0) extends java.io.Serializable {
   //sentId: Only one sentenid will keep, for debug
   var tf = 0    // term frequency
 
@@ -335,7 +342,7 @@ class TokenState extends java.io.Serializable {
   }
 }
 class Sentence extends java.io.Serializable {
-  var blogId = 0
+  var blogId = 0L
   var sentId = 0
   var words: Array[String] = null      // original words in the sentence. nothing is filtered.
   var tokens: Array[String] = null     // Token from openNlp

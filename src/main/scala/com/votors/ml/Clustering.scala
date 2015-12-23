@@ -73,18 +73,18 @@ class Clustering (sc: SparkContext) {
     sys.exit(1)
   }
 
-  def getBlogIdRdd(parallelism: Int): RDD[Int] = {
+  def getBlogIdRdd(parallelism: Int): RDD[Long] = {
   val limit = Conf.blogLimit
   val sqlUtil = new SqlUtils(Conf.dbUrl.toString)
-    val ret = sqlUtil.execQuery(s"select ${Conf.blogIdCol.toString} as blogId from ${Conf.blogTbl.toString} limit ${limit}")
-    val blogIds = new ArrayBuffer[Int]()
-    while (ret.next()) blogIds.append(ret.getInt(1))
+    val ret = sqlUtil.execQuery(s"select distinct ${Conf.blogIdCol.toString} as blogId from ${Conf.blogTbl.toString} limit ${limit}")
+    val blogIds = new ArrayBuffer[Long]()
+    while (ret.next()) blogIds.append(ret.getLong(1))
     sqlUtil.jdbcClose()
     docsNum = blogIds.size
     sc.parallelize(blogIds, parallelism)
   }
 
-  def getBlogTextRdd(rdd: RDD[Int]): RDD[(Int, String)] = {
+  def getBlogTextRdd(rdd: RDD[Long]): RDD[(Long, String)] = {
     val url = Conf.dbUrl
     val textCol = Conf.blogTextCol
     val tbl = Conf.blogTbl
@@ -104,7 +104,7 @@ class Clustering (sc: SparkContext) {
     }).map(text=>Nlp.textPreprocess(text._1,text._2))
   }
 
-  def getSentRdd(textRdd: RDD[(Int, String)])  = {
+  def getSentRdd(textRdd: RDD[(Long, String)])  = {
     val ret = textRdd.mapPartitions(itr => {
       println(s"getSentRdd ***")
       val sents = for (blog <- itr) yield Nlp.generateSentence(blog._1,blog._2,null)
@@ -224,6 +224,8 @@ class Clustering (sc: SparkContext) {
    */
   def getVectorRdd(rddNgram: RDD[Ngram], useFeatureWeight: Array[(String,Double)], useUmlsContextFeature: Boolean=false): RDD[(Ngram,Vector)] = {
 
+
+
     // get the weight for the vector !!! the order should be the same as constructing the vector !!!!
     val vectorWeight = new ArrayBuffer[Double]()
     val useFeature = useFeatureWeight.map(_._1)
@@ -249,12 +251,17 @@ class Clustering (sc: SparkContext) {
     if(useFeature.contains("capt_all"))vectorWeight.append(useWeight(useFeature.indexOf("capt_all"))) else vectorWeight.append(0)
     if(useFeature.contains("capt_term"))vectorWeight.append(useWeight(useFeature.indexOf("capt_term"))) else vectorWeight.append(0)
 
-    if(useFeature.contains("win_umls"))vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else vectorWeight.append(0)
-    if(useFeature.contains("win_chv"))vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else vectorWeight.append(0)
-    if(useFeature.contains("sent_umls"))vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else vectorWeight.append(0)
-    if(useFeature.contains("sent_chv"))vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else vectorWeight.append(0)
-    if(useFeature.contains("umls_dist"))vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else vectorWeight.append(0)
-    if(useFeature.contains("chv_dist"))vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else vectorWeight.append(0)
+    if(useFeature.contains("win_umls"))vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+    if(useFeature.contains("win_chv"))vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+    if(useFeature.contains("sent_umls"))vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+    if(useFeature.contains("sent_chv"))vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+    if(useFeature.contains("umls_dist"))vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+    if(useFeature.contains("chv_dist"))vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+
+    println(s"aa weight ${vectorWeight.size}")
+    if(useFeature.contains("prefix"))vectorWeight.appendAll(Nlp.prefixs.map(_=>useWeight(useFeature.indexOf("prefix"))))
+    if(useFeature.contains("suffix"))vectorWeight.appendAll(Nlp.suffixs.map(_=>useWeight(useFeature.indexOf("suffix"))))
+    println(s"bb weight ${vectorWeight.size}")
 
     println(s"* the weight for the feature vecotr is ${vectorWeight.mkString(",")} *")
 
@@ -286,6 +293,10 @@ class Clustering (sc: SparkContext) {
       if(useFeature.contains("sent_chv"))feature.append(log2(gram.context.sent_chvCnt+1)) else if (useUmlsContextFeature) feature.append(0)
       if(useFeature.contains("umls_dist"))feature.append(log2(gram.context.umlsDist+1)) else if (useUmlsContextFeature) feature.append(0)
       if(useFeature.contains("chv_dist"))feature.append(log2(gram.context.chvDist+1)) else if (useUmlsContextFeature) feature.append(0)
+
+      if(useFeature.contains("prefix"))feature.appendAll(gram.context.win_prefix.map(p=>log2(p+1)))
+      if(useFeature.contains("suffix"))feature.appendAll(gram.context.win_suffix.map(p=>log2(p+1)))
+      //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
 
       //(gram,Vectors.dense(feature.toArray))
       (gram,feature)
@@ -355,7 +366,7 @@ object Clustering {
     val clustering = new Clustering(sc)
 
     val rddNgram4Train = if (Conf.trainedNgramFilterPosRegex.length>0)
-        clustering.getTrainNgramRdd().filter(gram=>Ngram.TrainedNgramFilterPosRegex.matcher(gram.posString).matches()).persist()
+        clustering.getTrainNgramRdd().filter(gram=>Ngram.TrainedNgramFilterPosRegex.matcher(gram.posString).matches()==false).persist()
       else
         clustering.getTrainNgramRdd().persist()
     val ngramCntAll = rddNgram4Train.count()
@@ -444,12 +455,12 @@ object Clustering {
               if (ngram.isUmlsTerm(true)) {
                 cntChvAll += 1
                 if (!ngram.isTrain)cntChvTest += 1
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tchv\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tchv\t")
               }else if (ngram.isUmlsTerm(false)) {
                 cntUmls += 1
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tumls\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tumls\t")
               }else {
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.1f\tother\t")
+                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tother\t")
               }
               val rankLevel = topPercent.floor.toInt/Conf.rankGranular
               val recall = if (ngramCntChvTest>0)1.0*cntChvTest/ngramCntChvTest else -1
@@ -468,11 +479,14 @@ object Clustering {
           }
 
         }
-        (k, cost, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank)
+        val kc = (k, cost, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank)
+        println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}")
+        println(f"MAX OF recall ${recallVsRank.max}%.2f\tprecision ${precisionVsRank.max}%.2f\tfscore ${fscoreVsRank.max}%.2f")
+        kc
       }
 
-      println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular} ####")
-      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}"))
+      println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
+      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f"))
     }
 
     println("*******result is ******************")

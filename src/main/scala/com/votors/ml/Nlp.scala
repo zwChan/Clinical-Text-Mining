@@ -24,6 +24,7 @@ import scala.collection.immutable.Range
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.io.File
+import scala.util.control.Breaks._
 
 /**
  * Created by Jason on 2015/11/9 0009.
@@ -49,6 +50,7 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
     if (lvgApi != null) {
       val outputFromLvg = lvgApi.MutateToString(term)
       val arrrayRet = outputFromLvg.split("\\|")
+      //println(outputFromLvg)
       if (arrrayRet.size >= 2)
         ret = arrrayRet(1)
     }
@@ -174,6 +176,20 @@ object Nlp {
     ret
   }
 
+  val prefixs = new ArrayBuffer[String]()
+  for (line <- scala.io.Source.fromFile(s"${modelRoot}/prefix.txt").getLines()) {
+    if (line.trim.length > 0 && !line.trim.startsWith("#"))
+      prefixs.append(line.trim)
+  }
+  prefixs.sortBy(_.length * -1)  // sort by length of the string.
+
+  val suffixs = new ArrayBuffer[String]()
+  for (line <- scala.io.Source.fromFile(s"${modelRoot}/suffix.txt").getLines()) {
+    if (line.trim.length > 0 && !line.trim.startsWith("#"))
+      suffixs.append(line.trim)
+  }
+  suffixs.sortBy(_.length * -1)  // sort by length of the string.
+
   val stopwords = new mutable.TreeSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
@@ -217,7 +233,7 @@ object Nlp {
    * @param blogId blogId
    * @param text the content of the blog
    */
-  def generateSentence(blogId: Int, text: String, hSents: mutable.LinkedHashMap[(Int,Int),Sentence] = null): Array[Sentence] = {
+  def generateSentence(blogId: Long, text: String, hSents: mutable.LinkedHashMap[(Long,Int),Sentence] = null): Array[Sentence] = {
     // process the newline as configuration. 1: replace with space; 2: replace with '.'; 0: do nothing
     //    val text_tmp = if (Conf.ignoreNewLine == 1) {
     //      target.replace("\r\n", " ").replace("\r", " ").replace("\n", ". ").replace("\"", "\'")
@@ -397,11 +413,29 @@ object Nlp {
       cGram.context.umlsDist += nearestUmls
       cGram.context.chvDist += nearestChv
 
-      val posWinStart = if (c._1-Conf.WinLen>0) c._1-Conf.WinLen else 0
-      val posWinEnd = if (c._1+Conf.WinLen>sent.Pos.size) sent.Pos.size else c._1+Conf.WinLen
-      sent.Pos.slice(posWinStart,posWinEnd).foreach(p => {
+      var winStart = if (c._1-Conf.WinLen>0) c._1-Conf.WinLen else 0
+      var winEnd = if (c._1+Conf.WinLen>sent.Pos.size) sent.Pos.size else c._1+Conf.WinLen
+      sent.Pos.slice(winStart,winEnd).foreach(p => {
         val index = Conf.posInWindown.indexOf(p)
         if (index>=0) cGram.context.win_pos(index) += 1
+      })
+
+      // if only count the prefix/suffix of ngram itself, change the window to itself
+      if (!Conf.prefixSuffixUseWindow)winStart=c._1
+      if (!Conf.prefixSuffixUseWindow)winEnd=c._1+c._2.n
+      sent.words.slice(winStart,winEnd).foreach(w=>{
+        breakable {Nlp.prefixs.zipWithIndex.foreach(kv=>{
+          if (w.startsWith(kv._1)) {
+            cGram.context.win_prefix(kv._2) += 1
+            break
+          }
+        })}
+        breakable {Nlp.suffixs.zipWithIndex.foreach(kv=>{
+          if (w.endsWith(kv._1)) {
+            cGram.context.win_suffix(kv._2) += 1
+            break
+          }
+        })}
       })
     }
 
@@ -463,7 +497,7 @@ object Nlp {
    * @param text
    * @return
    */
-  def textPreprocess(blogId: Int, text: String) = {
+  def textPreprocess(blogId: Long, text: String) = {
     val ret = text.replaceAll("([~`=+<>,:|;/\"\\[\\]\\(\\)\\{\\}\\.!\\?\\|\\\\])"," $1 ").replaceAll("\\s+"," ")
     (blogId, ret)
   }
@@ -475,18 +509,9 @@ object Nlp {
 
     Trace.currLevel = DEBUG
 
-    println(Nlp.checkStopword("all"))
-    println(Nlp.checkStopword("alldiabetes"))
-    println(Nlp.checkStopword("diabetesall"))
-    println(Nlp.checkStopword("diabetesalldiabetest"))
-    println(Nlp.checkStopword("all diabetes"))
-    println(Nlp.checkStopword("diabetes all"))
-    println(Nlp.checkStopword("all diabetes all"))
-    println(Nlp.checkStopword("diabetes all diabetes"))
-
-//    val lvg =  new Lvg()
-//    val ret = lvg.getNormTerm("glasses")
-//    println(s"lvg out put ${ret}")
+    val lvg =  new Lvg()
+    val ret = lvg.getNormTerm("glasses")
+    println(s"lvg out put ${ret}")
 //
 //    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
 //    def textPreprocess(blogId: Int, text: String) = {
