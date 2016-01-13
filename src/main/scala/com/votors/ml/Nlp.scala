@@ -67,6 +67,8 @@ object Nlp {
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
   final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
 
+  var wordsInbags: Map[String,Int] = null
+
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
 
@@ -176,19 +178,22 @@ object Nlp {
     ret
   }
 
-  val prefixs = new ArrayBuffer[String]()
+  var prefixs = new ArrayBuffer[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/prefix.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
       prefixs.append(line.trim)
   }
-  prefixs.sortBy(_.length * -1)  // sort by length of the string.
+  prefixs = prefixs.sortBy(_.length * -1)  // sort by length of the string.
+  println(s"prefix: ${prefixs.mkString("\t")}")
 
-  val suffixs = new ArrayBuffer[String]()
+  var suffixs = new ArrayBuffer[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/suffix.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
       suffixs.append(line.trim)
   }
-  suffixs.sortBy(_.length * -1)  // sort by length of the string.
+  suffixs = suffixs.sortBy(_.length * -1)  // sort by length of the string.
+  println(s"suffix: ${suffixs.mkString("\t")}")
+
 
   val stopwords = new mutable.TreeSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
@@ -316,6 +321,16 @@ object Nlp {
                     ngram: Int = Ngram.N
                     ): Unit = {
     val hPreNgram =  firstStageNgram.value
+
+    if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
+      Nlp.wordsInbags = if (Conf.bowTopCvalueNgram>0) {
+        hPreNgram.map(kv=>(kv._1,kv._2.cvalue)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopCvalueNgram).map(_._1).zipWithIndex.toMap
+      }else{
+        hPreNgram.map(kv=>(kv._1,kv._2.cvalue)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
+      }
+      println(Nlp.wordsInbags.toSeq.sortBy(_._2).mkString("\t"))
+    }
+
     //println(s"generateNgramStage2, pre gram # ${hPreNgram.size}")
     sentence.foreach(sent => {
       // process ngram
@@ -333,7 +348,7 @@ object Nlp {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
                 val pre_gram = hPreNgram.getOrElse(gram_text,null)
-                if ( (pre_gram != null) ) {
+                if ( (sent.tokens(pos + n).length > 0 && pre_gram != null) ) {
                   //in stage 2, we can directly use result of stage 1
                   val gram = Ngram.getNgram(gram_text, hNgrams)
                   // some info have to update when the gram created
@@ -387,10 +402,19 @@ object Nlp {
           }
         }
 
+        // update bags of words counter by sentence
+        if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
+          val index = Nlp.wordsInbags.get(wPreGram.text).getOrElse(-1)
+          traceFilter(INFO, cGram.text, s"${cGram.text} found ${wPreGram.text},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v=>(v._1,v._2.text)).mkString(",")}")
+          if (index>=0){
+            cGram.context.wordsInbags(index) += 1
+          }
+        }
+
         // update the nearest umls term, exclude the term that is nested by cGram
         if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
           if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
-            traceFilter(INFO, cGram.text, s"umls dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+            traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.text}, ${wPreGram.text}")
             nearestUmls = Math.abs(c._1 - w._1)
           }
           if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
@@ -421,26 +445,42 @@ object Nlp {
       })
 
       // if only count the prefix/suffix of ngram itself, change the window to itself
-      if (!Conf.prefixSuffixUseWindow)winStart=c._1
-      if (!Conf.prefixSuffixUseWindow)winEnd=c._1+c._2.n
-      sent.words.slice(winStart,winEnd).foreach(w=>{
-        breakable {Nlp.prefixs.zipWithIndex.foreach(kv=>{
-          if (w.startsWith(kv._1)) {
-            cGram.context.win_prefix(kv._2) += 1
-            break
-          }
-        })}
-        breakable {Nlp.suffixs.zipWithIndex.foreach(kv=>{
-          if (w.endsWith(kv._1)) {
-            cGram.context.win_suffix(kv._2) += 1
-            break
-          }
-        })}
-      })
+      if (!Conf.prefixSuffixUseWindow) {
+        winStart = c._1
+        winEnd = c._1 + c._2.n
+      }
+      updatePrefixSuffix(sent.tokens.slice(winStart, winEnd),cGram)
+
     }
 
   }
 
+  /**
+   *
+   * @param words: the window of words that we have to check if contain pre/suf-fix
+   * @param ngram: the ngram that we are going to update the context
+   */
+  def updatePrefixSuffix(words: Seq[String], ngram: Ngram) = {
+    // if only count the prefix/suffix of ngram itself, change the window to itself
+    words.foreach(w => {
+      breakable {
+        Nlp.prefixs.zipWithIndex.foreach(kv => {
+          if (w.startsWith(kv._1)) {
+            ngram.context.win_prefix(kv._2) += 1
+            break
+          }
+        })
+      }
+      breakable {
+        Nlp.suffixs.zipWithIndex.foreach(kv => {
+          if (w.endsWith(kv._1)) {
+            ngram.context.win_suffix(kv._2) += 1
+            break
+          }
+        })
+      }
+    })
+  }
 
   /**
    * When the gram is create, we get some useful info from the sentence.

@@ -110,7 +110,8 @@ ium
 ive
 isation
 ization
-ize, ise
+ize
+ise
 izzle
 kinesis
 less

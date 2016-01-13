@@ -96,6 +96,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   var capt_first = 0 // it is update at stage 2
   var capt_all= 0    // it is update at stage 2
   var capt_term = 0  // it is update at stage 2
+
   /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
   def + (other: Ngram) = merge(other)
@@ -148,6 +149,8 @@ class Ngram (var text: String) extends java.io.Serializable{
     this.isPosANPN = other.isPosANPN
 
     this.stys = other.stys
+
+    if (Conf.bagsOfWord)this.context.wordsInbags = Array.fill(Nlp.wordsInbags.size)(0)
   }
 
   /**
@@ -213,7 +216,7 @@ class Ngram (var text: String) extends java.io.Serializable{
 
 
   def procTfdf(docNum: Long): Ngram = {
-    this.tfdf = log2(1+(log2(1+1.0*tfAll/Math.sqrt(docNum)) * df))  // supress the affect of tfAll
+    this.tfdf = log2p1((log2p1(1.0*tfAll/Math.sqrt(docNum)) * df))  // supress the affect of tfAll
     // gram.tfidf = Math.log(1+gram.tfAll/gram.hBlogId.size) * Math.log(1+docNum/gram.hBlogId.size)
     //gram.tfdf = Math.sqrt(gram.tfdf)
     this
@@ -240,9 +243,9 @@ class Ngram (var text: String) extends java.io.Serializable{
   // calculate the cValue. Since log(1)==0, we should add 1 to the value put into log()
   def getCValue() = {
     this.cvalue = if (this.nestTerm.size == 0) {
-      log2(this.n+1) * this.tfAll
+      log2p1(this.n) * this.tfAll
     }else{
-      log2(this.n+1) * (this.tfAll - (this nestedTf)/this.nestTerm.size)
+      log2p1(this.n) * (this.tfAll - (this nestedTf)/this.nestTerm.size)
     }
 
     /**
@@ -303,6 +306,9 @@ class Context extends java.io.Serializable{
   var umlsDist = 0       // ** the nearest distance with a umls term
   var chvDist = 0        // ** the nearest distance with a chv term
 
+  // bags of words
+  var wordsInbags:Array[Int] = null
+
   def +(other: Context) = merge(other)
   def merge(other: Context) = {
     val newCx = new Context()
@@ -316,14 +322,21 @@ class Context extends java.io.Serializable{
     arrayAddInt(this.win_pos,other.win_pos,newCx.win_pos)
     arrayAddInt(this.win_prefix,other.win_prefix,newCx.win_prefix)
     arrayAddInt(this.win_suffix,other.win_suffix,newCx.win_suffix)
+    if(this.wordsInbags!=null) {
+      newCx.wordsInbags = Array.fill(this.wordsInbags.size)(0)
+      arrayAddInt(this.wordsInbags,other.wordsInbags,newCx.wordsInbags)
+    }
+
     newCx
   }
 
   override def  toString() = {
-    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist}),posWin(${win_pos.mkString(",")}}),pre/suffix:(${win_prefix.count(_>0)},${win_suffix.count(_>0)})"
+    f"win(${win_umlsCnt},${win_chvCnt}), sent(${sent_umlsCnt},${sent_chvCnt}),dist(${umlsDist},${chvDist}),posWin(${win_pos.mkString(",")}}),"+
+      s"pre/suffix:(${win_prefix.filter(_>0).mkString(",")},${win_suffix.filter(_>0).mkString(",")}),bow(${if(wordsInbags!=null)wordsInbags.sum},${if(wordsInbags!=null)wordsInbags.count(_>0)}})"
   }
   def  toStringVector() = {
-    s"${win_umlsCnt}\t${win_chvCnt}\t${sent_umlsCnt}\t${sent_chvCnt}\t${umlsDist}\t${chvDist}\t${win_pos.mkString(",")}\t${win_prefix.count(_>0)}\t${win_suffix.count(_>0)}"
+    s"${win_umlsCnt}\t${win_chvCnt}\t${sent_umlsCnt}\t${sent_chvCnt}\t${umlsDist}\t${chvDist}\t${win_pos.mkString(",")}\t"+
+      s"${win_prefix.filter(_>0).mkString(",")}\t${win_suffix.filter(_>0).mkString(",")}\t${if(wordsInbags!=null)wordsInbags.sum else 0}\t${if(wordsInbags!=null)wordsInbags.count(_>0) else 0}"
   }
 }
 
@@ -441,7 +454,7 @@ object Ngram {
     if(Nlp.checkPosFilter(gramPos))  // if contains noun
       ret &&= false
 
-    traceFilter(INFO,gram,s"${gram} 's filter result is ${ret}. pos:${gramPos}, sent:${sentence}")
+    traceFilter(INFO,gram,s"${gram} 's check result is ${ret}. pos:${gramPos}, sent:${sentence}")
 
     ret
   }

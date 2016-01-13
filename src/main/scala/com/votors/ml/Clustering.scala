@@ -176,7 +176,15 @@ class Clustering (sc: SparkContext) {
         .filter(_.cvalue > Conf.stag2CvalueFilter)
       rddSent.unpersist()
       if(Conf.ngramSaveFile.trim.length>0) {
-        Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
+        if (Conf.bagsOfWord) {
+          Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
+          Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", rddNgram2.map(g=>{
+            g.context.wordsInbags=null;
+            g
+          }).collect())
+        }else{
+          Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
+        }
       }
 
       if (Conf.trainNgramCnt>0) {
@@ -189,6 +197,12 @@ class Clustering (sc: SparkContext) {
     }else {
       println(s"start load ngram from file:")
       var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile)
+     /* Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", ngrams.map(g=>{
+        g.context.wordsInbags=null;
+        g
+      }))
+      sys.exit(0)*/
+
       if (Conf.trainNgramCnt>0)ngrams = ngrams.take(Conf.trainNgramCnt)
       val rddNgram2 = sc.parallelize(ngrams, Conf.partitionNumber)
       trainSampleMark(rddNgram2)
@@ -227,78 +241,92 @@ class Clustering (sc: SparkContext) {
 
 
     // get the weight for the vector !!! the order should be the same as constructing the vector !!!!
-    val vectorWeight = new ArrayBuffer[Double]()
+    val vectorWeight:ArrayBuffer[Double] = new ArrayBuffer[Double]()
     val useFeature = useFeatureWeight.map(_._1)
     val useWeight = useFeatureWeight.map(_._2)
     val gram = rddNgram.take(1)(0)
-    if(useFeature.contains("tfdf"))vectorWeight.append(useWeight(useFeature.indexOf("tfdf"))) else vectorWeight.append(0) // tfdf
-    if(useFeature.contains("cvalue"))vectorWeight.append(useWeight(useFeature.indexOf("cvalue"))) else vectorWeight.append(0)   // c-value, applied a log function
+    if (!Conf.bagsOfWord) {
+      if (useFeature.contains("tfdf")) vectorWeight.append(useWeight(useFeature.indexOf("tfdf"))) else vectorWeight.append(0) // tfdf
+      if (useFeature.contains("cvalue")) vectorWeight.append(useWeight(useFeature.indexOf("cvalue"))) else vectorWeight.append(0) // c-value, applied a log function
 
-    if(useFeature.contains("umls_score"))vectorWeight.append(useWeight(useFeature.indexOf("umls_score"))) else vectorWeight.append(0)    // simple similarity to umls
-    if(useFeature.contains("contain_umls"))vectorWeight.append(useWeight(useFeature.indexOf("contain_umls"))) else vectorWeight.append(0)
-    if(useFeature.contains("contain_chv"))vectorWeight.append(useWeight(useFeature.indexOf("contain_chv"))) else vectorWeight.append(0)
-    if(useFeature.contains("chv_score"))vectorWeight.append(useWeight(useFeature.indexOf("chv_score"))) else vectorWeight.append(0)    //simple similarity to chv
+      if (useFeature.contains("umls_score")) vectorWeight.append(useWeight(useFeature.indexOf("umls_score"))) else vectorWeight.append(0) // simple similarity to umls
+      if (useFeature.contains("contain_umls")) vectorWeight.append(useWeight(useFeature.indexOf("contain_umls"))) else vectorWeight.append(0)
+      if (useFeature.contains("contain_chv")) vectorWeight.append(useWeight(useFeature.indexOf("contain_chv"))) else vectorWeight.append(0)
+      if (useFeature.contains("chv_score")) vectorWeight.append(useWeight(useFeature.indexOf("chv_score"))) else vectorWeight.append(0) //simple similarity to chv
 
-    if(useFeature.contains("nn"))vectorWeight.append(useWeight(useFeature.indexOf("nn"))) else vectorWeight.append(0)
-    if(useFeature.contains("an"))vectorWeight.append(useWeight(useFeature.indexOf("an"))) else vectorWeight.append(0)
-    if(useFeature.contains("pn"))vectorWeight.append(useWeight(useFeature.indexOf("pn"))) else vectorWeight.append(0)
-    if(useFeature.contains("anpn"))vectorWeight.append(useWeight(useFeature.indexOf("anpn"))) else vectorWeight.append(0)
+      if (useFeature.contains("nn")) vectorWeight.append(useWeight(useFeature.indexOf("nn"))) else vectorWeight.append(0)
+      if (useFeature.contains("an")) vectorWeight.append(useWeight(useFeature.indexOf("an"))) else vectorWeight.append(0)
+      if (useFeature.contains("pn")) vectorWeight.append(useWeight(useFeature.indexOf("pn"))) else vectorWeight.append(0)
+      if (useFeature.contains("anpn")) vectorWeight.append(useWeight(useFeature.indexOf("anpn"))) else vectorWeight.append(0)
 
-    if(useFeature.contains("stys"))vectorWeight.appendAll(gram.stys.map(_=>useWeight(useFeature.indexOf("stys")))) else vectorWeight.appendAll(gram.stys.map(_=>0.0))
-    if(useFeature.contains("win_pos"))vectorWeight.appendAll(gram.context.win_pos.map(p=>useWeight(useFeature.indexOf("win_pos")))) else vectorWeight.appendAll(gram.stys.map(_=>0.0))
+      if (useFeature.contains("stys")) vectorWeight.appendAll(gram.stys.map(_ => useWeight(useFeature.indexOf("stys")))) else vectorWeight.appendAll(gram.stys.map(_ => 0.0))
+      if (useFeature.contains("win_pos")) vectorWeight.appendAll(gram.context.win_pos.map(p => useWeight(useFeature.indexOf("win_pos")))) else vectorWeight.appendAll(gram.stys.map(_ => 0.0))
 
-    if(useFeature.contains("capt_first"))vectorWeight.append(useWeight(useFeature.indexOf("capt_first"))) else vectorWeight.append(0)
-    if(useFeature.contains("capt_all"))vectorWeight.append(useWeight(useFeature.indexOf("capt_all"))) else vectorWeight.append(0)
-    if(useFeature.contains("capt_term"))vectorWeight.append(useWeight(useFeature.indexOf("capt_term"))) else vectorWeight.append(0)
+      if (useFeature.contains("capt_first")) vectorWeight.append(useWeight(useFeature.indexOf("capt_first"))) else vectorWeight.append(0)
+      if (useFeature.contains("capt_all")) vectorWeight.append(useWeight(useFeature.indexOf("capt_all"))) else vectorWeight.append(0)
+      if (useFeature.contains("capt_term")) vectorWeight.append(useWeight(useFeature.indexOf("capt_term"))) else vectorWeight.append(0)
 
-    if(useFeature.contains("win_umls"))vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-    if(useFeature.contains("win_chv"))vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-    if(useFeature.contains("sent_umls"))vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-    if(useFeature.contains("sent_chv"))vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-    if(useFeature.contains("umls_dist"))vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-    if(useFeature.contains("chv_dist"))vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("win_umls")) vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("win_chv")) vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("sent_umls")) vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("sent_chv")) vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("umls_dist")) vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("chv_dist")) vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
 
-    println(s"aa weight ${vectorWeight.size}")
-    if(useFeature.contains("prefix"))vectorWeight.appendAll(Nlp.prefixs.map(_=>useWeight(useFeature.indexOf("prefix"))))
-    if(useFeature.contains("suffix"))vectorWeight.appendAll(Nlp.suffixs.map(_=>useWeight(useFeature.indexOf("suffix"))))
-    println(s"bb weight ${vectorWeight.size}")
-
+      if (useFeature.contains("prefix")) vectorWeight.appendAll(Nlp.prefixs.map(_ => useWeight(useFeature.indexOf("prefix"))))
+      if (useFeature.contains("suffix")) vectorWeight.appendAll(Nlp.suffixs.map(_ => useWeight(useFeature.indexOf("suffix"))))
+      println(s"size weight ${vectorWeight.size}")
+    } else {
+      if (gram.context.wordsInbags == null) {
+        println("You configured bagsOfWords enable, but there is no bagsOfWords info in ngram.")
+        sys.exit(1)
+      };
+      if (Conf.bowTopCvalueNgram>gram.context.wordsInbags.size) {
+        println(s"Warning: You specify Conf.bowTopCvalueNgram=${Conf.bowTopCvalueNgram}, but only ${gram.context.wordsInbags.size} available")
+        Conf.bowTopCvalueNgram = gram.context.wordsInbags.size
+      }
+      vectorWeight.appendAll(gram.context.wordsInbags.map(_=>1.0).take(Conf.bowTopCvalueNgram))
+    }
     println(s"* the weight for the feature vecotr is ${vectorWeight.mkString(",")} *")
+    //println(Nlp.wordsInbags.mkString("\t"))
 
     val tmp_vecter = rddNgram.map(gram => {
       val feature = new ArrayBuffer[Double]()
-      if(useFeature.contains("tfdf"))feature.append(gram.tfdf) else feature.append(0)     // tfdf
-      if(useFeature.contains("cvalue"))feature.append(log2(gram.cvalue+1)) else feature.append(0)    // c-value, applied a log function
+      if (!Conf.bagsOfWord) {
+        if (useFeature.contains("tfdf")) feature.append(gram.tfdf) else feature.append(0) // tfdf
+        if (useFeature.contains("cvalue")) feature.append(log2p1(gram.cvalue)) else feature.append(0) // c-value, applied a log function
 
-      if(useFeature.contains("umls_score"))feature.append(gram.umlsScore._1/100) else feature.append(0)    // simple similarity to umls
-      if(useFeature.contains("contain_umls"))feature.append(bool2Double(gram.isContainInUmls)) else feature.append(0)
-      if(useFeature.contains("contain_chv"))feature.append(bool2Double(gram.isContainInChv)) else feature.append(0)
-      if(useFeature.contains("chv_score"))feature.append(gram.umlsScore._2/100) else feature.append(0)    //simple similarity to chv
+        if (useFeature.contains("umls_score")) feature.append(gram.umlsScore._1 / 100) else feature.append(0) // simple similarity to umls
+        if (useFeature.contains("contain_umls")) feature.append(bool2Double(gram.isContainInUmls)) else feature.append(0)
+        if (useFeature.contains("contain_chv")) feature.append(bool2Double(gram.isContainInChv)) else feature.append(0)
+        if (useFeature.contains("chv_score")) feature.append(gram.umlsScore._2 / 100) else feature.append(0) //simple similarity to chv
 
-      if(useFeature.contains("nn"))feature.append(bool2Double(gram.isPosNN)) else feature.append(0)
-      if(useFeature.contains("an"))feature.append(bool2Double(gram.isPosAN)) else feature.append(0)
-      if(useFeature.contains("pn"))feature.append(bool2Double(gram.isPosPN)) else feature.append(0)
-      if(useFeature.contains("anpn"))feature.append(bool2Double(gram.isPosANPN)) else feature.append(0)
+        if (useFeature.contains("nn")) feature.append(bool2Double(gram.isPosNN)) else feature.append(0)
+        if (useFeature.contains("an")) feature.append(bool2Double(gram.isPosAN)) else feature.append(0)
+        if (useFeature.contains("pn")) feature.append(bool2Double(gram.isPosPN)) else feature.append(0)
+        if (useFeature.contains("anpn")) feature.append(bool2Double(gram.isPosANPN)) else feature.append(0)
 
-      if(useFeature.contains("stys"))feature.appendAll(gram.stys.map(bool2Double(_))) else feature.appendAll(gram.stys.map(_=>0.0))
-      if(useFeature.contains("win_pos"))feature.appendAll(gram.context.win_pos.map(p=>log2(p+1))) else feature.appendAll(gram.context.win_pos.map(p=>0.0))
+        if (useFeature.contains("stys")) feature.appendAll(gram.stys.map(bool2Double(_))) else feature.appendAll(gram.stys.map(_ => 0.0))
+        if (useFeature.contains("win_pos")) feature.appendAll(gram.context.win_pos.map(p => log2p1(p))) else feature.appendAll(gram.context.win_pos.map(p => 0.0))
 
-      if(useFeature.contains("capt_first"))feature.append(log2(gram.capt_first/gram.tfAll+1)) else feature.append(0)
-      if(useFeature.contains("capt_all"))feature.append(log2(gram.capt_all/gram.tfAll+1)) else feature.append(0)
-      if(useFeature.contains("capt_term"))feature.append(log2(gram.capt_term/gram.tfAll+1)) else feature.append(0)
+        if (useFeature.contains("capt_first")) feature.append(log2p1(1.0*gram.capt_first / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("capt_all")) feature.append(log2p1(1.0*gram.capt_all / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("capt_term")) feature.append(log2p1(1.0*gram.capt_term / gram.tfAll)) else feature.append(0)
 
-      if(useFeature.contains("win_umls"))feature.append(log2(gram.context.win_umlsCnt+1)) else if (useUmlsContextFeature) feature.append(0)
-      if(useFeature.contains("win_chv"))feature.append(log2(gram.context.win_chvCnt+1)) else if (useUmlsContextFeature) feature.append(0)
-      if(useFeature.contains("sent_umls"))feature.append(log2(gram.context.sent_umlsCnt+1)) else if (useUmlsContextFeature) feature.append(0)
-      if(useFeature.contains("sent_chv"))feature.append(log2(gram.context.sent_chvCnt+1)) else if (useUmlsContextFeature) feature.append(0)
-      if(useFeature.contains("umls_dist"))feature.append(log2(gram.context.umlsDist+1)) else if (useUmlsContextFeature) feature.append(0)
-      if(useFeature.contains("chv_dist"))feature.append(log2(gram.context.chvDist+1)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("win_umls")) feature.append(log2p1(gram.context.win_umlsCnt)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("win_chv")) feature.append(log2p1(gram.context.win_chvCnt)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("sent_umls")) feature.append(log2p1(gram.context.sent_umlsCnt)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("sent_chv")) feature.append(log2p1(gram.context.sent_chvCnt)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("umls_dist")) feature.append(log2p1(gram.context.umlsDist)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("chv_dist")) feature.append(log2p1(gram.context.chvDist)) else if (useUmlsContextFeature) feature.append(0)
 
-      if(useFeature.contains("prefix"))feature.appendAll(gram.context.win_prefix.map(p=>log2(p+1)))
-      if(useFeature.contains("suffix"))feature.appendAll(gram.context.win_suffix.map(p=>log2(p+1)))
-      //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
+        if (useFeature.contains("prefix")) feature.appendAll(gram.context.win_prefix.map(p => log2p1(1.0*p / gram.tfAll)))
+        if (useFeature.contains("suffix")) feature.appendAll(gram.context.win_suffix.map(p => log2p1(1.0*p / gram.tfAll)))
+        //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
 
-      //(gram,Vectors.dense(feature.toArray))
+      }else{
+        feature.appendAll(gram.context.wordsInbags.take(Conf.bowTopCvalueNgram).map(p => log2p1(1.0*p / gram.tfAll)))
+      }
       (gram,feature)
     })
     if (Conf.normalizeFeature) {
@@ -321,6 +349,7 @@ class Clustering (sc: SparkContext) {
         })
         f
       })
+      println("the maximum of the features: "+max.mkString("\t"))
       // normalization to (0,1), then apply the weight of the features
       val vecter = tmp_vecter.map(kv => {
         val f = new ArrayBuffer[Double]()
@@ -343,6 +372,105 @@ class Clustering (sc: SparkContext) {
     }else{
       tmp_vecter.map(kv=>(kv._1,Vectors.dense(kv._2.toArray)))
     }
+  }
+
+  /**
+   * Rank the ngam based on a cost value. current, we have 3 types of cost:
+   * 1: kmeans: the distance between a ngram and its nearest centre.
+   * 2. tfAll: the inverse of the term frequency(1/tf)
+   * 3: cvalue: the inverse of the cvalue(1/cvalue)
+   * @param rankType: based on the cost of 'kmeans', 'tfAlll', or 'cvalue'
+   * @param modelOrg: the model of kmeans
+   * @param rddVectorDbl: the double value vector
+   * @param rddRankVector_all:
+   * @param ngramCntChvTest: the chv number in the test data
+   * 
+   */
+  def rank (k:Int,rankType: String, modelOrg: KMeansModel,rddVectorDbl: RDD[Vector], rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long) = {
+
+    val ngramCntTrain = rddVectorDbl.count
+
+    /**
+     * Get the cost of every point to its closest center, and rand the points by these cost.
+     * In fact, it looks like using clustering to get classification goal.
+     **/
+    val ret = if (rankType.equals("kmeans")) {
+      val retPridict = rddVectorDbl.map(v => modelOrg.predict(v))
+      /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
+      val retPredictFiltered = retPridict.map(k => (k, 1L)).reduceByKey(_ + _).collect.filter(kv => {
+        val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
+        if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is excluded.")
+        filter
+      }).map(_._1)
+      // get new centers
+      val newCenter = modelOrg.clusterCenters.filter(v => {
+        retPredictFiltered.contains(modelOrg.clusterCenters.indexOf(v))
+      })
+      // update model
+      val model = new KMeansModel(newCenter)
+
+      val bcCenters = MyKmean.broadcastMode(rddRankVector_all.context, model)
+
+      /** predict the center of each point. */
+      rddRankVector_all.map(kv => (kv._1, MyKmean.computeCost(bcCenters.value, kv._2))).sortBy(_._2._2).collect
+    } else if (rankType.equals("tfAll") || rankType.equals("tfall")) {
+      rddRankVector_all.map(kv => (kv._1, (-1, 1.0/kv._1.tfAll))).sortBy(_._2._2).collect
+    }else { //"cvalue"
+      rddRankVector_all.map(kv => (kv._1, (-2, 1.0/kv._1.cvalue))).sortBy(_._2._2).collect
+    }
+    
+    
+    var cnt = 0
+    var cntUmls = 0
+    var cntChvAll = 0
+    var cntChvTest= 0
+    val rankBase =
+      if (Conf.rankLevelBase>0){
+        Conf.rankLevelBase
+      } else if (ngramCntChvTest>0)
+        ngramCntChvTest
+      else
+        rddRankVector_all.count()
+
+    val recallVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+    val precisionVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+    val precisionUmlsVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+    val fscoreVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
+    ret.foreach(kkvv => {
+      val kk = kkvv._2._1
+      val cost = kkvv._2._2
+      val ngram = kkvv._1
+      cnt += 1
+      val topPercent = 1.0*cnt/rankBase*100
+
+      if (ngram.isUmlsTerm(true)) {
+        cntChvAll += 1
+        if (!ngram.isTrain)cntChvTest += 1
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tchv\t")
+      }else if (ngram.isUmlsTerm(false)) {
+        cntUmls += 1
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tumls\t")
+      }else {
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tother\t")
+      }
+      val rankLevel = topPercent.floor.toInt/Conf.rankGranular
+      val recall = if (ngramCntChvTest>0)1.0*cntChvTest/ngramCntChvTest else -1
+      val precision = 1.0*cntChvTest/cnt
+      val precision_umls = 1.0*cntUmls/cnt
+      val fscore = if(precision+recall==0) 0 else (1+Conf.fscoreBeta*Conf.fscoreBeta)*(precision*recall)/(Conf.fscoreBeta*Conf.fscoreBeta*precision+recall)
+      if(rankLevel>0 && rankLevel<=Conf.rankLevelNumber && recallVsRank(rankLevel-1)<0) {
+        recallVsRank(rankLevel - 1) = recall*100
+        precisionVsRank(rankLevel - 1) = precision*100
+        precisionUmlsVsRank(rankLevel - 1) = precision_umls*100
+        fscoreVsRank(rankLevel - 1) = fscore
+      }
+      if (Conf.showDetailRankPt>=topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t${precision_umls*100}%.2f\t")
+      if (Conf.showDetailRankPt>=topPercent)println(ngram.toStringVector())
+    })
+    println(f"type ${rankType},${k}\t${ngramCntChvTest}\t${recallVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${precisionVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${fscoreVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${precisionUmlsVsRank.map(v=>f"${v}%.2f").mkString("\t")}")
+    println(f"MAX OF recall ${recallVsRank.max}%.2f\tprecision ${precisionVsRank.max}%.2f\tfscore ${fscoreVsRank.max}%.2f\tprecision_umls ${precisionUmlsVsRank.max}%.2f")
+
+    (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank)
   }
 }
 
@@ -381,7 +509,8 @@ object Clustering {
 
     if (Conf.runKmeans) {
       val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train,Conf.useUmlsContextFeature).persist()
-      val rddVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test, Conf.useUmlsContextFeature).persist()
+      val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test, Conf.useUmlsContextFeature).persist()
+      rddNgram4Train.unpersist()
 
       if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
@@ -389,7 +518,6 @@ object Clustering {
 
       val rddVectorDbl = rddVector.map(_._2).persist()
       rddVector.unpersist()
-      val ngramCntTrain = rddVectorDbl.count
 
       var model: KMeansModel = null
 
@@ -400,93 +528,25 @@ object Clustering {
         System.out.println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
         println(s"###kcost#### $k $cost" )
 
-        /**
-         * predict the center of each point.
-         */
-        var recallVsRank: Array[Double]=null
-        var precisionVsRank: Array[Double]=null
-        var fscoreVsRank: Array[Double]=null
-        if (Conf.runPredict) {
-          // TODO choose a "best" k?
-
-          val retPridict = rddVectorDbl.map(v => model.predict(v))
-          /**
-           * Get the cost of every point to its closest center, and rand the points by these cost.
-           * In fact, it looks like using clustering to get classification goal.
-           **/
-          if (Conf.runRank) {
-            /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
-            val retPredictFiltered = retPridict.map(k => (k, 1L)).reduceByKey(_ + _).collect.filter(kv => {
-              val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
-              if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain/k}, so it is excluded.")
-              filter
-            }).map(_._1)
-            // get new centers
-            val newCenter = model.clusterCenters.filter(v => {
-              retPredictFiltered.contains(model.clusterCenters.indexOf(v))
-            })
-            // update model
-            model = new KMeansModel(newCenter)
-
-            val ngramCntRank = rddVector_all.count()
-            val bcCenters = MyKmean.broadcastMode(rddVector_all.context, model)
-            val ret = rddVector_all.map(kv => (kv._1, MyKmean.computeCost(bcCenters.value, kv._2))).sortBy(_._2._2).collect
-            var cnt = 0
-            var cntUmls = 0
-            var cntChvAll = 0
-            var cntChvTest= 0
-            val rankBase =
-              if (Conf.rankLevelBase>0){
-                Conf.rankLevelBase
-              } else if (ngramCntChvTest>0)
-                ngramCntChvTest
-              else
-                ngramCntRank
-            recallVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
-            precisionVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
-            fscoreVsRank = Array.fill(Conf.rankLevelNumber)(-1.0)
-            ret.foreach(kkvv => {
-              val kk = kkvv._2._1
-              val cost = kkvv._2._2
-              val ngram = kkvv._1
-              cnt += 1
-              val topPercent = 1.0*cnt/rankBase*100
-
-              if (ngram.isUmlsTerm(true)) {
-                cntChvAll += 1
-                if (!ngram.isTrain)cntChvTest += 1
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tchv\t")
-              }else if (ngram.isUmlsTerm(false)) {
-                cntUmls += 1
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tumls\t")
-              }else {
-                if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tother\t")
-              }
-              val rankLevel = topPercent.floor.toInt/Conf.rankGranular
-              val recall = if (ngramCntChvTest>0)1.0*cntChvTest/ngramCntChvTest else -1
-              val precision = 1.0*cntChvTest/cnt
-              val precision_umls = 1.0*cntUmls/cnt
-              val fscore = (1+Conf.fscoreBeta*Conf.fscoreBeta)*(precision*recall)/(Conf.fscoreBeta*Conf.fscoreBeta*precision+recall)
-              if(rankLevel>0 && rankLevel<=Conf.rankLevelNumber && recallVsRank(rankLevel-1)<0) {
-                recallVsRank(rankLevel - 1) = recall*100
-                precisionVsRank(rankLevel - 1) = precision*100
-                fscoreVsRank(rankLevel - 1) = fscore
-              }
-              if (Conf.showDetailRankPt>=topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t${precision_umls*100}%.2f\t")
-              if (Conf.showDetailRankPt>=topPercent)println(ngram.toStringVector())
-
-            })
-          }
-
-        }
-        val kc = (k, cost, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank)
-        println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}")
-        println(f"MAX OF recall ${recallVsRank.max}%.2f\tprecision ${precisionVsRank.max}%.2f\tfscore ${fscoreVsRank.max}%.2f")
+        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddVectorDbl,rddRankVector_all, ngramCntChvTest)
+        val kc = (k, cost, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
         kc
       }
 
-      println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
-      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f"))
+      if (Conf.bagsOfWord)
+        println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
+      else
+        println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
+      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f\t${kc._9.max}%.2f"))
+
+      if (Conf.baseLineRank) {
+        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", model, rddVectorDbl, rddRankVector_all, ngramCntChvTest)
+        val kc = ("tfAll",0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+        val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", model, rddVectorDbl, rddRankVector_all, ngramCntChvTest)
+        val kCostBase = kc :: ("cvalue",0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
+        println(s"#### result for base line: base type(tfall,cvalue), rankGranular is ${Conf.rankGranular} ####")
+        kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v => f"${v}%.2f").mkString("\t")}\t${kc._7.map(v => f"${v}%.2f").mkString("\t")}\t${kc._8.map(v => f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f\t${kc._9.max}%.2f"))
+      }
     }
 
     println("*******result is ******************")

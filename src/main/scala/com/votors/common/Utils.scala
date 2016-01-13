@@ -11,7 +11,8 @@ import java.util.{Random, Properties, Date}
  */
 object Utils extends java.io.Serializable{
   val random = new Random()
-  def log2(x:Double)=Math.log(x)/Math.log(2)
+  // log2(x+1)
+  def log2p1(x:Double)=Math.log(x+1)/Math.log(2)
   def string2Int(s: String, default: Int=0): Int = {
     try{
       s.toFloat.toInt
@@ -197,7 +198,7 @@ object Conf extends java.io.Serializable{
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
 
-  val runPredict=prop.get("runPredict").toString.toBoolean
+  val baseLineRank=prop.get("baseLineRank").toString.toBoolean
   val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
   val runRank=prop.get("runRank").toString.toBoolean
   val rankGranular=prop.get("rankGranular").toString.toInt
@@ -212,6 +213,8 @@ object Conf extends java.io.Serializable{
   val showOrgNgramOfTextRegex=prop.get("showOrgNgramOfTextRegex").toString.trim
   val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
   val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
+  val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
+  var bowTopCvalueNgram=prop.get("bowTopCvalueNgram").toString.toInt
 
 }
 
