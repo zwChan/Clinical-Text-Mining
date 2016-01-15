@@ -67,6 +67,8 @@ import com.votors.common._
 
 class Clustering (sc: SparkContext) {
   var docsNum = 0L
+  var trainNum = 0L
+//  var allNum = 0L
 
   if (Conf.dbUrl.length==0 || Conf.blogTbl.length==0 || Conf.blogIdCol.length==0 || Conf.blogTextCol.length==0) {
     trace(ERROR, "Some database config not exist.")
@@ -374,45 +376,52 @@ class Clustering (sc: SparkContext) {
     }
   }
 
+  def reviseMode(k:Int,modelOrg: KMeansModel,rddVectorDbl: RDD[Vector]): KMeansModel = {
+    // if reviseMode is not configured
+    if (!Conf.reviseModel || Conf.clusterThresholdPt <= 0) return modelOrg
+
+    val ngramCntTrain = rddVectorDbl.count
+    /**
+     * Get the cost of every point to its closest center, and rand the points by these cost.
+     * In fact, it looks like using clustering to get classification goal.
+     **/
+    val retPridict = rddVectorDbl.map(v => modelOrg.predict(v))
+    /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
+    val retPredictFiltered = retPridict.map(kk => (kk, 1L)).reduceByKey(_ + _).collect().filter(kv => {
+      val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
+      if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is excluded.")
+      filter
+    }).map(_._1)
+    // get new centers
+    val newCenter = modelOrg.clusterCenters.filter(v => {
+      retPredictFiltered.contains(modelOrg.clusterCenters.indexOf(v))
+    })
+    // update model
+    val model = new KMeansModel(newCenter)
+    return model
+  }
+
   /**
    * Rank the ngam based on a cost value. current, we have 3 types of cost:
    * 1: kmeans: the distance between a ngram and its nearest centre.
    * 2. tfAll: the inverse of the term frequency(1/tf)
    * 3: cvalue: the inverse of the cvalue(1/cvalue)
+   * @param k the original k, before the model is revised. Only for display.
    * @param rankType: based on the cost of 'kmeans', 'tfAlll', or 'cvalue'
-   * @param modelOrg: the model of kmeans
-   * @param rddVectorDbl: the double value vector
+   * @param model: the model of kmeans
    * @param rddRankVector_all:
    * @param ngramCntChvTest: the chv number in the test data
    * 
    */
-  def rank (k:Int,rankType: String, modelOrg: KMeansModel,rddVectorDbl: RDD[Vector], rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long) = {
-
-    val ngramCntTrain = rddVectorDbl.count
-
+  def rank (k:Int,rankType: String, model: KMeansModel,rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long) = {
     /**
      * Get the cost of every point to its closest center, and rand the points by these cost.
      * In fact, it looks like using clustering to get classification goal.
      **/
     val ret = if (rankType.equals("kmeans")) {
-      val retPridict = rddVectorDbl.map(v => modelOrg.predict(v))
-      /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
-      val retPredictFiltered = retPridict.map(k => (k, 1L)).reduceByKey(_ + _).collect.filter(kv => {
-        val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
-        if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is excluded.")
-        filter
-      }).map(_._1)
-      // get new centers
-      val newCenter = modelOrg.clusterCenters.filter(v => {
-        retPredictFiltered.contains(modelOrg.clusterCenters.indexOf(v))
-      })
-      // update model
-      val model = new KMeansModel(newCenter)
-
-      val bcCenters = MyKmean.broadcastMode(rddRankVector_all.context, model)
-
+      val bcCenters = sc.broadcast(model)
       /** predict the center of each point. */
-      rddRankVector_all.map(kv => (kv._1, MyKmean.computeCost(bcCenters.value, kv._2))).sortBy(_._2._2).collect
+      rddRankVector_all.map(kv => (kv._1, MyKmean.findClosest(bcCenters.value.clusterCenters, kv._2))).sortBy(_._2._2).collect
     } else if (rankType.equals("tfAll") || rankType.equals("tfall")) {
       rddRankVector_all.map(kv => (kv._1, (-1, 1.0/kv._1.tfAll))).sortBy(_._2._2).collect
     }else { //"cvalue"
@@ -472,6 +481,87 @@ class Clustering (sc: SparkContext) {
 
     (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank)
   }
+
+  /**
+   * Get the score for these K for clustering. this method do not evaluate the score as the Silhouette
+   * algorithm describing. For every point, It uses the distance from its current center comparing to the
+   * distance frome the second nearest center.
+   * It is much faster than the Silhouette algorithm.
+   * For detail, see: https://en.wikipedia.org/wiki/Silhouette_(clustering)
+   * @param model
+   * @param rddVectorDbl
+   * @return
+   */
+  def getSilhouetteScoreFast(model: KMeansModel,rddVectorDbl: RDD[Vector]): Double = {
+    val rddK = model.predict(rddVectorDbl)
+
+    val bcCenters = sc.broadcast(model)
+    /** predict the center of each point. */
+    val rddCostCenter = rddVectorDbl.map(v => MyKmean.findClosest(bcCenters.value.clusterCenters, v)._2)
+    //bcCenters.destroy()
+
+    /* To get the "neighbouring cluster(center)" of a point, we modify its center to a 'very far away point',
+    and then evaluate the least cost center again. This 'least cost' center is the neighbor center that we need.  */
+    val models4Neibhor = model.clusterCenters.map(c =>{
+      // !!We have to clone a new clusterCenters to avoid affect the old result.
+      val m = new KMeansModel(model.clusterCenters.clone())
+      m.clusterCenters(model.clusterCenters.indexOf(c)) = Vectors.dense(Array.fill(c.size)(10.0))
+      m
+    })
+
+    val bcNeighbors = sc.broadcast(models4Neibhor)
+    /** predict the new center of each point. */
+    val rddCostNeighbor = rddVectorDbl.zip(rddK).map(vk => MyKmean.findClosest(bcNeighbors.value(vk._2).clusterCenters, vk._1)._2)
+    //bcNeighbors.destroy()
+
+    rddCostCenter.zip(rddCostNeighbor).map(ab=>{
+      (ab._2-ab._1)/Math.max(ab._2,ab._1)
+    }).reduce(_+_) / this.trainNum
+  }
+
+  /**
+   * Get the score for these K for clustering. this method do exactly evaluate the score as the Silhouette
+   * algorithm describing.
+   * For detail, see: https://en.wikipedia.org/wiki/Silhouette_(clustering)
+   * @param model
+   * @param rddVectorDbl
+   * @return
+   */
+  def getSilhouetteScore(model: KMeansModel,rddVectorDbl: RDD[Vector]): Double = {
+    val startTime = System.currentTimeMillis()
+
+    // map to (k,vector, norm) for further processing. For performance consideration, we evaluate norm of the vector here.
+    val rddKVN = model.predict(rddVectorDbl).zip(rddVectorDbl).zip(rddVectorDbl.map(Vectors.norm(_, 2.0))).map(kvn => (kvn._1._1, kvn._1._2, kvn._2))
+    val rddKVector = rddKVN.groupBy(kvn => kvn._1)
+    // cartesian combintion, the order may not be preserved, that is why we have to keep the 'vector' in the result.
+    // the result (vector, k-of-vector, k-of-cluster, average-distance)
+    val rddDist = rddKVN.cartesian(rddKVector).map(kvkv => {
+      val kvVecter = kvkv._1
+      val kvCluster = kvkv._2
+      // get distance from current point to all point in some cluster. this distance could be a(i) or b(i)
+      val dist = kvCluster._2.map(kvn => MyKmean.fastSquaredDistance(kvVecter._2, kvVecter._3, kvn._2, kvn._3)).sum
+      (kvVecter._2, kvVecter._1, kvCluster._1, dist / kvCluster._2.size)
+    }).persist()
+
+    val rddA = rddDist.filter(vkkd => vkkd._2 == vkkd._3).map(vkkd => (vkkd._1, vkkd._4))
+    val rddB = rddDist.filter(vkkd => vkkd._2 != vkkd._3).map(vkkd => (vkkd._1, vkkd._4)).reduceByKey((v1, v2) => if (v1 < v2) v1 else v2)
+    rddDist.unpersist()
+
+    val numB = rddB.count()
+    val numA = rddA.count()
+    println(f"getSilhouetteScore: len(a)=${numA}, len(b)=${numB}")
+    if (numA != numB){
+      println(f"!!!! numbers of A and B is not the same!!!!")
+      return -1
+    }
+
+    val score = rddA.join(rddB).map(kdd => {
+      val ab = kdd._2
+      (ab._2 - ab._1) / Math.max(ab._2, ab._1)
+    }).reduce(_ + _) / this.trainNum
+    println(f"### getSilhouetteScore ${score}, used  time ${System.currentTimeMillis()-startTime} ###")
+    score
+  }
 }
 
 object Clustering {
@@ -501,6 +591,7 @@ object Clustering {
     val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
     val ngramCntUmls = rddNgram4Train.filter(_.isUmlsTerm(false)).count()
     val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
+    clustering.trainNum = ngramCntChv - ngramCntChvTest
 
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
     if (Conf.showOrgNgramNum>0)rddNgram4Train.filter(gram => {
@@ -519,17 +610,26 @@ object Clustering {
       val rddVectorDbl = rddVector.map(_._2).persist()
       rddVector.unpersist()
 
-      var model: KMeansModel = null
-
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
         val startTimeTmp = new Date();
-        model = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
+        val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
+        val costOrg = modelOrg.computeCost(rddVectorDbl)
+        val model = clustering.reviseMode(k,modelOrg,rddVectorDbl)
         val cost = model.computeCost(rddVectorDbl)
-        System.out.println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
-        println(s"###kcost#### $k $cost" )
+        val predictOrg = modelOrg.predict(rddVectorDbl).map((_,1L)).reduceByKey(_+_).collect()
+        val predict = model.predict(rddVectorDbl).map((_,1L)).reduceByKey(_+_).collect()
+        println(f"cluster result number of point in K: \nold:${predictOrg.mkString("\t")}, \nnew:${predict.mkString("\t")}")
+        if(Conf.showNgramInCluster>0)println(f"${modelOrg.predict(rddVectorDbl).zip(rddVectorDbl).map(kv=>(kv._1,kv._2)).groupByKey().map(kv=>(kv._1,kv._2.take(Conf.showNgramInCluster))).collect().mkString("\n")}")
+        println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
+        val clusterScore = if (Conf.clusterScore) {
+          clustering.getSilhouetteScore(model,rddVectorDbl)
+        }else{
+          0.0
+        }
+        println(s"###kcost#### $k, newK:${model.k} costOrg:$costOrg, costNew:$cost, costDelta:${cost-costOrg}}" )
 
-        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddVectorDbl,rddRankVector_all, ngramCntChvTest)
-        val kc = (k, cost, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddRankVector_all, ngramCntChvTest)
+        val kc = (k, model.k, costOrg,cost, clusterScore,ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
         kc
       }
 
@@ -537,15 +637,15 @@ object Clustering {
         println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
       else
         println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
-      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._7.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._8.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f\t${kc._9.max}%.2f"))
+      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
 
       if (Conf.baseLineRank) {
-        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", model, rddVectorDbl, rddRankVector_all, ngramCntChvTest)
-        val kc = ("tfAll",0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
-        val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", model, rddVectorDbl, rddRankVector_all, ngramCntChvTest)
-        val kCostBase = kc :: ("cvalue",0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
+        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", null, rddRankVector_all, ngramCntChvTest)
+        val kc = ("tfAll",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+        val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", null, rddRankVector_all, ngramCntChvTest)
+        val kCostBase = kc :: ("cvalue",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
         println(s"#### result for base line: base type(tfall,cvalue), rankGranular is ${Conf.rankGranular} ####")
-        kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}%.1f\t${kc._3}\t${kc._4}\t${kc._5}\t${kc._6.map(v => f"${v}%.2f").mkString("\t")}\t${kc._7.map(v => f"${v}%.2f").mkString("\t")}\t${kc._8.map(v => f"${v}%.2f").mkString("\t")}\t${kc._6.max}%.2f\t${kc._7.max}%.2f\t${kc._8.max}%.2f\t${kc._9.max}%.2f"))
+        kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.1f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
       }
     }
 

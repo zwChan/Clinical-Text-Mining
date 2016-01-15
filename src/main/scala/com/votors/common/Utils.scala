@@ -215,6 +215,9 @@ object Conf extends java.io.Serializable{
   val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
   val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
   var bowTopCvalueNgram=prop.get("bowTopCvalueNgram").toString.toInt
+  val reviseModel=prop.get("reviseModel").toString.toBoolean
+  val clusterScore=prop.get("clusterScore").toString.toBoolean
+  var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
 
 }
 

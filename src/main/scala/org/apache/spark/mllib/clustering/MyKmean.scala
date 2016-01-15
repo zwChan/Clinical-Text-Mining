@@ -18,14 +18,19 @@ import org.apache.spark.util.random.XORShiftRandom
  * Created by Jason on 2015/12/4 0004.
  */
 object MyKmean extends KMeans{
-  def broadcastMode(sc: SparkContext,model:KMeansModel) = {
-    sc.broadcast(model.clusterCenters.map(new VectorWithNorm(_)))
-  }
   def pointCost2(centers: TraversableOnce[VectorWithNorm],
                  point: VectorWithNorm) = KMeans.pointCost(centers,point)
 
-  def computeCost(centers: TraversableOnce[VectorWithNorm],p: Vector): (Int,Double) = {
-    KMeans.findClosest(centers, new VectorWithNorm(p))
+  /**
+   * Returns the index of the closest center to the given point, as well as the squared distance.
+   */
+  def findClosest(centers: TraversableOnce[Vector],p: Vector): (Int,Double) = {
+    KMeans.findClosest(clusterCentersWithNorm(centers), new VectorWithNorm(p))
   }
+  def clusterCentersWithNorm(clusterCenters: TraversableOnce[Vector]): TraversableOnce[VectorWithNorm] =
+    clusterCenters.map(new VectorWithNorm(_))
 
+  def fastSquaredDistance( v1: Vector, norm1:Double, v2: Vector, norm2:Double): Double = {
+    KMeans.fastSquaredDistance(new VectorWithNorm(v1,norm1),new VectorWithNorm(v2,norm2))
+  }
 }
