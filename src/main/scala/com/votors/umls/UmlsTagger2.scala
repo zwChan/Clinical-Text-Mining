@@ -340,6 +340,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * 2. a distance: for now it is getLevenshteinDistance.
    * 3. pos discount: if the pos is not the same, make a discount to the score directly.
    *
+   * L-dist(t,s) / len *
+   *
    * @param s
    * @param candidates
    * @param caseFactor how much you care about case(lowcase/upcase), [0,,1],,
@@ -366,7 +368,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val dist_case = StringUtils.getLevenshteinDistance(candidate, s).toFloat
         val dist_no_case = StringUtils.getLevenshteinDistance(candidate.toLowerCase, s.toLowerCase).toFloat
         val dist = (dist_case * (1 - caseFactor) + dist_no_case * caseFactor)
-        (candidate, (1.0F - (dist / maxlen)) * level)
+        (candidate, (1.0F - (1.0F*dist / maxlen)) * level)
       } else {
         ("", 0.0f)
       }

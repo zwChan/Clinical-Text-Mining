@@ -77,7 +77,7 @@ class UmlsTagger2Test   {
       val phrases = List("Lung Cancer",
         "Heart Attack",
         "Diabetes",
-        "Heart Attack and diabetes",
+        "high fat food",
         "carcinoma (small-cell) of lung",
         "asthma side effects"
       )

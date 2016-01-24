@@ -197,6 +197,9 @@ object Conf extends java.io.Serializable{
   val semanticType=prop.get("semanticType").toString.trim.split(",")
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
+  val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean
+  val normalize_standardlize=prop.get("normalize_standardlize").toString.toBoolean
+  val outputVectorOnly=prop.get("outputVectorOnly").toString.toBoolean
 
   val baseLineRank=prop.get("baseLineRank").toString.toBoolean
   val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
@@ -218,6 +221,7 @@ object Conf extends java.io.Serializable{
   val reviseModel=prop.get("reviseModel").toString.toBoolean
   val clusterScore=prop.get("clusterScore").toString.toBoolean
   var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
+  var pcaDimension=prop.get("pcaDimension").toString.toInt
 
 }
 

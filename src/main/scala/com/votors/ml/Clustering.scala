@@ -7,6 +7,7 @@ import com.votors.aqi.Train
 import com.votors.common.SqlUtils
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
@@ -54,7 +55,7 @@ import opennlp.tools.tokenize.WhitespaceTokenizer
 import opennlp.tools.util.ObjectStream
 import opennlp.tools.util.PlainTextByLineStream
 import java.sql.{Statement, Connection, DriverManager, ResultSet}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors}
 
 import org.apache.spark.mllib.clustering._
 
@@ -239,8 +240,12 @@ class Clustering (sc: SparkContext) {
    * @return
    */
   def getVectorRdd(rddNgram: RDD[Ngram], useFeatureWeight: Array[(String,Double)], useUmlsContextFeature: Boolean=false): RDD[(Ngram,Vector)] = {
-
-
+    // some configuration problem will lead to no ngram in the RDD.
+    val currNgramCnt = rddNgram.count()
+    if(currNgramCnt==0) {
+      println("getVectorRdd: werid! no ngram in the RDD, maybe some configuration is wrong.")
+      return null
+    }
 
     // get the weight for the vector !!! the order should be the same as constructing the vector !!!!
     val vectorWeight:ArrayBuffer[Double] = new ArrayBuffer[Double]()
@@ -252,9 +257,9 @@ class Clustering (sc: SparkContext) {
       if (useFeature.contains("cvalue")) vectorWeight.append(useWeight(useFeature.indexOf("cvalue"))) else vectorWeight.append(0) // c-value, applied a log function
 
       if (useFeature.contains("umls_score")) vectorWeight.append(useWeight(useFeature.indexOf("umls_score"))) else vectorWeight.append(0) // simple similarity to umls
+      if (useFeature.contains("chv_score")) vectorWeight.append(useWeight(useFeature.indexOf("chv_score"))) else vectorWeight.append(0) //simple similarity to chv
       if (useFeature.contains("contain_umls")) vectorWeight.append(useWeight(useFeature.indexOf("contain_umls"))) else vectorWeight.append(0)
       if (useFeature.contains("contain_chv")) vectorWeight.append(useWeight(useFeature.indexOf("contain_chv"))) else vectorWeight.append(0)
-      if (useFeature.contains("chv_score")) vectorWeight.append(useWeight(useFeature.indexOf("chv_score"))) else vectorWeight.append(0) //simple similarity to chv
 
       if (useFeature.contains("nn")) vectorWeight.append(useWeight(useFeature.indexOf("nn"))) else vectorWeight.append(0)
       if (useFeature.contains("an")) vectorWeight.append(useWeight(useFeature.indexOf("an"))) else vectorWeight.append(0)
@@ -299,9 +304,9 @@ class Clustering (sc: SparkContext) {
         if (useFeature.contains("cvalue")) feature.append(log2p1(gram.cvalue)) else feature.append(0) // c-value, applied a log function
 
         if (useFeature.contains("umls_score")) feature.append(gram.umlsScore._1 / 100) else feature.append(0) // simple similarity to umls
+        if (useFeature.contains("chv_score")) feature.append(gram.umlsScore._2 / 100) else feature.append(0) //simple similarity to chv
         if (useFeature.contains("contain_umls")) feature.append(bool2Double(gram.isContainInUmls)) else feature.append(0)
         if (useFeature.contains("contain_chv")) feature.append(bool2Double(gram.isContainInChv)) else feature.append(0)
-        if (useFeature.contains("chv_score")) feature.append(gram.umlsScore._2 / 100) else feature.append(0) //simple similarity to chv
 
         if (useFeature.contains("nn")) feature.append(bool2Double(gram.isPosNN)) else feature.append(0)
         if (useFeature.contains("an")) feature.append(bool2Double(gram.isPosAN)) else feature.append(0)
@@ -332,7 +337,63 @@ class Clustering (sc: SparkContext) {
       (gram,feature)
     })
     if (Conf.normalizeFeature) {
-      tmp_vecter.persist()
+      val vector = Normalize(tmp_vecter, vectorWeight)
+      vector
+    }else{
+      tmp_vecter.map(kv=>(kv._1,Vectors.dense(kv._2.toArray)))
+    }
+  }
+
+  def Normalize (vecter_input: RDD[(Ngram, ArrayBuffer[Double])], vectorWeight: ArrayBuffer[Double]) = {
+    vecter_input.persist()
+    var tmp_vecter = vecter_input
+    if (Conf.normalize_standardlize) {
+      val currNgramCnt = tmp_vecter.count()
+      // get sum
+      val sum = tmp_vecter.map(_._2).reduce((a1, a2) => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(a1.size)(0.0))
+        Range(0, a1.size).foreach(index => {
+          f(index) = a1(index) + a2(index)
+        })
+        f
+      })
+      // average
+      val avg = sum.map(_/currNgramCnt)
+      // get squard sum
+      val sumSquare = tmp_vecter.map(_._2).map(v=> {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(v.size)(0.0))
+        Range(0, v.size).foreach(index => {
+          f(index) = Math.pow(v(index) - avg(index),2)
+        })
+        f
+      }).reduce((a1, a2) => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(a1.size)(0.0))
+        Range(0, a1.size).foreach(index => {
+          f(index) = a1(index) + a2(index)
+        })
+        f
+      })
+      // standard deviation
+      val sd = sumSquare.map(v=>Math.sqrt(v/currNgramCnt))
+      println("the standard deviation of the features: " + sd.mkString("\t"))
+      // normalization to (0,1), then apply the weight of the features
+      tmp_vecter = tmp_vecter.map(kv => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(sd.size)(0.0))
+        val a = kv._2
+        Range(0, a.size).foreach(index => {
+          f(index) = if (sd(index)>0.0001) (a(index) - avg(index)) / sd(index) else a(index)
+          // apply the weight to the feature
+          //f(index) *= vectorWeight(index)
+        })
+        //(kv._1, Vectors.dense(f.toArray))
+        (kv._1, f)
+      })
+    }
+    if (Conf.normalizeFeature.equals("Rescaling")) {
       // get minimum
       val min = tmp_vecter.map(_._2).reduce((a1, a2) => {
         val f = new ArrayBuffer[Double]()
@@ -351,29 +412,32 @@ class Clustering (sc: SparkContext) {
         })
         f
       })
-      println("the maximum of the features: "+max.mkString("\t"))
+      println("the maximum of the features: " + max.mkString("\t"))
       // normalization to (0,1), then apply the weight of the features
-      val vecter = tmp_vecter.map(kv => {
+      tmp_vecter = tmp_vecter.map(kv => {
         val f = new ArrayBuffer[Double]()
         f.appendAll(Array.fill(min.size)(0.0))
         val a = kv._2
         Range(0, a.size).foreach(index => {
-          f(index) = if (max(index) != min(index))
+          f(index) = if (max(index) - min(index) > 0.0001)
             (a(index) - min(index)) / (max(index) - min(index))
           else
             a(index)
           // apply the weight to the feature
           f(index) *= vectorWeight(index)
         })
-        (kv._1, Vectors.dense(f.toArray))
+        (kv._1,f)
       })
-
-      //
-      tmp_vecter.unpersist()
-      vecter
-    }else{
-      tmp_vecter.map(kv=>(kv._1,Vectors.dense(kv._2.toArray)))
     }
+    if (tmp_vecter == vecter_input) {
+      println("you configured a invalid normalization type.")
+      null
+    }
+    //
+    val vector = tmp_vecter.map(kv=>(kv._1, Vectors.dense(kv._2.toArray)))
+
+    vecter_input.unpersist()
+    vector
   }
 
   def reviseMode(k:Int,modelOrg: KMeansModel,rddVectorDbl: RDD[Vector]): KMeansModel = {
@@ -562,6 +626,17 @@ class Clustering (sc: SparkContext) {
     println(f"### getSilhouetteScore ${score}, used  time ${System.currentTimeMillis()-startTime} ###")
     score
   }
+
+  def pca(rddVectorDbl: RDD[Vector], nDim:Int) = {
+    val mat = new RowMatrix(rddVectorDbl)
+    // Compute the top 10 principal components.
+    val pc: Matrix = mat.computePrincipalComponents(nDim) // Principal components are stored in a local dense matrix.
+
+    // Project the rows to the linear space spanned by the top 10 principal components.
+    val projected: RowMatrix = mat.multiply(pc)
+    println(projected.rows.collect().foreach(v=>println(v.toArray.mkString(" "))))
+  }
+
 }
 
 object Clustering {
@@ -598,18 +673,30 @@ object Clustering {
       Conf.showOrgNgramOfN.contains(gram.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(gram.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(gram.text).matches()
     }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(gram => println(f"${gram.toStringVector()}"))
 
+    val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train,Conf.useUmlsContextFeature).persist()
+    // if (!Conf.trainOnlyChv&&Conf.testSample<=0), there is no test ngram for rank.
+    val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test, Conf.useUmlsContextFeature).persist()
+    rddNgram4Train.unpersist()
+
+    if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
+      Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
+    }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
+
+    val rddVectorDbl = rddVector.map(_._2).persist()
+    rddVector.unpersist()
+
+    if (Conf.outputVectorOnly) {
+      rddVectorDbl.collect().foreach(v =>{
+        println(v.toArray.mkString(" "))
+      })
+      return
+    }
+    if (Conf.pcaDimension>0) {
+      clustering.pca(rddVectorDbl, Conf.pcaDimension)
+      return
+    }
+
     if (Conf.runKmeans) {
-      val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train,Conf.useUmlsContextFeature).persist()
-      val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test, Conf.useUmlsContextFeature).persist()
-      rddNgram4Train.unpersist()
-
-      if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
-        Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
-      }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
-
-      val rddVectorDbl = rddVector.map(_._2).persist()
-      rddVector.unpersist()
-
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
         val startTimeTmp = new Date();
         val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
