@@ -70,6 +70,7 @@ class Clustering (sc: SparkContext) {
   var docsNum = 0L
   var trainNum = 0L
 //  var allNum = 0L
+  val columnName = new ArrayBuffer[String]()
 
   if (Conf.dbUrl.length==0 || Conf.blogTbl.length==0 || Conf.blogIdCol.length==0 || Conf.blogTextCol.length==0) {
     trace(ERROR, "Some database config not exist.")
@@ -252,37 +253,64 @@ class Clustering (sc: SparkContext) {
     val useFeature = useFeatureWeight.map(_._1)
     val useWeight = useFeatureWeight.map(_._2)
     val gram = rddNgram.take(1)(0)
+    columnName.clear()
     if (!Conf.bagsOfWord) {
       if (useFeature.contains("tfdf")) vectorWeight.append(useWeight(useFeature.indexOf("tfdf"))) else vectorWeight.append(0) // tfdf
+      columnName.append("tfdf")
       if (useFeature.contains("cvalue")) vectorWeight.append(useWeight(useFeature.indexOf("cvalue"))) else vectorWeight.append(0) // c-value, applied a log function
-
+      columnName.append("cvalue")
       if (useFeature.contains("umls_score")) vectorWeight.append(useWeight(useFeature.indexOf("umls_score"))) else vectorWeight.append(0) // simple similarity to umls
+      columnName.append("umls_score")
       if (useFeature.contains("chv_score")) vectorWeight.append(useWeight(useFeature.indexOf("chv_score"))) else vectorWeight.append(0) //simple similarity to chv
+      columnName.append("chv_score")
       if (useFeature.contains("contain_umls")) vectorWeight.append(useWeight(useFeature.indexOf("contain_umls"))) else vectorWeight.append(0)
+      columnName.append("contain_umls")
       if (useFeature.contains("contain_chv")) vectorWeight.append(useWeight(useFeature.indexOf("contain_chv"))) else vectorWeight.append(0)
+      columnName.append("contain_chv")
 
       if (useFeature.contains("nn")) vectorWeight.append(useWeight(useFeature.indexOf("nn"))) else vectorWeight.append(0)
+      columnName.append("nn")
       if (useFeature.contains("an")) vectorWeight.append(useWeight(useFeature.indexOf("an"))) else vectorWeight.append(0)
+      columnName.append("an")
       if (useFeature.contains("pn")) vectorWeight.append(useWeight(useFeature.indexOf("pn"))) else vectorWeight.append(0)
+      columnName.append("pn")
       if (useFeature.contains("anpn")) vectorWeight.append(useWeight(useFeature.indexOf("anpn"))) else vectorWeight.append(0)
+      columnName.append("anpn")
 
       if (useFeature.contains("stys")) vectorWeight.appendAll(gram.stys.map(_ => useWeight(useFeature.indexOf("stys")))) else vectorWeight.appendAll(gram.stys.map(_ => 0.0))
-      if (useFeature.contains("win_pos")) vectorWeight.appendAll(gram.context.win_pos.map(p => useWeight(useFeature.indexOf("win_pos")))) else vectorWeight.appendAll(gram.stys.map(_ => 0.0))
+      columnName.appendAll(gram.stys.map(_=>"stys"))
+      if (useFeature.contains("win_pos")) vectorWeight.appendAll(gram.context.win_pos.map(p => useWeight(useFeature.indexOf("win_pos")))) else vectorWeight.appendAll(gram.context.win_pos.map(_ => 0.0))
+      columnName.appendAll(gram.context.win_pos.map(_=>"win_pos"))
 
       if (useFeature.contains("capt_first")) vectorWeight.append(useWeight(useFeature.indexOf("capt_first"))) else vectorWeight.append(0)
+      columnName.append("capt_first")
       if (useFeature.contains("capt_all")) vectorWeight.append(useWeight(useFeature.indexOf("capt_all"))) else vectorWeight.append(0)
+      columnName.append("capt_all")
       if (useFeature.contains("capt_term")) vectorWeight.append(useWeight(useFeature.indexOf("capt_term"))) else vectorWeight.append(0)
+      columnName.append("capt_term")
 
-      if (useFeature.contains("win_umls")) vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-      if (useFeature.contains("win_chv")) vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-      if (useFeature.contains("sent_umls")) vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-      if (useFeature.contains("sent_chv")) vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-      if (useFeature.contains("umls_dist")) vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
-      if (useFeature.contains("chv_dist")) vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else if (useUmlsContextFeature) vectorWeight.append(0)
+      if (useFeature.contains("win_umls")) vectorWeight.append(useWeight(useFeature.indexOf("win_umls"))) else vectorWeight.append(0)
+      columnName.append("win_umls")
+      if (useFeature.contains("win_chv")) vectorWeight.append(useWeight(useFeature.indexOf("win_chv"))) else vectorWeight.append(0)
+      columnName.append("win_chv")
+      if (useFeature.contains("sent_umls")) vectorWeight.append(useWeight(useFeature.indexOf("sent_umls"))) else vectorWeight.append(0)
+      columnName.append("sent_umls")
+      if (useFeature.contains("sent_chv")) vectorWeight.append(useWeight(useFeature.indexOf("sent_chv"))) else vectorWeight.append(0)
+      columnName.append("sent_chv")
+      if (useFeature.contains("umls_dist")) vectorWeight.append(useWeight(useFeature.indexOf("umls_dist"))) else vectorWeight.append(0)
+      columnName.append("umls_dist")
+      if (useFeature.contains("chv_dist")) vectorWeight.append(useWeight(useFeature.indexOf("chv_dist"))) else vectorWeight.append(0)
+      columnName.append("chv_dist")
 
-      if (useFeature.contains("prefix")) vectorWeight.appendAll(Nlp.prefixs.map(_ => useWeight(useFeature.indexOf("prefix"))))
-      if (useFeature.contains("suffix")) vectorWeight.appendAll(Nlp.suffixs.map(_ => useWeight(useFeature.indexOf("suffix"))))
-      println(s"size weight ${vectorWeight.size}")
+      if (useFeature.contains("prefix")) {
+        vectorWeight.appendAll(Nlp.prefixs.map(_ => useWeight(useFeature.indexOf("prefix"))))
+        columnName.appendAll(Nlp.prefixs.map(_=>"prefix"))
+      }
+      if (useFeature.contains("suffix")) {
+        vectorWeight.appendAll(Nlp.suffixs.map(_ => useWeight(useFeature.indexOf("suffix"))))
+        columnName.appendAll(Nlp.suffixs.map(_=>"suffix"))
+      }
+      println(s"*** size weight ${vectorWeight.size} ***")
     } else {
       if (gram.context.wordsInbags == null) {
         println("You configured bagsOfWords enable, but there is no bagsOfWords info in ngram.")
@@ -293,8 +321,9 @@ class Clustering (sc: SparkContext) {
         Conf.bowTopCvalueNgram = gram.context.wordsInbags.size
       }
       vectorWeight.appendAll(gram.context.wordsInbags.map(_=>1.0).take(Conf.bowTopCvalueNgram))
+      columnName.appendAll(gram.context.wordsInbags.map(_=>"bow"))
     }
-    println(s"* the weight for the feature vecotr is ${vectorWeight.mkString(",")} *")
+    println(s"* the weight for the feature vecotr is \n${columnName.zip(vectorWeight).mkString(",")} *")
     //println(Nlp.wordsInbags.mkString("\t"))
 
     val tmp_vecter = rddNgram.map(gram => {
@@ -320,15 +349,15 @@ class Clustering (sc: SparkContext) {
         if (useFeature.contains("capt_all")) feature.append(log2p1(1.0*gram.capt_all / gram.tfAll)) else feature.append(0)
         if (useFeature.contains("capt_term")) feature.append(log2p1(1.0*gram.capt_term / gram.tfAll)) else feature.append(0)
 
-        if (useFeature.contains("win_umls")) feature.append(log2p1(gram.context.win_umlsCnt)) else if (useUmlsContextFeature) feature.append(0)
-        if (useFeature.contains("win_chv")) feature.append(log2p1(gram.context.win_chvCnt)) else if (useUmlsContextFeature) feature.append(0)
-        if (useFeature.contains("sent_umls")) feature.append(log2p1(gram.context.sent_umlsCnt)) else if (useUmlsContextFeature) feature.append(0)
-        if (useFeature.contains("sent_chv")) feature.append(log2p1(gram.context.sent_chvCnt)) else if (useUmlsContextFeature) feature.append(0)
-        if (useFeature.contains("umls_dist")) feature.append(log2p1(gram.context.umlsDist)) else if (useUmlsContextFeature) feature.append(0)
-        if (useFeature.contains("chv_dist")) feature.append(log2p1(gram.context.chvDist)) else if (useUmlsContextFeature) feature.append(0)
+        if (useFeature.contains("win_umls")) feature.append(log2p1(gram.context.win_umlsCnt)) else feature.append(0)
+        if (useFeature.contains("win_chv")) feature.append(log2p1(gram.context.win_chvCnt))  else feature.append(0)
+        if (useFeature.contains("sent_umls")) feature.append(log2p1(gram.context.sent_umlsCnt))  else feature.append(0)
+        if (useFeature.contains("sent_chv")) feature.append(log2p1(gram.context.sent_chvCnt))  else feature.append(0)
+        if (useFeature.contains("umls_dist")) feature.append(log2p1(gram.context.umlsDist))  else feature.append(0)
+        if (useFeature.contains("chv_dist")) feature.append(log2p1(gram.context.chvDist))  else feature.append(0)
 
-        if (useFeature.contains("prefix")) feature.appendAll(gram.context.win_prefix.map(p => log2p1(1.0*p / gram.tfAll)))
-        if (useFeature.contains("suffix")) feature.appendAll(gram.context.win_suffix.map(p => log2p1(1.0*p / gram.tfAll)))
+        if (useFeature.contains("prefix")) feature.appendAll(gram.context.win_prefix.map(p => if(p>0) 1.0 else 0))
+        if (useFeature.contains("suffix")) feature.appendAll(gram.context.win_suffix.map(p => if(p>0) 1.0 else 0))
         //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
 
       }else{
@@ -347,7 +376,7 @@ class Clustering (sc: SparkContext) {
   def Normalize (vecter_input: RDD[(Ngram, ArrayBuffer[Double])], vectorWeight: ArrayBuffer[Double]) = {
     vecter_input.persist()
     var tmp_vecter = vecter_input
-    if (Conf.normalize_standardlize) {
+    if (Conf.normalize_standardize) {
       val currNgramCnt = tmp_vecter.count()
       // get sum
       val sum = tmp_vecter.map(_._2).reduce((a1, a2) => {
@@ -393,7 +422,7 @@ class Clustering (sc: SparkContext) {
         (kv._1, f)
       })
     }
-    if (Conf.normalizeFeature.equals("Rescaling")) {
+    if (Conf.normalize_rescale) {
       // get minimum
       val min = tmp_vecter.map(_._2).reduce((a1, a2) => {
         val f = new ArrayBuffer[Double]()
@@ -641,6 +670,13 @@ class Clustering (sc: SparkContext) {
 
 object Clustering {
   def main (args: Array[String]): Unit = {
+    Range(1,Conf.sampleRuns+1).foreach(i =>{
+      println(s"## iteration ${i} ##")
+      main_do(null)
+    })
+
+  }
+  def main_do (args: Array[String]): Unit = {
     // init spark
     val startTime = new Date()
     val conf = new SparkConf()
@@ -673,9 +709,9 @@ object Clustering {
       Conf.showOrgNgramOfN.contains(gram.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(gram.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(gram.text).matches()
     }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(gram => println(f"${gram.toStringVector()}"))
 
-    val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train,Conf.useUmlsContextFeature).persist()
+    val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train).persist()
     // if (!Conf.trainOnlyChv&&Conf.testSample<=0), there is no test ngram for rank.
-    val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test, Conf.useUmlsContextFeature).persist()
+    val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test).persist()
     rddNgram4Train.unpersist()
 
     if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
@@ -685,15 +721,18 @@ object Clustering {
     val rddVectorDbl = rddVector.map(_._2).persist()
     rddVector.unpersist()
 
+    //print the name of the features in vetors
+    println("The feature name is:\n" + clustering.columnName.zipWithIndex.map(kv=>s"${kv._1}-${kv._2+1}").mkString("\t"))
+
     if (Conf.outputVectorOnly) {
       rddVectorDbl.collect().foreach(v =>{
         println(v.toArray.mkString(" "))
       })
-      return
+      sys.exit(0)
     }
     if (Conf.pcaDimension>0) {
       clustering.pca(rddVectorDbl, Conf.pcaDimension)
-      return
+      sys.exit(0)
     }
 
     if (Conf.runKmeans) {
@@ -736,6 +775,7 @@ object Clustering {
       }
     }
 
+    sc.stop()
     println("*******result is ******************")
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
   }

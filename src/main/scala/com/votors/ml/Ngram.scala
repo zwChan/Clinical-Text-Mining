@@ -149,6 +149,7 @@ class Ngram (var text: String) extends java.io.Serializable{
     this.isPosANPN = other.isPosANPN
 
     this.stys = other.stys
+    if(other.textOrg.length>0)this.textOrg=other.textOrg
 
     if (Conf.bagsOfWord)this.context.wordsInbags = Array.fill(Nlp.wordsInbags.size)(0)
   }
@@ -216,9 +217,11 @@ class Ngram (var text: String) extends java.io.Serializable{
 
 
   def procTfdf(docNum: Long): Ngram = {
-    this.tfdf = log2p1((log2p1(1.0*tfAll/Math.sqrt(docNum)) * df))  // supress the affect of tfAll
-    // gram.tfidf = Math.log(1+gram.tfAll/gram.hBlogId.size) * Math.log(1+docNum/gram.hBlogId.size)
-    //gram.tfdf = Math.sqrt(gram.tfdf)
+    if (Conf.tfdfLessLog) {
+      this.tfdf = log2p1((1.0 * tfAll / Math.sqrt(docNum)) * df) // supress the affect of tfAll
+    }else{
+      this.tfdf = log2p1((log2p1(1.0 * tfAll / Math.sqrt(docNum)) * df)) // supress the affect of tfAll
+    }
     this
   }
 

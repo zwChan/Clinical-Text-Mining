@@ -193,12 +193,12 @@ object Conf extends java.io.Serializable{
     val afw = fw.split(":").filter(_.trim.length>0)
     (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
   })
-  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
+//  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
   val semanticType=prop.get("semanticType").toString.trim.split(",")
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
   val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean
-  val normalize_standardlize=prop.get("normalize_standardlize").toString.toBoolean
+  val normalize_standardize=prop.get("normalize_standardize").toString.toBoolean
   val outputVectorOnly=prop.get("outputVectorOnly").toString.toBoolean
 
   val baseLineRank=prop.get("baseLineRank").toString.toBoolean
@@ -217,11 +217,13 @@ object Conf extends java.io.Serializable{
   val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
   val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
   val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
+  val tfdfLessLog=prop.get("tfdfLessLog").toString.toBoolean
   var bowTopCvalueNgram=prop.get("bowTopCvalueNgram").toString.toInt
   val reviseModel=prop.get("reviseModel").toString.toBoolean
   val clusterScore=prop.get("clusterScore").toString.toBoolean
   var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
   var pcaDimension=prop.get("pcaDimension").toString.toInt
+  val sampleRuns=prop.get("sampleRuns").toString.toInt
 
 }
 
