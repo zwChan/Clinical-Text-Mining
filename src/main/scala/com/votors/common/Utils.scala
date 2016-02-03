@@ -224,6 +224,7 @@ object Conf extends java.io.Serializable{
   var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
   var pcaDimension=prop.get("pcaDimension").toString.toInt
   val sampleRuns=prop.get("sampleRuns").toString.toInt
+  val showSentence=prop.get("showSentence").toString.toBoolean
 
 }
 
