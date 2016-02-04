@@ -145,7 +145,7 @@ class Clustering (sc: SparkContext) {
       val rddSent = this.getSentRdd(rddText).persist()
       val docNumber = this.docsNum
       val rddNgram = this.getNgramRdd(rddSent, Conf.partitionTfFilter)
-        .map(gram => (gram.text, gram))
+        .map(gram => (gram.key, gram))
         .reduceByKey(_ + _)
         //.sortByKey()
         .map(_._2)
@@ -159,19 +159,19 @@ class Clustering (sc: SparkContext) {
 
       val firstStageRet = new mutable.HashMap[String, Ngram]()
       if (Conf.topTfNgram > 0)
-        firstStageRet ++= rddNgram.sortBy(_.tfAll * -1).take(Conf.topTfNgram).map(gram => (gram.text, gram))
+        firstStageRet ++= rddNgram.sortBy(_.tfAll * -1).take(Conf.topTfNgram).map(gram => (gram.key, gram))
       else if (Conf.topTfdfNgram > 0)
-        firstStageRet ++= rddNgram.sortBy(_.tfdf * -1).take(Conf.topTfdfNgram).map(gram => (gram.text, gram))
+        firstStageRet ++= rddNgram.sortBy(_.tfdf * -1).take(Conf.topTfdfNgram).map(gram => (gram.key, gram))
       else if (Conf.topCvalueNgram > 0)
-        firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram => (gram.text, gram))
+        firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram => (gram.key, gram))
       else
-        firstStageRet ++= rddNgram.collect().map(gram => (gram.text, gram))
+        firstStageRet ++= rddNgram.collect().map(gram => (gram.key, gram))
 
       //firstStageRet.foreach(println)
       val firstStageNgram = sc.broadcast(firstStageRet)
 
       val rddNgram2 = this.getNgramRdd(rddSent, 0, firstStageNgram)
-        .map(gram => (gram.text, gram))
+        .map(gram => (gram.key, gram))
         .reduceByKey(_ + _)
         //.sortByKey()
         .map(_._2)
@@ -716,7 +716,7 @@ object Clustering {
 
     if (Conf.showOrgNgramNum>0)rddVector.filter(kv => {
       Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
-    }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(v => println(f"${v._1.text}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
+    }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(v => println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
 
     val rddVectorDbl = rddVector.map(_._2).persist()
     rddVector.unpersist()

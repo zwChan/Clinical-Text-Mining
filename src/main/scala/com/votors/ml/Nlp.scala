@@ -285,9 +285,10 @@ object Nlp {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
+                val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
                   // check if the gram is valid. e.g. stop words
-                  val gram = Ngram.getNgram(gram_text, hNgrams)
+                  val gram = Ngram.getNgram(key,gram_text, hNgrams)
                   // some info have to update when the gram created
                   if (gram.id < 0) {
                     gram.id = gramId.getAndAdd(1)
@@ -347,10 +348,11 @@ object Nlp {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
-                val pre_gram = hPreNgram.getOrElse(gram_text,null)
+                val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
+                val pre_gram = hPreNgram.getOrElse(key,null)
                 if ( (sent.tokens(pos + n).length > 0 && pre_gram != null) ) {
                   //in stage 2, we can directly use result of stage 1
-                  val gram = Ngram.getNgram(gram_text, hNgrams)
+                  val gram = Ngram.getNgram(key,gram_text, hNgrams)
                   // some info have to update when the gram created
                   if (gram.id < 0) {
                     gram.id = gramId.getAndAdd(1)
@@ -404,8 +406,8 @@ object Nlp {
 
         // update bags of words counter by sentence
         if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
-          val index = Nlp.wordsInbags.get(wPreGram.text).getOrElse(-1)
-          traceFilter(INFO, cGram.text, s"${cGram.text} found ${wPreGram.text},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v=>(v._1,v._2.text)).mkString(",")}")
+          val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse(-1)
+          traceFilter(INFO, cGram.text, s"${cGram.key} found ${wPreGram.key},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v=>(v._1,v._2.key)).mkString(",")}")
           if (index>=0){
             cGram.context.wordsInbags(index) += 1
           }
@@ -414,11 +416,11 @@ object Nlp {
         // update the nearest umls term, exclude the term that is nested by cGram
         if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
           if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
-            traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.text}, ${wPreGram.text}")
+            traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.key}, ${wPreGram.key}")
             nearestUmls = Math.abs(c._1 - w._1)
           }
           if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
-            traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
+            traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.key}, ${wPreGram.key}")
             nearestChv = Math.abs(c._1 - w._1)
           }
         }

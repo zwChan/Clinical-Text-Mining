@@ -100,7 +100,7 @@ class Ngram (var text: String) extends java.io.Serializable{
 
   /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
-  def key = s"${text}_${posString}"
+  def key = Ngram.getKey(text,posString)
 
   def + (other: Ngram) = merge(other)
   def merge (other: Ngram): Ngram = {
@@ -140,7 +140,7 @@ class Ngram (var text: String) extends java.io.Serializable{
 
     newNgram.sent = this.sent
 
-    traceFilter(INFO,this.text,s"Merge!! ${this.text} ${other.text} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll}")
+    traceFilter(INFO,this.text,s"Merge!! ${this.key} ${other.key} ${this.id} ${other.id} tfall ${this.tfAll}, ${other.tfAll}")
     newNgram
   }
 
@@ -206,7 +206,7 @@ class Ngram (var text: String) extends java.io.Serializable{
     3. ((Adj|Noun)+|((Adj|Noun)?(NounPrep)?)(Adj|Noun)?)Noun, named ANAN
       */
     this.posString = gramPos.mkString("")
-    traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is ${posString}")
+    traceFilter(INFO, this.text, s"${this.key} 's Pos string for pattern match is ${posString}")
     if (posString.matches(".*N.*N.*")) {
       this.isPosNN = true
     }
@@ -219,7 +219,7 @@ class Ngram (var text: String) extends java.io.Serializable{
     if (posString.matches("((A|N)+|((A|N)*(NP)?)(A|N)*)N")) {
       this.isPosANPN = true
     }
-    traceFilter(INFO, this.text, s"${this.text} 's Pos string for pattern match is NN=${isPosNN},AN=${isPosAN},PN=${isPosPN},ANPN=${isPosANPN},")
+    traceFilter(INFO, this.text, s"${this.key} 's Pos string for pattern match is NN=${isPosNN},AN=${isPosAN},PN=${isPosPN},ANPN=${isPosANPN},")
   }
 
 
@@ -280,13 +280,13 @@ class Ngram (var text: String) extends java.io.Serializable{
     toString(if (text.matches(Trace.filter)) true else false)
   }
   def toString(detail: Boolean): String = {
-    f"[${n}]${text}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${umlsScore._3},${umlsScore._4},${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}),contex:${this.context}" +
+    f"[${n}]${key}%-15s|tfdf(${tfdf}%.2f,${tfAll}%2d,${df}%2d),cvalue(${cvalue}%.2f,${nestedTf}%2d),umls(${umlsScore._1}%.2f,${umlsScore._2}%.2f,${umlsScore._3},${umlsScore._4},${bool2Str(isContainInUmls)},${bool2Str(isContainInChv)}),contex:${this.context}" +
      f"pt:(${posString}:${bool2Str(isPosNN)},${bool2Str(isPosAN)},${isPosPN}${bool2Str(isPosANPN)}),train:${isTrain},capt:(${capt_first},${capt_term},${capt_all}),stys:${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}, "+
     s"textOrg:${textOrg},sent:${if(Conf.showSentence)sent.mkString(" ") else "" }" +
       {if (detail && hBlogId!=null) f"blogs:${hBlogId.size}:${hBlogId.mkString(",")}" else ""}
   }
   def toStringVector(): String = {
-    f"${text}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${umlsScore._3}\t${umlsScore._4}\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
+    f"${key}\t${bool2Str(isTrain)}\t${n}\t${tfdf}%.2f\t${tfAll}\t${df}\t${cvalue}%.2f\t${nestedTf}\t${umlsScore._1}%.0f\t${umlsScore._2}%.0f\t${umlsScore._3}\t${umlsScore._4}\t${bool2Str(isContainInUmls)}\t${bool2Str(isContainInChv)}\t${this.context.toStringVector()}" +
       s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}\t${isTrain}\t${capt_first}\t${capt_term}\t${capt_all}\t${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}\t"+
     f"${textOrg}\t${if(Conf.showSentence)sent.mkString(" ") else "" }"
   }
@@ -429,12 +429,12 @@ object Ngram {
    * @param gram
    * @return
    */
-  def getNgram (gram: String, hNgrams: mutable.LinkedHashMap[String,Ngram]): Ngram = {
-    hNgrams.getOrElseUpdate(gram, {
+  def getNgram (key:String, gram: String, hNgrams: mutable.LinkedHashMap[String,Ngram]): Ngram = {
+    hNgrams.getOrElseUpdate(key, {
       new Ngram(gram)
     })
   }
-
+  def getKey(text:String,posString:String) = s"${text} (${posString})"
   /**
    * gram is sentence.tokens[start, end)
    * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html

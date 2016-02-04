@@ -17,14 +17,15 @@ import scala.io.Codec
  */
 
 
-case class CTRow(val tid: String, criteriaType:String, sentence:String){
+case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var numericalType:String=""){
+  var hitNumType = false
   override def toString(): String = {
-    val str = f""""${tid.trim}","${criteriaType.trim}","${sentence.trim}"\n"""
+    val str = f""""${tid.trim}","${criteriaType.trim}","${sentence.trim.replaceAll("\\\"","'")}","${numericalType}","${if(hitNumType)'Y' else 'N'}"\n"""
     trace(INFO, "Get CTRow parsing result: " + str)
     str
   }
   def getTitle(): String = {
-    f""""tid","type","sentence"""" + "\n"
+    f""""tid","type","sentence","Numerical type"""" + "\n"
   }
 }
 
@@ -33,7 +34,7 @@ case class CTRow(val tid: String, criteriaType:String, sentence:String){
 
 
 
-class AnalyzeCT(csvFile: String, outputFile:String) {
+class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
   val STAG_HEAD=0;
   val STAG_INCLUDE=1
   val STAG_EXCLUDE=2
@@ -46,6 +47,31 @@ class AnalyzeCT(csvFile: String, outputFile:String) {
   val TYPE_INCLUDE_HEAD = "Include head"
   val TYPE_EXCLUDE_HEAD = "Exclude head"
   val TYPE_BOTH_HEAD = "Both head"
+
+  val numericReg = new ArrayBuffer[(String,String)]()
+  val in = new FileReader(numVarFile)
+  val records = CSVFormat.DEFAULT
+    //.withDelimiter(' ')
+    .parse(in)
+    .iterator()
+    .filter(_.size()>=2)
+    .foreach(r => {
+      r.size()
+      val name = r.get(0)
+      val reg = r.get(1).toLowerCase()
+      // Note: you can not use 'word boundary' to reg that with operation character beginning or ending
+      val reg2 =
+        if (name.contains("(op)")) {
+          ".*(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ").*"
+        }else{
+          ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
+        }
+      println(s"${name}\t${reg2}")
+    numericReg.append((name,reg2))
+  })
+
+
+
 
   def analyzeFile(): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
@@ -94,7 +120,7 @@ class AnalyzeCT(csvFile: String, outputFile:String) {
               }
             }
           }
-        writer.print(ctRow)
+        detectQuantity(ctRow,writer)
       })
 
     })
@@ -104,14 +130,61 @@ class AnalyzeCT(csvFile: String, outputFile:String) {
 
   }
 
+  def detectQuantity(ctRow: CTRow, writer:PrintWriter) = {
+    //replace all table,  reduce to only one space between words
+    ctRow.sentence = ctRow.sentence.replaceAll("\\s+"," ")
+    numericReg.foreach(reg=>{
+      if(ctRow.numericalType.size ==0 && ctRow.sentence.toLowerCase.matches(reg._2)){
+        println("********" + reg._1)
+        ctRow.numericalType = reg._1
+        ctRow.hitNumType = true
+        writer.print(ctRow)
+      }else{
+        //ctRow.numericalType = reg._1
+        //ctRow.hitNumType = false
+      }
+    })
+    if (ctRow.numericalType.size==0) {
+      ctRow.numericalType="None"
+      ctRow.hitNumType=false
+      writer.print(ctRow)
+    }
+
+  }
+
+  def detectQuantity2(sentence:String) = {
+    //replace all table,  reduce to only one space between words
+    val ctRow = CTRow("test","",sentence,"")
+    numericReg.foreach(reg=>{
+      if(ctRow.sentence.toLowerCase.matches(".*"+reg._2+".*")){
+        println("********" + reg._1)
+        ctRow.numericalType += {if (ctRow.numericalType.size==0) "" else "|"} + reg._1
+      }
+    })
+    if (ctRow.numericalType.size==0) {
+      ctRow.numericalType="None"
+      false
+    }else{
+      true
+    }
+
+  }
 
 }
 
 object AnalyzeCT {
 
-  def main(avgs: Array[String]): Unit = {
-    val ct = new AnalyzeCT("C:\\fsu\\ra\\data\\201601\\criteria_dementia_studies.csv", "C:\\fsu\\ra\\data\\201601\\criteria_dementia_studies_ret.csv")
+  def doAnaly(f: String): Unit = {
+    val ct = new AnalyzeCT(s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}.csv",
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}_ret.csv",
+      "C:\\fsu\\ra\\data\\201601\\split_criteria\\numeric_variables.csv")
     ct.analyzeFile()
-
+  }
+  def main(avgs: Array[String]): Unit = {
+    doAnaly("Obesity_05_14_random300")
+    doAnaly("Congective_Heart_Failure_05_14_all233")
+    doAnaly("Dementia_05_14_all197")
+    doAnaly("Hypertension_05_14_random300")
+    doAnaly("T2DM_05_14_random300")
   }
 }
