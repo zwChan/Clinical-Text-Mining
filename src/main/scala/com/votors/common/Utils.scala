@@ -183,6 +183,7 @@ object Conf extends java.io.Serializable{
   val maxIterations=prop.get("maxIterations").toString.toInt
   val runs=prop.get("runs").toString.toInt
   val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
+  val clusterThresholdLimit=prop.get("clusterThresholdLimit").toString.toInt
   val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
   val testSample=prop.get("testSample").toString.toInt
   val useFeatures4Train=prop.get("useFeatures4Train").toString.trim.split(",").map(fw=>{
@@ -199,6 +200,7 @@ object Conf extends java.io.Serializable{
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
   val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean
   val normalize_standardize=prop.get("normalize_standardize").toString.toBoolean
+  val normalize_outlier_factor=prop.get("normalize_outlier_factor").toString.toDouble
   val outputVectorOnly=prop.get("outputVectorOnly").toString.toBoolean
 
   val baseLineRank=prop.get("baseLineRank").toString.toBoolean
@@ -217,8 +219,9 @@ object Conf extends java.io.Serializable{
   val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
   val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
   val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
+  val bagsOfWordFilter=prop.get("bagsOfWordFilter").toString.toBoolean
   val tfdfLessLog=prop.get("tfdfLessLog").toString.toBoolean
-  var bowTopCvalueNgram=prop.get("bowTopCvalueNgram").toString.toInt
+  var bowTopNgram=prop.get("bowTopNgram").toString.toInt
   val reviseModel=prop.get("reviseModel").toString.toBoolean
   val clusterScore=prop.get("clusterScore").toString.toBoolean
   var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt

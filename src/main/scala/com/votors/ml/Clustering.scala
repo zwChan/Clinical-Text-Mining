@@ -200,7 +200,7 @@ class Clustering (sc: SparkContext) {
 
     }else {
       println(s"start load ngram from file:")
-      var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile)
+      var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(!_.text.matches(Conf.stopwordRegex))
      /* Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", ngrams.map(g=>{
         g.context.wordsInbags=null;
         g
@@ -257,6 +257,10 @@ class Clustering (sc: SparkContext) {
     if (!Conf.bagsOfWord) {
       if (useFeature.contains("tfdf")) vectorWeight.append(useWeight(useFeature.indexOf("tfdf"))) else vectorWeight.append(0) // tfdf
       columnName.append("tfdf")
+      if (useFeature.contains("tf")) vectorWeight.append(useWeight(useFeature.indexOf("tf"))) else vectorWeight.append(0) // tfdf
+      columnName.append("tf")
+      if (useFeature.contains("df")) vectorWeight.append(useWeight(useFeature.indexOf("df"))) else vectorWeight.append(0) // tfdf
+      columnName.append("df")
       if (useFeature.contains("cvalue")) vectorWeight.append(useWeight(useFeature.indexOf("cvalue"))) else vectorWeight.append(0) // c-value, applied a log function
       columnName.append("cvalue")
       if (useFeature.contains("umls_score")) vectorWeight.append(useWeight(useFeature.indexOf("umls_score"))) else vectorWeight.append(0) // simple similarity to umls
@@ -316,11 +320,11 @@ class Clustering (sc: SparkContext) {
         println("You configured bagsOfWords enable, but there is no bagsOfWords info in ngram.")
         sys.exit(1)
       };
-      if (Conf.bowTopCvalueNgram>gram.context.wordsInbags.size) {
-        println(s"Warning: You specify Conf.bowTopCvalueNgram=${Conf.bowTopCvalueNgram}, but only ${gram.context.wordsInbags.size} available")
-        Conf.bowTopCvalueNgram = gram.context.wordsInbags.size
+      if (Conf.bowTopNgram>gram.context.wordsInbags.size) {
+        println(s"Warning: You specify Conf.bowTopCvalueNgram=${Conf.bowTopNgram}, but only ${gram.context.wordsInbags.size} available")
+        Conf.bowTopNgram = gram.context.wordsInbags.size
       }
-      vectorWeight.appendAll(gram.context.wordsInbags.map(_=>1.0).take(Conf.bowTopCvalueNgram))
+      vectorWeight.appendAll(gram.context.wordsInbags.map(_=>1.0).take(Conf.bowTopNgram))
       columnName.appendAll(gram.context.wordsInbags.map(_=>"bow"))
     }
     println(s"* the weight for the feature vecotr is \n${columnName.zip(vectorWeight).mkString(",")} *")
@@ -330,6 +334,8 @@ class Clustering (sc: SparkContext) {
       val feature = new ArrayBuffer[Double]()
       if (!Conf.bagsOfWord) {
         if (useFeature.contains("tfdf")) feature.append(gram.tfdf) else feature.append(0) // tfdf
+        if (useFeature.contains("tf")) feature.append(log2p1(gram.tfAll)) else feature.append(0) // tfdf
+        if (useFeature.contains("df")) feature.append(log2p1(gram.df)) else feature.append(0) // tfdf
         if (useFeature.contains("cvalue")) feature.append(log2p1(gram.cvalue)) else feature.append(0) // c-value, applied a log function
 
         if (useFeature.contains("umls_score")) feature.append(gram.umlsScore._1 / 100) else feature.append(0) // simple similarity to umls
@@ -361,7 +367,7 @@ class Clustering (sc: SparkContext) {
         //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
 
       }else{
-        feature.appendAll(gram.context.wordsInbags.take(Conf.bowTopCvalueNgram).map(p => log2p1(1.0*p / gram.tfAll)))
+        feature.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(p => log2p1(1.0*p / gram.tfAll)))
       }
       (gram,feature)
     })
@@ -376,7 +382,9 @@ class Clustering (sc: SparkContext) {
   def Normalize (vecter_input: RDD[(Ngram, ArrayBuffer[Double])], vectorWeight: ArrayBuffer[Double]) = {
     vecter_input.persist()
     var tmp_vecter = vecter_input
-    if (Conf.normalize_standardize) {
+    var sd:ArrayBuffer[Double] = null
+    var avg:ArrayBuffer[Double] = null
+    if (Conf.normalize_standardize || Conf.normalize_outlier_factor > 0.1) {
       val currNgramCnt = tmp_vecter.count()
       // get sum
       val sum = tmp_vecter.map(_._2).reduce((a1, a2) => {
@@ -388,13 +396,13 @@ class Clustering (sc: SparkContext) {
         f
       })
       // average
-      val avg = sum.map(_/currNgramCnt)
+      avg = sum.map(_ / currNgramCnt)
       // get squard sum
-      val sumSquare = tmp_vecter.map(_._2).map(v=> {
+      val sumSquare = tmp_vecter.map(_._2).map(v => {
         val f = new ArrayBuffer[Double]()
         f.appendAll(Array.fill(v.size)(0.0))
         Range(0, v.size).foreach(index => {
-          f(index) = Math.pow(v(index) - avg(index),2)
+          f(index) = Math.pow(v(index) - avg(index), 2)
         })
         f
       }).reduce((a1, a2) => {
@@ -406,19 +414,41 @@ class Clustering (sc: SparkContext) {
         f
       })
       // standard deviation
-      val sd = sumSquare.map(v=>Math.sqrt(v/currNgramCnt))
+      sd = sumSquare.map(v => Math.sqrt(v / currNgramCnt))
       println("the standard deviation of the features: " + sd.mkString("\t"))
+    }
+
+    if (Conf.normalize_outlier_factor>0.1) {
+      // limit the outlier not to be farer from (average+sd*factor).
+      tmp_vecter = tmp_vecter.map(kv => {
+        val f = new ArrayBuffer[Double]()
+        f.appendAll(Array.fill(sd.size)(0.0))
+        val a = kv._2
+        Range(0, a.size).foreach(index => {
+          f(index) = if (sd(index)>0.01 &&  Math.abs(a(index) - avg(index)) > Conf.normalize_outlier_factor * sd(index)) {
+            if(a(index) > avg(index))
+              avg(index) + Conf.normalize_outlier_factor * sd(index)
+            else
+              avg(index) - Conf.normalize_outlier_factor * sd(index)
+          } else {
+            a(index)
+          }
+        })
+        (kv._1, f)
+      })
+
+    }
+
+
+    if (Conf.normalize_standardize){
       // normalization to (0,1), then apply the weight of the features
       tmp_vecter = tmp_vecter.map(kv => {
         val f = new ArrayBuffer[Double]()
         f.appendAll(Array.fill(sd.size)(0.0))
         val a = kv._2
         Range(0, a.size).foreach(index => {
-          f(index) = if (sd(index)>0.0001) (a(index) - avg(index)) / sd(index) else a(index)
-          // apply the weight to the feature
-          //f(index) *= vectorWeight(index)
+          f(index) = if (sd(index)>0.01) (a(index) - avg(index)) / sd(index) else a(index)
         })
-        //(kv._1, Vectors.dense(f.toArray))
         (kv._1, f)
       })
     }
@@ -481,7 +511,7 @@ class Clustering (sc: SparkContext) {
     val retPridict = rddVectorDbl.map(v => modelOrg.predict(v))
     /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
     val retPredictFiltered = retPridict.map(kk => (kk, 1L)).reduceByKey(_ + _).collect().filter(kv => {
-      val filter = k * kv._2 * 100.0 / ngramCntTrain > Conf.clusterThresholdPt
+      val filter = k * kv._2 * 100.0 / ngramCntTrain >= Conf.clusterThresholdPt &&  kv._2>=Conf.clusterThresholdLimit
       if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is excluded.")
       filter
     }).map(_._1)
@@ -702,7 +732,7 @@ object Clustering {
     val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
     val ngramCntUmls = rddNgram4Train.filter(_.isUmlsTerm(false)).count()
     val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
-    clustering.trainNum = ngramCntChv - ngramCntChvTest
+    clustering.trainNum = rddNgram4Train.filter(g=>g.isTrain).count()
 
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
     if (Conf.showOrgNgramNum>0)rddNgram4Train.filter(gram => {
@@ -763,16 +793,17 @@ object Clustering {
         println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
       else
         println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
-      kCost.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
+      kCost.foreach(kc =>       println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
 
-      if (Conf.baseLineRank) {
-        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", null, rddRankVector_all, ngramCntChvTest)
-        val kc = ("tfAll",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
-        val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", null, rddRankVector_all, ngramCntChvTest)
-        val kCostBase = kc :: ("cvalue",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
-        println(s"#### result for base line: base type(tfall,cvalue), rankGranular is ${Conf.rankGranular} ####")
-        kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.1f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
-      }
+    }
+
+    if (Conf.baseLineRank) {
+      val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", null, rddRankVector_all, ngramCntChvTest)
+      val kc = ("tfAll",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+      val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", null, rddRankVector_all, ngramCntChvTest)
+      val kCostBase = kc :: ("cvalue",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
+      println(s"#### result for base line: base type(tfall,cvalue), rankGranular is ${Conf.rankGranular} ####")
+      kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.1f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
     }
 
     sc.stop()

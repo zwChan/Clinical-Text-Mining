@@ -324,10 +324,10 @@ object Nlp {
     val hPreNgram =  firstStageNgram.value
 
     if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
-      Nlp.wordsInbags = if (Conf.bowTopCvalueNgram>0) {
-        hPreNgram.map(kv=>(kv._1,kv._2.cvalue)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopCvalueNgram).map(_._1).zipWithIndex.toMap
+      Nlp.wordsInbags = if (Conf.bowTopNgram>0) {
+        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopNgram).map(_._1).zipWithIndex.toMap
       }else{
-        hPreNgram.map(kv=>(kv._1,kv._2.cvalue)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
+        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
       }
       println(Nlp.wordsInbags.toSeq.sortBy(_._2).mkString("\t"))
     }
