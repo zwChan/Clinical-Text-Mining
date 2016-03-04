@@ -758,7 +758,14 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     val rs = sqlStatement.executeQuery(sql)
     rs
   }
-
+  def execUpdate (sql: String):Int = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeUpdate(sql)
+    rs
+  }
 }
 
 object UmlsTagger2 {

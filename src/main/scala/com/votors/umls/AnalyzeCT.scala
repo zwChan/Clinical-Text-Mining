@@ -1,6 +1,7 @@
 package com.votors.umls
 
 import java.io.{FileWriter, PrintWriter, FileReader}
+import com.votors.common.Conf
 import com.votors.common.Utils.Trace._
 import org.apache.commons.csv._
 import scala.collection.mutable.ListBuffer
@@ -17,15 +18,15 @@ import scala.io.Codec
  */
 
 
-case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var numericalType:String=""){
+case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var markedType:String="", var depth:String="-1", var cui:String="None", var cuiStr:String="None"){
   var hitNumType = false
   override def toString(): String = {
-    val str = f""""${tid.trim}","${criteriaType.trim}","${sentence.trim.replaceAll("\\\"","'")}","${numericalType}","${if(hitNumType)'Y' else 'N'}"\n"""
-    trace(INFO, "Get CTRow parsing result: " + str)
+    val str = f""""${tid.trim}","${criteriaType.trim}","${sentence.trim.replaceAll("\\\"","'")}","${markedType}","${depth}","${cui}","${cuiStr}"""" + "\n"
+    if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
     str
   }
   def getTitle(): String = {
-    f""""tid","type","sentence","Numerical type"""" + "\n"
+    """"tid","type","sentence","Numerical type","depth" ,"cui" ,"cuiStr"""" + "\n"
   }
 }
 
@@ -34,7 +35,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
 
 
 
-class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
+class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRetFile:String) {
   val STAG_HEAD=0;
   val STAG_INCLUDE=1
   val STAG_EXCLUDE=2
@@ -49,28 +50,61 @@ class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
   val TYPE_BOTH_HEAD = "Both head"
 
   val numericReg = new ArrayBuffer[(String,String)]()
-  val in = new FileReader(numVarFile)
-  val records = CSVFormat.DEFAULT
-    //.withDelimiter(' ')
-    .parse(in)
-    .iterator()
-    .filter(_.size()>=2)
-    .foreach(r => {
-      r.size()
-      val name = r.get(0)
-      val reg = r.get(1).toLowerCase()
-      // Note: you can not use 'word boundary' to reg that with operation character beginning or ending
-      val reg2 =
-        if (name.contains("(op)")) {
-          ".*(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ").*"
-        }else{
-          ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
-        }
-      println(s"${name}\t${reg2}")
-    numericReg.append((name,reg2))
-  })
+
+  var isNumericInit = false
+  def initNumericReg() = {
+    if (!isNumericInit){
+      isNumericInit = true
+      val in = new FileReader(externFile)
+      CSVFormat.DEFAULT
+      //.withDelimiter(' ')
+      .parse(in)
+      .iterator()
+      .filter(_.size()>=2)
+      .foreach(r => {
+        r.size()
+        val name = r.get(0)
+        val reg = r.get(1).toLowerCase()
+        // Note: you can not use 'word boundary' to reg that with operation character beginning or ending
+        val reg2 =
+          if (name.contains("(op)")) {
+            ".*(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ").*"
+          }else{
+            ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
+          }
+        println(s"${name}\t${reg2}")
+        numericReg.append((name,reg2))
+      })
+    }
+  }
+
+    /**
+     *   input: (depth, cui, keyword)
+     *   output:(root,depth,cui,keyword)
+     */
+  val keywords = new ArrayBuffer[(String,String,String,String)]()
+  var isKeywordInit = false
+  def initKeyword() = {
+    if (!isKeywordInit){
+      isKeywordInit = true
+      var root = ""
+      Source.fromFile(externRetFile).getLines()
+        .foreach(line => {
+          val tokens = line.split(",", 3)
+          if (tokens.size >= 3 && tokens(0) == "#") {
+            root = tokens(2)
+          } else if (tokens.size >= 3) {
+            val kw = tokens(2).toLowerCase()
+            val cui = tokens(1)
+            val depth = tokens(0)
+            keywords.append((root,depth,cui,kw))
+          }
+      })
+    }
+  }
 
 
+  val tagger = new UmlsTagger2(Conf.solrServerUrl,Conf.rootDir)
 
 
   def analyzeFile(): Unit = {
@@ -87,7 +121,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
 
     // for each row of csv file
     records.drop(1).foreach(row => {
-      println(row)
+      //println(row)
       val tid = row.get(0)
       val criteria = row.get(1)
 
@@ -120,7 +154,8 @@ class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
               }
             }
           }
-        detectQuantity(ctRow,writer)
+        //detectQuantity(ctRow,writer)
+        detectKeyword(ctRow,writer)
       })
 
     })
@@ -130,13 +165,15 @@ class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
 
   }
 
+  // detect normal key words
   def detectQuantity(ctRow: CTRow, writer:PrintWriter) = {
+    initNumericReg()
     //replace all table,  reduce to only one space between words
     ctRow.sentence = ctRow.sentence.replaceAll("\\s+"," ")
     numericReg.foreach(reg=>{
-      if(ctRow.numericalType.size ==0 && ctRow.sentence.toLowerCase.matches(reg._2)){
+      if(ctRow.markedType.size ==0 && ctRow.sentence.toLowerCase.matches(reg._2)){
         println("********" + reg._1)
-        ctRow.numericalType = reg._1
+        ctRow.markedType = reg._1
         ctRow.hitNumType = true
         writer.print(ctRow)
       }else{
@@ -144,47 +181,154 @@ class AnalyzeCT(csvFile: String, outputFile:String, numVarFile:String) {
         //ctRow.hitNumType = false
       }
     })
-    if (ctRow.numericalType.size==0) {
-      ctRow.numericalType="None"
+    if (ctRow.markedType.size==0) {
+      ctRow.markedType="None"
       ctRow.hitNumType=false
       writer.print(ctRow)
     }
 
   }
 
+  // detect special symbol, such as >=, !=
   def detectQuantity2(sentence:String) = {
+    initNumericReg()
     //replace all table,  reduce to only one space between words
     val ctRow = CTRow("test","",sentence,"")
     numericReg.foreach(reg=>{
       if(ctRow.sentence.toLowerCase.matches(".*"+reg._2+".*")){
         println("********" + reg._1)
-        ctRow.numericalType += {if (ctRow.numericalType.size==0) "" else "|"} + reg._1
+        ctRow.markedType += {if (ctRow.markedType.size==0) "" else "|"} + reg._1
       }
     })
-    if (ctRow.numericalType.size==0) {
-      ctRow.numericalType="None"
+    if (ctRow.markedType.size==0) {
+      ctRow.markedType="None"
       false
     }else{
       true
     }
+  }
+
+  // detect normal key words
+  def detectKeyword(ctRow: CTRow, writer:PrintWriter) = {
+    //replace all table,  reduce to only one space between words
+    initKeyword()
+    ctRow.sentence = ctRow.sentence.replaceAll("\\s+"," ")
+    keywords.foreach(kw=>{
+      if(ctRow.markedType.size ==0 && ctRow.sentence.toLowerCase.matches(s".*\\b${kw._4}\\b.*")){
+        //println(s"$kw, $ctRow")
+        ctRow.markedType = kw._1
+        ctRow.depth = kw._2
+        ctRow.cui = kw._3
+        ctRow.cuiStr = kw._4
+        ctRow.hitNumType = true
+        writer.print(ctRow)
+      }else{
+        //ctRow.numericalType = reg._1
+        //ctRow.hitNumType = false
+      }
+    })
+    if (ctRow.markedType.size==0) {
+      ctRow.markedType="None"
+      ctRow.hitNumType=false
+      writer.print(ctRow)
+    }
 
   }
 
+  // (cui,str) -> (dept)
+  val hCriteria = new mutable.LinkedHashMap[(String,String),(Int)]()
+  /**
+   * lookup the the child term in UMLS recursively.
+   * for the root node, do not search its brother node, just all the child node.
+   * @param term
+   */
+  def findChildTerm(cui: String, term: String, dept: Int): Unit = {
+    val ret1 = tagger.execUpdate("drop table if exists prtbl;")
+    val ret2 = if (cui.size < 3)tagger.execUpdate("create /*temporary*/ table prtbl as (" +
+      "  select distinct rel.cui1 from umls.mrconso as conso, umls.mrrel as rel" +
+      s"  where str='${term}' and conso.cui = rel.cui2  and (REL='PAR')      " +
+      " );" )
+    else
+      tagger.execUpdate("create /*temporary*/ table prtbl as (" +
+        "  select distinct rel.cui1 from umls.mrconso as conso, umls.mrrel as rel" +
+        s"  where conso.cui='${cui}' and conso.cui = rel.cui2  and (REL='RB' OR REL='PAR')      " +
+        " );" )
+    val ret = tagger.execQuery("select distinct conso.cui, conso.str from umls.mrconso as conso, prtbl as pr where conso.cui=pr.cui1;")
+    val buff = new ArrayBuffer[(String,String)]()
+    while(ret.next()) {
+      if (hCriteria.contains((ret.getString(1), ret.getString(2)))) {
+        println(s"${ret.toString} already exists.")
+      }else {
+        buff.append((ret.getString(1), ret.getString(2)))
+      }
+    }
+    println(s"dept: ${dept}, ${cui}, ${term}: get child number ${buff.size}")
+    if (buff.size <= 0) {
+      hCriteria.getOrElseUpdate((cui,term),(dept))
+      return
+    }
+
+    if (dept >= 5) {
+      println("Too much recursive, there may be a loop!")
+      hCriteria.getOrElseUpdate((cui,term),(dept))
+      return
+    }
+    ret.close()
+    buff.foreach(kv =>{
+      hCriteria.getOrElseUpdate((cui,term),(dept))
+      findChildTerm(kv._1, kv._2, dept+1)
+    })
+  }
+
+  def findTerm(): Unit = {
+    var writer = new PrintWriter(new FileWriter(externRetFile))
+    Source.fromFile(externFile).getLines().foreach(line => {
+      val tmp = line.split(",",2)
+      if (tmp.size>1) {
+        findChildTerm(tmp(0),tmp(1),0)
+
+        writer.append(s"#,${tmp(0)},${tmp(1)}\n")
+        hCriteria.foreach(term => {
+          writer.append(s"${term._2},${term._1._1},${term._1._2}\n")
+        })
+        hCriteria.clear()
+      }
+    })
+
+
+    writer.close()
+  }
 }
 
 object AnalyzeCT {
-
-  def doAnaly(f: String): Unit = {
+  def doGetKeywords(f: String, externFile:String) = {
     val ct = new AnalyzeCT(s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}.csv",
       s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}_ret.csv",
-      "C:\\fsu\\ra\\data\\201601\\split_criteria\\numeric_variables.csv")
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${externFile}.txt",
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${externFile}_ret.txt")
+    //ct.analyzeFile()
+    ct.findTerm()
+  }
+  def doAnaly(f: String, externFile:String): Unit = {
+    val ct = new AnalyzeCT(s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}.csv",
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${f}_ret.csv",
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${externFile}.txt",
+      s"C:\\fsu\\ra\\data\\201601\\split_criteria\\${externFile}_ret.txt")
     ct.analyzeFile()
   }
   def main(avgs: Array[String]): Unit = {
-    doAnaly("Obesity_05_14_random300")
-    doAnaly("Congective_Heart_Failure_05_14_all233")
-    doAnaly("Dementia_05_14_all197")
-    doAnaly("Hypertension_05_14_random300")
-    doAnaly("T2DM_05_14_random300")
+//    doAnaly("Obesity_05_14_random300")
+//    doAnaly("Congective_Heart_Failure_05_14_all233")
+//    doAnaly("Dementia_05_14_all197")
+//    doAnaly("Hypertension_05_14_random300")
+//    doAnaly("T2DM_05_14_random300")
+
+//    doAnaly("Obesity_05_14_random300","criteriaWords")
+//    doAnaly("Congective_Heart_Failure_05_14_all233","criteriaWords")
+//    doAnaly("Dementia_05_14_all197","criteriaWords")
+//    doAnaly("Hypertension_05_14_random300","criteriaWords")
+//    doAnaly("T2DM_05_14_random300","criteriaWords")
+      doAnaly("criteria_cancer_trials_2004_2014","criteriaWords")
+//    doGetKeywords("T2DM_05_14_random300","criteriaWords")
   }
 }

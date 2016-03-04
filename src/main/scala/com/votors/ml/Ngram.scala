@@ -276,6 +276,14 @@ class Ngram (var text: String) extends java.io.Serializable{
     else
       false
   }
+  def getTypeName(): String = {
+    if (isUmlsTerm(true))
+      "chv"
+    else if (isUmlsTerm(false))
+      "umls"
+    else
+      "other"
+  }
   override def toString(): String = {
     toString(if (text.matches(Trace.filter)) true else false)
   }

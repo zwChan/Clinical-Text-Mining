@@ -200,7 +200,9 @@ class Clustering (sc: SparkContext) {
 
     }else {
       println(s"start load ngram from file:")
-      var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(!_.text.matches(Conf.stopwordRegex))
+      var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v=>{
+        !v.text.matches(Conf.stopwordRegex) && v.tfAll>Conf.stag2TfFilter
+      })
      /* Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", ngrams.map(g=>{
         g.context.wordsInbags=null;
         g
@@ -324,8 +326,8 @@ class Clustering (sc: SparkContext) {
         println(s"Warning: You specify Conf.bowTopCvalueNgram=${Conf.bowTopNgram}, but only ${gram.context.wordsInbags.size} available")
         Conf.bowTopNgram = gram.context.wordsInbags.size
       }
-      vectorWeight.appendAll(gram.context.wordsInbags.map(_=>1.0).take(Conf.bowTopNgram))
-      columnName.appendAll(gram.context.wordsInbags.map(_=>"bow"))
+      vectorWeight.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(_=>1.0).take(Conf.bowTopNgram))
+      columnName.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(_=>"bow"))
     }
     println(s"* the weight for the feature vecotr is \n${columnName.zip(vectorWeight).mkString(",")} *")
     //println(Nlp.wordsInbags.mkString("\t"))
@@ -334,9 +336,9 @@ class Clustering (sc: SparkContext) {
       val feature = new ArrayBuffer[Double]()
       if (!Conf.bagsOfWord) {
         if (useFeature.contains("tfdf")) feature.append(gram.tfdf) else feature.append(0) // tfdf
-        if (useFeature.contains("tf")) feature.append(log2p1(gram.tfAll)) else feature.append(0) // tfdf
-        if (useFeature.contains("df")) feature.append(log2p1(gram.df)) else feature.append(0) // tfdf
-        if (useFeature.contains("cvalue")) feature.append(log2p1(gram.cvalue)) else feature.append(0) // c-value, applied a log function
+        if (useFeature.contains("tf")) feature.append(gram.tfAll) else feature.append(0) // tfdf
+        if (useFeature.contains("df")) feature.append(gram.df) else feature.append(0) // tfdf
+        if (useFeature.contains("cvalue")) feature.append(gram.cvalue) else feature.append(0) // c-value, applied a log function
 
         if (useFeature.contains("umls_score")) feature.append(gram.umlsScore._1 / 100) else feature.append(0) // simple similarity to umls
         if (useFeature.contains("chv_score")) feature.append(gram.umlsScore._2 / 100) else feature.append(0) //simple similarity to chv
@@ -349,25 +351,25 @@ class Clustering (sc: SparkContext) {
         if (useFeature.contains("anpn")) feature.append(bool2Double(gram.isPosANPN)) else feature.append(0)
 
         if (useFeature.contains("stys")) feature.appendAll(gram.stys.map(bool2Double(_))) else feature.appendAll(gram.stys.map(_ => 0.0))
-        if (useFeature.contains("win_pos")) feature.appendAll(gram.context.win_pos.map(p => log2p1(p))) else feature.appendAll(gram.context.win_pos.map(p => 0.0))
+        if (useFeature.contains("win_pos")) feature.appendAll(gram.context.win_pos.map(p => 1.0*p / gram.tfAll)) else feature.appendAll(gram.context.win_pos.map(p => 0.0))
 
-        if (useFeature.contains("capt_first")) feature.append(log2p1(1.0*gram.capt_first / gram.tfAll)) else feature.append(0)
-        if (useFeature.contains("capt_all")) feature.append(log2p1(1.0*gram.capt_all / gram.tfAll)) else feature.append(0)
-        if (useFeature.contains("capt_term")) feature.append(log2p1(1.0*gram.capt_term / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("capt_first")) feature.append((1.0*gram.capt_first / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("capt_all")) feature.append((1.0*gram.capt_all / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("capt_term")) feature.append((1.0*gram.capt_term / gram.tfAll)) else feature.append(0)
 
-        if (useFeature.contains("win_umls")) feature.append(log2p1(gram.context.win_umlsCnt)) else feature.append(0)
-        if (useFeature.contains("win_chv")) feature.append(log2p1(gram.context.win_chvCnt))  else feature.append(0)
-        if (useFeature.contains("sent_umls")) feature.append(log2p1(gram.context.sent_umlsCnt))  else feature.append(0)
-        if (useFeature.contains("sent_chv")) feature.append(log2p1(gram.context.sent_chvCnt))  else feature.append(0)
-        if (useFeature.contains("umls_dist")) feature.append(log2p1(gram.context.umlsDist))  else feature.append(0)
-        if (useFeature.contains("chv_dist")) feature.append(log2p1(gram.context.chvDist))  else feature.append(0)
+        if (useFeature.contains("win_umls")) feature.append((gram.context.win_umlsCnt * 1.0 / gram.tfAll)) else feature.append(0)
+        if (useFeature.contains("win_chv")) feature.append((gram.context.win_chvCnt * 1.0 / gram.tfAll))  else feature.append(0)
+        if (useFeature.contains("sent_umls")) feature.append((gram.context.sent_umlsCnt * 1.0 / gram.tfAll))  else feature.append(0)
+        if (useFeature.contains("sent_chv")) feature.append((gram.context.sent_chvCnt * 1.0 / gram.tfAll))  else feature.append(0)
+        if (useFeature.contains("umls_dist")) feature.append((gram.context.umlsDist * 1.0 / gram.tfAll))  else feature.append(0)
+        if (useFeature.contains("chv_dist")) feature.append((gram.context.chvDist * 1.0 / gram.tfAll))  else feature.append(0)
 
-        if (useFeature.contains("prefix")) feature.appendAll(gram.context.win_prefix.map(p => if(p>0) 1.0 else 0))
-        if (useFeature.contains("suffix")) feature.appendAll(gram.context.win_suffix.map(p => if(p>0) 1.0 else 0))
+        if (useFeature.contains("prefix")) feature.appendAll(gram.context.win_prefix.map(p => 1.0*p/gram.tfAll))
+        if (useFeature.contains("suffix")) feature.appendAll(gram.context.win_suffix.map(p => 1.0*p/gram.tfAll))
         //println(s"NLP prefix ${Nlp.prefixs.size} suffix ${Nlp.suffixs.size} prefix ${gram.context.win_prefix.size}, suffix ${gram.context.win_suffix.size} f ${feature.size} weight ${vectorWeight.size}")
 
       }else{
-        feature.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(p => log2p1(1.0*p / gram.tfAll)))
+        feature.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(p => (1.0*p / gram.tfAll)))
       }
       (gram,feature)
     })
@@ -499,11 +501,20 @@ class Clustering (sc: SparkContext) {
     vector
   }
 
-  def reviseMode(k:Int,modelOrg: KMeansModel,rddVectorDbl: RDD[Vector]): KMeansModel = {
+  def sampleAvgCost(model: KMeansModel,rddVectorDbl: RDD[Vector]): Double = {
+    // find average distance of a point to its center. sample some poit to caculate the cost
+    val samplePointCost = rddVectorDbl.takeSample(false,Conf.clusterThresholSample).map(p=>MyKmean.findClosest(model.clusterCenters,p)._2)
+    val avgCost = samplePointCost.sum / samplePointCost.size
+    return avgCost
+  }
+
+  def reviseMode(k:Int,modelOrg: KMeansModel,rddVectorDbl: RDD[Vector]): (KMeansModel) = {
     // if reviseMode is not configured
     if (!Conf.reviseModel || Conf.clusterThresholdPt <= 0) return modelOrg
 
     val ngramCntTrain = rddVectorDbl.count
+
+
     /**
      * Get the cost of every point to its closest center, and rand the points by these cost.
      * In fact, it looks like using clustering to get classification goal.
@@ -512,7 +523,7 @@ class Clustering (sc: SparkContext) {
     /* exclude the centers that contain small number of ngram, compare to the average number of each cluster*/
     val retPredictFiltered = retPridict.map(kk => (kk, 1L)).reduceByKey(_ + _).collect().filter(kv => {
       val filter = k * kv._2 * 100.0 / ngramCntTrain >= Conf.clusterThresholdPt &&  kv._2>=Conf.clusterThresholdLimit
-      if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is excluded.")
+      if (filter == false) println(s"cluster ${kv._1} has ${kv._2} ngram, less than ${Conf.clusterThresholdPt}% of train ${ngramCntTrain}/${k}=${ngramCntTrain / k}, so it is considered to be excluded.")
       filter
     }).map(_._1)
     // get new centers
@@ -521,7 +532,26 @@ class Clustering (sc: SparkContext) {
     })
     // update model
     val model = new KMeansModel(newCenter)
-    return model
+
+    val avgCost = sampleAvgCost(model,rddVectorDbl)
+    println(f"new: sample average cost of model for k=${model.k} is ${avgCost}")
+
+    // check the discarded centers, if the cost of then grater than the average cost * 2, add them as center again
+    val finalCenter = new ArrayBuffer[Vector]()
+    finalCenter.appendAll(newCenter)
+    modelOrg.clusterCenters.filter(v => {
+      !retPredictFiltered.contains(modelOrg.clusterCenters.indexOf(v))
+    }).foreach(p=>{
+      val cost = MyKmean.findClosest(model.clusterCenters,p)._2
+      println(f"discarded center cost is ${cost}, factor ${cost/avgCost}%.1f")
+      if(cost > avgCost * Conf.clusterThresholFactor){
+        finalCenter.append(p)
+      }
+    })
+
+    // update model
+    val finalModel = new KMeansModel(finalCenter.toArray)
+    return finalModel
   }
 
   /**
@@ -536,7 +566,7 @@ class Clustering (sc: SparkContext) {
    * @param ngramCntChvTest: the chv number in the test data
    * 
    */
-  def rank (k:Int,rankType: String, model: KMeansModel,rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long) = {
+  def rank (k:Int,rankType: String, model: KMeansModel,rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long,tfStat:Map[Int, (Int, Int, Long, Double)]) = {
     /**
      * Get the cost of every point to its closest center, and rand the points by these cost.
      * In fact, it looks like using clustering to get classification goal.
@@ -578,12 +608,12 @@ class Clustering (sc: SparkContext) {
       if (ngram.isUmlsTerm(true)) {
         cntChvAll += 1
         if (!ngram.isTrain)cntChvTest += 1
-        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tchv\t")
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\t${ngram.getTypeName()}\t")
       }else if (ngram.isUmlsTerm(false)) {
         cntUmls += 1
-        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tumls\t")
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\t${ngram.getTypeName()}\t")
       }else {
-        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\tother\t")
+        if (Conf.showDetailRankPt>=topPercent)print(f"${kk}\t${cost}%.3f\t${ngram.getTypeName()}\t")
       }
       val rankLevel = topPercent.floor.toInt/Conf.rankGranular
       val recall = if (ngramCntChvTest>0)1.0*cntChvTest/ngramCntChvTest else -1
@@ -596,7 +626,11 @@ class Clustering (sc: SparkContext) {
         precisionUmlsVsRank(rankLevel - 1) = precision_umls*100
         fscoreVsRank(rankLevel - 1) = fscore
       }
-      if (Conf.showDetailRankPt>=topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t${precision_umls*100}%.2f\t")
+      val tfst = if (tfStat!=null)tfStat.get(kk).get else null
+      val kNum = if (tfst != null) tfst._2 else 0
+      val kTfAvg = if (tfst != null) tfst._3 else 0
+      val kTfSd = if (tfst != null) tfst._4 else 0
+      if (Conf.showDetailRankPt>=topPercent)print(f"${topPercent}%.1f\t${recall*100}%.2f\t${precision*100}%.2f\t${fscore}%.2f\t${precision_umls*100}%.2f\t${kNum}\t${kTfAvg}%.1f\t${kTfSd}%.1f\t")
       if (Conf.showDetailRankPt>=topPercent)println(ngram.toStringVector())
     })
     println(f"type ${rankType},${k}\t${ngramCntChvTest}\t${recallVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${precisionVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${fscoreVsRank.map(v=>f"${v}%.2f").mkString("\t")}\t${precisionUmlsVsRank.map(v=>f"${v}%.2f").mkString("\t")}")
@@ -749,15 +783,17 @@ object Clustering {
     }).takeSample(false,Conf.showOrgNgramNum,Seed).foreach(v => println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}"))
 
     val rddVectorDbl = rddVector.map(_._2).persist()
-    rddVector.unpersist()
+    // show ngram need this rdd.
+    //if (Conf.showNgramInCluster<=0) rddVector.unpersist()
 
     //print the name of the features in vetors
     println("The feature name is:\n" + clustering.columnName.zipWithIndex.map(kv=>s"${kv._1}-${kv._2+1}").mkString("\t"))
 
     if (Conf.outputVectorOnly) {
-      rddVectorDbl.collect().foreach(v =>{
-        println(v.toArray.mkString(" "))
-      })
+      if(Conf.bagsOfWord)
+        rddVector.foreach(kv=>{println(f"${if(kv._1.isUmlsTerm(true)) 1 else 0} ${kv._2.toArray.mkString(" ")}")})
+      else
+        rddVectorDbl.collect().foreach(v =>{println(v.toArray.mkString(" "))})
       sys.exit(0)
     }
     if (Conf.pcaDimension>0) {
@@ -767,7 +803,7 @@ object Clustering {
 
     if (Conf.runKmeans) {
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
-        val startTimeTmp = new Date();
+        val startTimeTmp = new Date()
         val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
         val costOrg = modelOrg.computeCost(rddVectorDbl)
         val model = clustering.reviseMode(k,modelOrg,rddVectorDbl)
@@ -775,7 +811,35 @@ object Clustering {
         val predictOrg = modelOrg.predict(rddVectorDbl).map((_,1L)).reduceByKey(_+_).collect()
         val predict = model.predict(rddVectorDbl).map((_,1L)).reduceByKey(_+_).collect()
         println(f"cluster result number of point in K: \nold:${predictOrg.mkString("\t")}, \nnew:${predict.mkString("\t")}")
-        if(Conf.showNgramInCluster>0)println(f"${modelOrg.predict(rddVectorDbl).zip(rddVectorDbl).map(kv=>(kv._1,kv._2)).groupByKey().map(kv=>(kv._1,kv._2.take(Conf.showNgramInCluster))).collect().mkString("\n")}")
+
+        val avgCost = clustering.sampleAvgCost(model,rddVectorDbl)
+        println(f"final: sample average cost of model for k=${model.k} is ${avgCost}")
+
+        val tfStatMap = if(Conf.showTfAvgSdInCluster){
+          println("tf average and standard deviation in new clusters:")
+          val avgSd = model.predict(rddVectorDbl).zip(rddVector).map(kv=>(kv._1,kv._2._1.tfAll)).groupByKey().map(kv=>(kv._1,kv._2.toArray)).collect().map(kv=>{
+            val avg = kv._2.sum/kv._2.size
+            val sd = Math.sqrt(kv._2.map(v=>(v-avg)*(v-avg)).sum/kv._2.size)
+            (kv._1, kv._2.size,avg, sd)
+          }).sortBy(_._3 * -1)
+          avgSd.foreach(kv=>println(f"${kv._1}\t${kv._2}\t${kv._3}\t${kv._4}%.2f"))
+
+          if(Conf.showNgramInCluster>0){
+            println("gram in new clusters with tf order:")
+            //modelOrg.predict(rddVectorDbl).zip(rddVector).map(kv=>(kv._1,kv._2._1)).groupByKey().map(kv=>(kv._1,kv._2.take(Conf.showNgramInCluster))).collect().foreach(kv=>{kv._2.foreach(ngram=>println(f"${kv._1}\t${ngram.toStringVector()}"))})
+            val kNgram = model.predict(rddVectorDbl).zip(rddVector).map(kv=>(kv._1,(MyKmean.findClosest(model.clusterCenters, kv._2._2)._2,kv._2._1))).groupByKey().map(kv=>(kv._1,kv._2.take(Conf.showNgramInCluster))).collect().toMap
+            avgSd.foreach(t=>kNgram.get(t._1).get.foreach(kv=>{
+              val cost = kv._1
+              val ngram = kv._2
+              // k	cost	type	topPercent	recall	precision	fscore	umls-precision	kNum	kTfAvg	kTfSd + gram, the same as show gram in rank()
+              println(f"${t._1}\t${cost}%.4f\t${ngram.getTypeName()}\t0\t0\t0\t0\t0\t${t._2}\t${t._3}\t${t._4}%.2f\t${ngram.toStringVector()}")
+            }))
+          }
+
+          avgSd.map(kv=>(kv._1,(kv))).toMap
+        } else {null}
+
+
         println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
         val clusterScore = if (Conf.clusterScore) {
           clustering.getSilhouetteScore(model,rddVectorDbl)
@@ -784,26 +848,25 @@ object Clustering {
         }
         println(s"###kcost#### $k, newK:${model.k} costOrg:$costOrg, costNew:$cost, costDelta:${cost-costOrg}}" )
 
-        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddRankVector_all, ngramCntChvTest)
-        val kc = (k, model.k, costOrg,cost, clusterScore,ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+        val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddRankVector_all, ngramCntChvTest,tfStatMap)
+        val kc = (k, model.k, costOrg,cost, avgCost,clusterScore,ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
         kc
       }
 
       if (Conf.bagsOfWord)
         println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
       else
-        println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, rankGranular is ${Conf.rankGranular}, feature: ${Conf.useFeatures4Train.mkString(",")} ####")
-      kCost.foreach(kc =>       println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
-
+        println(s"#### result for all k: k(${Conf.k_start},${Conf.k_end},${Conf.k_step}, trainOnlyChv ${Conf.trainOnlyChv}, tf ${Conf.stag2TfFilter}, cluster (${Conf.clusterThresholdLimit},${Conf.clusterThresholdPt},${Conf.clusterThresholFactor},${Conf.clusterThresholSample}}), rankGranular (${Conf.rankGranular},base ${Conf.rankLevelBase}}), sample ${Conf.testSample} feature: ${Conf.useFeatures4Train.mkString(",")} ####")
+      kCost.foreach(kc =>     println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}%.4f\t${kc._7}\t${kc._8}\t${kc._9}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._12.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f\t${kc._13.max}%.2f"))
     }
 
     if (Conf.baseLineRank) {
-      val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", null, rddRankVector_all, ngramCntChvTest)
-      val kc = ("tfAll",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
-      val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", null, rddRankVector_all, ngramCntChvTest)
-      val kCostBase = kc :: ("cvalue",0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
+      val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(-1,"tfAll", null, rddRankVector_all, ngramCntChvTest,null)
+      val kc = ("-2",0,0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+      val (recallVsRank2, precisionVsRank2, fscoreVsRank2, precisionUmlsVsRank2) = clustering.rank(-2,"cvalue", null, rddRankVector_all, ngramCntChvTest,null)
+      val kCostBase = kc :: ("-1",0,0,0,0,0, ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank2, precisionVsRank2,fscoreVsRank2,precisionUmlsVsRank2) :: Nil
       println(s"#### result for base line: base type(tfall,cvalue), rankGranular is ${Conf.rankGranular} ####")
-      kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.1f\t${kc._6}\t${kc._7}\t${kc._8}\t${kc._9.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._9.max}%.2f\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f"))
+      kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}%.4f\t${kc._7}\t${kc._8}\t${kc._9}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._12.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f\t${kc._13.max}%.2f"))
     }
 
     sc.stop()

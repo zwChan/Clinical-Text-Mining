@@ -18,8 +18,8 @@ import org.apache.spark.util.random.XORShiftRandom
  * Created by Jason on 2015/12/4 0004.
  */
 object MyKmean extends KMeans{
-  def pointCost2(centers: TraversableOnce[VectorWithNorm],
-                 point: VectorWithNorm) = KMeans.pointCost(centers,point)
+//  def pointCost2(centers: TraversableOnce[VectorWithNorm],
+//                 point: Vector) = KMeans.pointCost(centers, new VectorWithNorm(point))
 
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.

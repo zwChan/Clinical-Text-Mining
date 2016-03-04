@@ -183,6 +183,8 @@ object Conf extends java.io.Serializable{
   val maxIterations=prop.get("maxIterations").toString.toInt
   val runs=prop.get("runs").toString.toInt
   val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
+  val clusterThresholSample=prop.get("clusterThresholSample").toString.toInt
+  val clusterThresholFactor=prop.get("clusterThresholFactor").toString.toDouble
   val clusterThresholdLimit=prop.get("clusterThresholdLimit").toString.toInt
   val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
   val testSample=prop.get("testSample").toString.toInt
@@ -228,6 +230,8 @@ object Conf extends java.io.Serializable{
   var pcaDimension=prop.get("pcaDimension").toString.toInt
   val sampleRuns=prop.get("sampleRuns").toString.toInt
   val showSentence=prop.get("showSentence").toString.toBoolean
+  //val showTfAvgSdInCluster=prop.get("showTfAvgSdInCluster").toString.toBoolean
+  val showTfAvgSdInCluster=true
 
 }
 
