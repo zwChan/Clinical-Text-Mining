@@ -20,12 +20,26 @@ class UmlsTagger2Test   {
     }
 
     @Test
-    def testBuildIndex(): Unit = {
+    def testBuildIndexJson(): Unit = {
       val tagger = new UmlsTagger2("",rootDir)
       tagger.buildIndexJson(
-        new File("C:\\fsu\\all_0912.csv"),
-        new File("C:\\fsu\\all_0912.json"))
+        new File("C:\\fsu\\target.terms.csv"),
+        new File("C:\\fsu\\target.terms.txt"))
     }
+
+  @Test
+  def testBuildIndexXml(): Unit = {
+    val tagger = new UmlsTagger2("",rootDir)
+    tagger.buildIndexCsv(
+      new File("C:\\fsu\\target.terms.csv"),
+      new File("C:\\fsu\\target.terms.ret.csv"))
+  }
+  @Test
+  def testBuildIndex2db(): Unit = {
+    val tagger = new UmlsTagger2("",rootDir)
+    tagger.buildIndex2db(
+      new File("C:\\fsu\\target.terms.csv"))
+  }
 
     @Test
     def testGetFull(): Unit = {
@@ -46,50 +60,6 @@ class UmlsTagger2Test   {
       })
     }
 
-    @Test
-    def testGetPartial(): Unit = {
-      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
-      val phrases = List(
-        "Heart Attack and diabetes",
-        "carcinoma (small-cell) of lung",
-        "side effects of Australia Antigen")
-      phrases.foreach(phrase => {
-        Console.println()
-        Console.println("Query: %s".format(phrase))
-        val suggestions = tagger.tag(phrase)
-        suggestions match {
-          case Some(psuggs) => {
-            psuggs.foreach(psugg => {
-              Console.println(psugg)
-              Console.println(psugg.toString())
-            })
-            Assert.assertNotNull(psuggs)
-          }
-          case None =>
-            Assert.fail("No results for [%s]".format(phrase))
-        }
-      })
-    }
-
-    @Test
-    def testAnnotateConcepts(): Unit = {
-      val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
-      val phrases = List("Lung Cancer",
-        "Heart Attack",
-        "Diabetes",
-        "high fat food",
-        "carcinoma (small-cell) of lung",
-        "asthma side effects"
-      )
-      phrases.foreach(phrase => {
-        Console.println()
-        Console.println("Query: %s".format(phrase))
-        val suggestions = tagger.annotateConcepts(phrase)
-        suggestions.foreach(suggestion => {
-          Console.println(suggestion.toString())
-        })
-      })
-    }
 
     @Test
     def testStermWord(): Unit = {
@@ -143,12 +113,6 @@ class UmlsTagger2Test   {
       tagger.jdbcClose()
     }
 
-
-  @Test
-  def testtransferExcelCvs(): Unit = {
-    val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
-    tagger.transferExcelCvs(s"${rootDir}/data/raw_data_CHV_study2.csv.txt", "")
-  }
 
     //  @AfterClass
 //  def cleanup():Unit = {

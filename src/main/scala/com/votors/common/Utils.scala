@@ -145,6 +145,8 @@ object Conf extends java.io.Serializable{
   val blogIdCol = Conf.prop.get("blogIdCol").toString
   val blogTextCol = Conf.prop.get("blogTextCol").toString
   val blogLimit = Conf.prop.get("blogLimit").toString.toInt
+  val targetTermTbl = Conf.prop.get("targetTermTbl").toString.toString
+  val targetTermUsingSolr = Conf.prop.get("targetTermUsingSolr").toString.toBoolean
 
   val caseFactor = prop.get("caseFactor").toString.toFloat
   val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
