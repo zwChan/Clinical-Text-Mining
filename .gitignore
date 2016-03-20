@@ -4,6 +4,6 @@ target/
 *dat.txt
 *.bak
 *.bk
-data/
+*.csv
 lvg2015/
 lvg2015data/

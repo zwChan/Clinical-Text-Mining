@@ -24,6 +24,7 @@ import scala.collection.immutable.Range
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.io.File
+import scala.util.control.Breaks._
 
 /**
  * Created by Jason on 2015/11/9 0009.
@@ -49,6 +50,7 @@ class Lvg(lvgdir: String=Conf.lvgdir) {
     if (lvgApi != null) {
       val outputFromLvg = lvgApi.MutateToString(term)
       val arrrayRet = outputFromLvg.split("\\|")
+      //println(outputFromLvg)
       if (arrrayRet.size >= 2)
         ret = arrrayRet(1)
     }
@@ -63,6 +65,9 @@ object Nlp {
   val punctPattern = Pattern.compile("\\p{Punct}")
   val spacePattern = Pattern.compile("\\s+")
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
+  final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
+
+  var wordsInbags: Map[String,Int] = null
 
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
@@ -169,10 +174,28 @@ object Nlp {
   def normalizeAll(str: String, tokenSt: TokenState=null, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str,tokenSt)
     if (isStem)ret = stemWords(ret,tokenSt)
+    //println(s"norm: $str\t$ret")
     ret
   }
 
-  val stopwords = new mutable.HashSet[String]()
+  var prefixs = new ArrayBuffer[String]()
+  for (line <- scala.io.Source.fromFile(s"${modelRoot}/prefix.txt").getLines()) {
+    if (line.trim.length > 0 && !line.trim.startsWith("#"))
+      prefixs.append(line.trim)
+  }
+  prefixs = prefixs.sortBy(_.length * -1)  // sort by length of the string.
+  println(s"prefix: ${prefixs.mkString("\t")}")
+
+  var suffixs = new ArrayBuffer[String]()
+  for (line <- scala.io.Source.fromFile(s"${modelRoot}/suffix.txt").getLines()) {
+    if (line.trim.length > 0 && !line.trim.startsWith("#"))
+      suffixs.append(line.trim)
+  }
+  suffixs = suffixs.sortBy(_.length * -1)  // sort by length of the string.
+  println(s"suffix: ${suffixs.mkString("\t")}")
+
+
+  val stopwords = new mutable.TreeSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
       stopwords.add(Nlp.getToken(line).map(t =>{Nlp.normalizeAll(t)}).mkString(" ").trim)
@@ -180,15 +203,34 @@ object Nlp {
 
   /**
    * return true if it is a stop word.
+   * how does ngram  match the stop words list?
+   * 0:exactly matching;
+   * 1: ngram contains any stop word;
+   * 2. ngram start or end with any stop word
    * @param str
    * @param withRegex check the stop word regex in addition the the stop word file.
    * @return
    */
   def checkStopword(str: String, withRegex: Boolean=true):Boolean ={
     var ret = false
-    ret ||= stopwords.contains(str)
+    if (Conf.stopwordMatchType == 0)
+      ret ||= stopwords.contains(str)
+    else if (Conf.stopwordMatchType == 1) {
+      //ret ||= stopwords.exists(s=> str.matches(s".*\\b${s}\\b.*"))
+      ret ||= stopwords.exists(s => s == str || str.startsWith(s + " ") || str.endsWith(" " + s) || str.contains(" " + s + " "))
+    }else if (Conf.stopwordMatchType == 2)
+      ret ||= stopwords.exists(s=> s==str || str.startsWith(s+" ") || str.endsWith(" "+s))
+
     if (withRegex) ret ||= StopwordRegex.matcher(str).matches()
     ret
+  }
+
+  def checkPosFilter(posString: String): Boolean = {
+    PosFilterRegex.foreach(p => {
+      if (p.matcher(posString).matches())
+        return true
+    })
+    return false
   }
 
   /**
@@ -196,7 +238,7 @@ object Nlp {
    * @param blogId blogId
    * @param text the content of the blog
    */
-  def generateSentence(blogId: Int, text: String, hSents: mutable.LinkedHashMap[(Int,Int),Sentence] = null): Array[Sentence] = {
+  def generateSentence(blogId: Long, text: String, hSents: mutable.LinkedHashMap[(Long,Int),Sentence] = null): Array[Sentence] = {
     // process the newline as configuration. 1: replace with space; 2: replace with '.'; 0: do nothing
     //    val text_tmp = if (Conf.ignoreNewLine == 1) {
     //      target.replace("\r\n", " ").replace("\r", " ").replace("\n", ". ").replace("\"", "\'")
@@ -243,9 +285,10 @@ object Nlp {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
+                val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
                   // check if the gram is valid. e.g. stop words
-                  val gram = Ngram.getNgram(gram_text, hNgrams)
+                  val gram = Ngram.getNgram(key,gram_text, hNgrams)
                   // some info have to update when the gram created
                   if (gram.id < 0) {
                     gram.id = gramId.getAndAdd(1)
@@ -253,7 +296,7 @@ object Nlp {
                     gram.updateOnCreated(sent, pos, pos + n + 1)
                   }
                   // on create or found it again.
-                  gram.updateOnHit(sent)
+                  gram.updateOnHit(sent,pos,pos+n+1)
                   if (gram.tfAll == 1) {
                     traceFilter(INFO, gram.text, s"Creating gram ${gram}, sent:${sent}")
                   } else {
@@ -279,6 +322,16 @@ object Nlp {
                     ngram: Int = Ngram.N
                     ): Unit = {
     val hPreNgram =  firstStageNgram.value
+
+    if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
+      Nlp.wordsInbags = if (Conf.bowTopNgram>0) {
+        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopNgram).map(_._1).zipWithIndex.toMap
+      }else{
+        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
+      }
+      println(Nlp.wordsInbags.toSeq.sortBy(_._2).mkString("\t"))
+    }
+
     //println(s"generateNgramStage2, pre gram # ${hPreNgram.size}")
     sentence.foreach(sent => {
       // process ngram
@@ -295,10 +348,11 @@ object Nlp {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
-                val pre_gram = hPreNgram.getOrElse(gram_text,null)
-                if ( (pre_gram != null) ) {
+                val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
+                val pre_gram = hPreNgram.getOrElse(key,null)
+                if ( (sent.tokens(pos + n).length > 0 && pre_gram != null) ) {
                   //in stage 2, we can directly use result of stage 1
-                  val gram = Ngram.getNgram(gram_text, hNgrams)
+                  val gram = Ngram.getNgram(key,gram_text, hNgrams)
                   // some info have to update when the gram created
                   if (gram.id < 0) {
                     gram.id = gramId.getAndAdd(1)
@@ -307,7 +361,7 @@ object Nlp {
                     gram.getInfoFromPrevious(pre_gram)
                   }
                   // on create or found it again.
-                  gram.updateOnHit(sent,hPreNgram)
+                  gram.updateOnHit(sent,pos,pos+n+1,hPreNgram)
                   traceFilter(INFO, gram.text, s"Updating gram ${gram}, sent:${sent}")
                   gramInSent.append((pos,gram,pre_gram))
                 }
@@ -350,16 +404,26 @@ object Nlp {
           }
         }
 
-        // update the nearest umls term, exclude the term that is nested by cGram
-        if (wPreGram.isUmlsTerm() && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) && Math.abs(c._1 - w._1) < nearestUmls) {
-          traceFilter(INFO,cGram.text, s"umls dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
-          nearestUmls = Math.abs(c._1 - w._1)
-        }
-        if (wPreGram.isUmlsTerm(true) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)  && Math.abs(c._1 - w._1) < nearestChv) {
-          traceFilter(INFO,cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.text}, ${wPreGram.text}")
-          nearestChv = Math.abs(c._1 - w._1)
+        // update bags of words counter by sentence
+        if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
+          val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse(-1)
+          traceFilter(INFO, cGram.text, s"${cGram.key} found ${wPreGram.key},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v=>(v._1,v._2.key)).mkString(",")}")
+          if (index>=0){
+            cGram.context.wordsInbags(index) += 1
+          }
         }
 
+        // update the nearest umls term, exclude the term that is nested by cGram
+        if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
+          if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
+            traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.key}, ${wPreGram.key}")
+            nearestUmls = Math.abs(c._1 - w._1)
+          }
+          if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
+            traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.key}, ${wPreGram.key}")
+            nearestChv = Math.abs(c._1 - w._1)
+          }
+        }
         // update in the window,  exclude the term that is nested by cGram
         if (((w._1 + w._2.n + Ngram.WinLen > c._1) && (c._1 + c._2.n + Ngram.WinLen) < w._1) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)) {
           if (wPreGram.isUmlsTerm(true)) {
@@ -374,9 +438,51 @@ object Nlp {
       }
       cGram.context.umlsDist += nearestUmls
       cGram.context.chvDist += nearestChv
+
+      var winStart = if (c._1-Conf.WinLen>0) c._1-Conf.WinLen else 0
+      var winEnd = if (c._1+Conf.WinLen>sent.Pos.size) sent.Pos.size else c._1+Conf.WinLen
+      sent.Pos.slice(winStart,winEnd).foreach(p => {
+        val index = Conf.posInWindown.indexOf(p)
+        if (index>=0) cGram.context.win_pos(index) += 1
+      })
+
+      // if only count the prefix/suffix of ngram itself, change the window to itself
+      if (!Conf.prefixSuffixUseWindow) {
+        winStart = c._1
+        winEnd = c._1 + c._2.n
+      }
+      updatePrefixSuffix(sent.tokens.slice(winStart, winEnd),cGram)
+
     }
+
   }
 
+  /**
+   *
+   * @param words: the window of words that we have to check if contain pre/suf-fix
+   * @param ngram: the ngram that we are going to update the context
+   */
+  def updatePrefixSuffix(words: Seq[String], ngram: Ngram) = {
+    // if only count the prefix/suffix of ngram itself, change the window to itself
+    words.foreach(w => {
+      breakable {
+        Nlp.prefixs.zipWithIndex.foreach(kv => {
+          if (w.startsWith(kv._1)) {
+            ngram.context.win_prefix(kv._2) += 1
+            break
+          }
+        })
+      }
+      breakable {
+        Nlp.suffixs.zipWithIndex.foreach(kv => {
+          if (w.endsWith(kv._1)) {
+            ngram.context.win_suffix(kv._2) += 1
+            break
+          }
+        })
+      }
+    })
+  }
 
   /**
    * When the gram is create, we get some useful info from the sentence.
@@ -405,12 +511,22 @@ object Nlp {
       "A" // adjective
     else if (pos == "IN")
       "P" // preposition or a conjunction that introduces a subordinate clause, e.g., although, because.
-    else if (pos == "RB"|pos == "RBR"|pos == "RBS")
+    else if (pos == "RB"|pos == "RBR"|pos == "RBS"| pos=="WRB")
       "R" // Adverb
     else if (pos == "VB"|pos == "VBD"|pos == "VBG"|pos=="VBN"|pos=="VBP"|pos=="VBZ")
       "V" // verb
     else if (pos == "TO")
       "T" // to
+    else if ("DT" ==pos|"PDT"==pos|"WDT"==pos)
+      "D" // determiner
+    else if (pos == "EX")
+      "E" // existential
+    else if (pos == "FW")
+      "F" // foreign word
+    else if (pos == "CD")
+      "M" // cardinal number
+    else if (pos == "RPR"|pos == "RPR$"|pos == "WP"|pos == "WP$")
+      "U" // pronoun
     else if (pos == "CC")
       "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.
     else
@@ -423,7 +539,7 @@ object Nlp {
    * @param text
    * @return
    */
-  def textPreprocess(blogId: Int, text: String) = {
+  def textPreprocess(blogId: Long, text: String) = {
     val ret = text.replaceAll("([~`=+<>,:|;/\"\\[\\]\\(\\)\\{\\}\\.!\\?\\|\\\\])"," $1 ").replaceAll("\\s+"," ")
     (blogId, ret)
   }
@@ -434,26 +550,27 @@ object Nlp {
   def main(argv: Array[String]): Unit = {
 
     Trace.currLevel = DEBUG
-//    val lvg =  new Lvg()
-//    val ret = lvg.getNormTerm("glasses")
-//    println(s"lvg out put ${ret}")
+
+    val lvg =  new Lvg()
+    val ret = lvg.getNormTerm("glasses")
+    println(s"lvg out put ${ret}")
 //
-    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
-    def textPreprocess(blogId: Int, text: String) = {
-      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
-      (blogId, ret)
-    }
-    val text = "Impaired fasting glucose"
-    //val orgPos = postagger.tag(text.split(" "))
-    //orgPos.map(Nlp.posTransform(_))
-
-    val ret = Nlp.getToken(text)
-    val ret2 = ret.map(Nlp.normalizeAll(_))
-
-    println(s"Nlp result: ${ret2.mkString(" ")}")
-    println("nlp then old tool result: " + tagger.normalizeAll(text,false))
-    println("select result: " + tagger.select(text).mkString(","))
-    println("select result: " + tagger.getUmlsScore(text))
+//    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
+//    def textPreprocess(blogId: Int, text: String) = {
+//      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
+//      (blogId, ret)
+//    }
+//    val text = "Impaired fasting glucose"
+//    //val orgPos = postagger.tag(text.split(" "))
+//    //orgPos.map(Nlp.posTransform(_))
+//
+//    val ret = Nlp.getToken(text)
+//    val ret2 = ret.map(Nlp.normalizeAll(_))
+//
+//    println(s"Nlp result: ${ret2.mkString(" ")}")
+//    println("nlp then old tool result: " + tagger.normalizeAll(text,false))
+//    println("select result: " + tagger.select(text).mkString(","))
+//    println("select result: " + tagger.getUmlsScore(text))
 
 
 

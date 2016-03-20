@@ -2,21 +2,35 @@
 
 ## Overview
 
- A project focus on mining useful information from clinical text, based on UMLS data. The original
- idea come from [Sujit Pal](https://www.blogger.com/profile/06835223352394332155)'s posts
- [Fuzzy String Matching against UMLS Data](http://sujitpal.blogspot.com/2014/02/fuzzy-string-matching-against-umls-data.html)
- and [Fuzzy String Matching with SolrTextTagger](http://sujitpal.blogspot.com/2014/02/fuzzy-string-matching-with.html).
+ A project focus on mining potential knowledge from clinical text, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
+   and platform [Apcache Spark](http://spark.apache.org/). 
+ 
+## Features
+### General text processing
+ We call it "general" because anytime given a text dataset, we have to transform the text into
+ the form that we can process them, usually it can be a vector of words.
+ Currently, we use [Apache openNLP](https://opennlp.apache.org/) to process the text, 
+ including sentence detection, tokenization and  Part-of-Speech parsing. We may adopt
+  [Stanford NLP](http://nlp.stanford.edu/) in the future since it provide  richer of features.
+ We use Lexical Variant Generation (LVG) to convert the variant of a word to its basic form.
+ We use a user-defined stop word list to filter out the meaningless words. Note that a term contains
+ more than one word, we will filter out it if it begins or ends with a stop word.
 
- To put it simply, Currently plan, Clinical-Text-Mining includes steps:
+### Term identification
+ Term identification is a feature that given some texts and a list of term, we identify if the term 
+ occurs in the text.
+ To put it simply, Clinical-Text-Mining includes steps:
 
- - Normalize(tokenization, parsing, chunking and so on, maybe use cTAKES or opennlp) 
-   the definition(string or other info) of UMLS(or any other metathesaurus) into several features,
-   then makes a custom index and tag using Solr, then
- - Takes the same Normalization steps for the clinical text to get the features, then
- - Match features of clinical text with the tags of UMLS in Solr.
- - Evaluate the matching result, and find out the best result(s)
+ - For the texts, applay the general process mentioned above, then we obtain a vector of words for every
+   text. 
+ - For the list of tems, we do the same general process, and then store the result in Mysql (or solr)
+ - We construct [N-gram](https://en.wikipedia.org/wiki/N-gram) from the vector, and then execute a 
+ query for the Ngram to check if is is found in the term list stored in Mysql (or solr).
+ - For a N-gram, it may match more than one term in the list. We will give a similarity score based on
+   the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance), and we also collecting
+   other information about the term, such as the semantic type if it is a term in UMLS.
 
- ## Concrete functions as flowing(Tasks List):
+### Tasks List:
 
  - [x] Extract UMLS terms (AUIs or CUI and so on) from text, just a basic function as an example.
   For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
@@ -24,7 +38,7 @@
   Each of the synonyms has a AUI (term unique identifier). In this basic task, it extracts the AUIs
   like A1303513, A18648338 according to the text.
     - [x] Use sentence as the basic unit to apply the n-gram algorithm (currently use a line as unit). Using opennlp.
-    - [x] Concern the pos of a word when match.(if pos not match, 70% discount)
+    - [x] Use the pos of a word when match.(if pos not match, 70% discount)
     - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
     - [x] Get all the resault from solr, sorted with the score
     - [ ] Choose a best result. It is about Word Sense Disambiguation.
@@ -36,19 +50,18 @@
 ## clustering
 
 
-
 ## How to run
 
 1. Download this project use: `git clone http://somelab08.cci.fsu.edu/zc15d/Clinical-Text-Mining.git`. I recommend
-   you use an IDE such as IDEA or Eclipse.  
-   Modify the ${UmlsTagger2Test.rootDir} in the test class to the root directory of the project, e.g. val rootDir = "C:\\fsu\\ra\\UmlsTagger"  
-   Modify the file default.properties in /conf to the right property, 
+   you use an IDE such as IDEA.  Is is a maven project, so it should be easy to build it.
+   Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
+   The tool will find the configuration file and resource file in the project directory.
 2. **Prepare the UMLS data for test**. **(This step may take lost of time, but if you just try to test
    the basic function of this project, just directly use the example data in data/umls/first_10000.csv)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
    or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
    At the end, you will import the UMLS data into Mysql.
-   Then export the test data from using sql:
+   Then export the test data  using sql:
 
    ```
     select CUI, AUI, STR from MRCONSO
@@ -73,94 +86,7 @@
    mvn test
    mvn package
    ```
-4. **Download and Customize Solr** (only 4.6.1 is tested, later it will support solr 5.x)
-   Solr is available for download [here](https://archive.apache.org/dist/lucene/solr/4.6.1/).
-   After downloading you will need to expand it locally, then update the schema.xml and solrconfig.xml
-   in the conf subdirectory as shown below:  
-  **(Tips: Instead of modify by yourself as following,, you can just copy the config files in
-  ${project-root}/conf directory to ${solr-4.6.1}/example/solr/collection1/conf)**
-
-   ```
-   tar xvzf solr-4.6.1.tgz
-   cd solr-4.6.1/example/solr/collection1/conf
-   ```
-
-   Update the schema.xml to replace the field definitions with our own. Our fields list and the definition
-   of the field type "tag" (copied from the documentation of SolrTextTagger) is shown. The "id" field is
-    just a integer sequence (unique key for Solr), the "cui" and "descr" comes from the CUI and
-    STR fields from the UMLS database, and the descr_norm, descr_sorted, descr_stemmed are case/punctuation normalized,
-    alpha sorted and stemmed versions of STR. The descr_tagged field is identical to descr_norm but is analyzed differently as specified below.
-    (add the new fields to the beginning of the <fields>):
-
-    ```
-    <fields>
-        <field name="id" type="string" indexed="true" stored="true"
-          required="true"/>
-        <field name="cui" type="string" indexed="true" stored="true"/>
-        <field name="aui" type="string" indexed="true" stored="true"/>
-        <field name="sab" type="string" indexed="false" stored="true"/>
-        <field name="descr" type="string" indexed="true" stored="true"/>
-        <field name="descr_norm" type="string" indexed="true" stored="true"/>
-        <field name="descr_sorted" type="string" indexed="true" stored="true"/>
-        <field name="descr_stemmed" type="string" indexed="true" stored="true"/>
-        <field name="descr_tagged" type="tag" indexed="true" stored="false"
-             omitTermFreqAndPositions="true" omitNorms="true"/>
-        <copyField source="descr_norm" dest="descr_tagged"/>
-        <dynamicField name="*" type="string" indexed="true" stored="true"/>
-        
-        ...
-    </fields>
-    ...
-    <types>
-        <fieldType name="tag" class="solr.TextField" positionIncrementGap="100">
-          <analyzer>
-            <tokenizer class="solr.StandardTokenizerFactory"/>
-            <filter class="solr.EnglishPossessiveFilterFactory"/>
-            <filter class="solr.ASCIIFoldingFilterFactory"/>
-            <filter class="solr.LowerCaseFilterFactory"/>
-          </analyzer>
-        </fieldType>
-    ...
-    </types>        
-        
-    ```
-    We then add in the requestHandler definition for SolrTextTagger's tag service into the solrconfig.xml file (also in conf).
-    The definition is shown below(add it above the first exists requestHandler):
-
-    ```
-    <requestHandler name="/tag"
-         class="org.opensextant.solrtexttagger.TaggerRequestHandler">
-        <str name="indexedField">descr_tagged</str>
-        <str name="storedField">descr_norm</str>
-        <bool name="partialMatches">false</bool>
-        <int name="valueMaxLen">5000</int>
-        <str name="cacheFile">taggerCache.dat</str>
-     </requestHandler>
-      ```
-     Finally, we create a lib directory and copy over the solr-text-tagger-1.3-SNAPSHOT.jar into it.
-     Then go up to the example directory and start Solr. Solr is now listening on port 8983 on localhost.
-
-     ```
-     cd solr-4.6.1/example/solr/collection1
-     mkdir lib
-     cp ${SolrTextTagger-path}/SolrTextTagger/target/*jar lib/
-     cd ../..
-     java -jar start.jar
-     ```
-5. Load Data and Build FST
-    We use the same cuistr1.csv file that we downloaded from our MySQL UMLS database. I guess I could have
-    written custom code to load the data into the index, but I had started experimenting with SolrTextTagger using curl,
-    so I just wrote some code that converted the (CUI,STR) CSV format into JSON,
-    with additional fields created by our case/punctuation normalization, alpha sort and stemming.
-    I used the same Scala code since I already had the transformations coded up from last week.
-    Once I generated the JSON file (cuistr1.json), I uploaded it into Solr and built the FST using the following curl commands.
-
-    ```
-    cd solr-4.6.1\example\exampledocs
-    java -Durl=http://localhost:8983/solr/update -Dtype=application/json \
-      -jar post.jar ${your-path}/first_10000.csv
-    curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
-    ```
+   
 6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.  
    I suggest using the IDEA as your IDE, and mark the src/main as a source directory and src/test as the test directory. Then you can directly 
    run the junit test function. Before you run it, set the UmlsTagger2Test.dataDir (in class UmlsTagger2Test) to the directory of the "data"
@@ -169,8 +95,6 @@
 7. Good luck and enjoy it!
 
 ## Dependency
- - [Solr](https://github.com/apache/solr)
- - [SolrTextTagger](https://github.com/OpenSextant/SolrTextTagger)
  - UMLS data
 
 ## Test Result using all UMLM record of UMLS 

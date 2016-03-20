@@ -1,6 +1,6 @@
 package com.votors.common
 
-import java.io.{FileOutputStream, ObjectOutputStream, FileInputStream}
+import java.io.{File, FileOutputStream, ObjectOutputStream, FileInputStream}
 import java.lang.Exception
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Random, Properties, Date}
@@ -11,7 +11,8 @@ import java.util.{Random, Properties, Date}
  */
 object Utils extends java.io.Serializable{
   val random = new Random()
-  def log2(x:Double)=Math.log(x)/Math.log(2)
+  // log2(x+1)
+  def log2p1(x:Double)=Math.log(x+1)/Math.log(2)
   def string2Int(s: String, default: Int=0): Int = {
     try{
       s.toFloat.toInt
@@ -46,6 +47,11 @@ object Utils extends java.io.Serializable{
     val format = new java.text.SimpleDateFormat("yyyyMMddHHmm")
     format.format(new Date(ts*1000))
   }
+  def arrayAddInt(a:Array[Int],b:Array[Int],ret:Array[Int]) = {
+    Range(0,a.size).foreach(index =>{
+      ret(index) = a(index)+(b(index))
+    })
+  }
   //class TraceLevel extends Enumeration {}
   object Trace extends Enumeration {
     type TraceLevel = Value
@@ -63,6 +69,9 @@ object Utils extends java.io.Serializable{
   }
   def bool2Double(b: Boolean): Double = {
     if (b) 1.0 else 0.0
+  }
+  def bool2Int(b: Boolean): Int = {
+    if (b) 1 else 0
   }
   def writeObjectToFile(filename: String, obj: AnyRef) = {
     // obj must have serialiazable trait
@@ -114,11 +123,31 @@ class InterObject(factor: Double=0.5, capacity: Int=3) extends java.io.Serializa
 }
 
 object Conf extends java.io.Serializable{
-  // Load properties
-  val rootDir = sys.props.get("CTM_ROOT_PATH").getOrElse(sys.env.getOrElse("CTM_ROOT_PATH",println("!!!!!!!!you need to set env CTM_ROOT_PATH!!!!!!!!"))).toString
+  // Load properties. root dir is importance. the configuration and resource files are under the root dir.
+  val rootDir = sys.props.get("CTM_ROOT_PATH").getOrElse(sys.env.getOrElse("CTM_ROOT_PATH",println("!!!!!!!!you need to set java property/env CTM_ROOT_PATH!!!!!!!!"))).toString
+  if (rootDir.trim.length == 0) {
+    println("!!!!!! root dir not found, check java option or env to make sure  CTM_ROOT_PATH is defined.!!!!!!!!!!!!")
+    sys.exit(1)
+  }
   val prop = new Properties()
-  prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
+  // read current dir configuration first.
+  if (new File("default.properties").exists()) {
+    println(s"********* default.propertiest is found in current working directory ************")
+    prop.load(new FileInputStream("default.properties"))
+  }else {
+    println(s"********* default.propertiest is NOT found in current working directory, try ${rootDir}/conf/default.properties ************")
+    prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
+  }
   println("Current properties:\n" + prop.toString)
+
+  val dbUrl = Conf.prop.get("blogDbUrl").toString
+  val blogTbl = Conf.prop.get("blogTbl").toString
+  val blogIdCol = Conf.prop.get("blogIdCol").toString
+  val blogTextCol = Conf.prop.get("blogTextCol").toString
+  val blogLimit = Conf.prop.get("blogLimit").toString.toInt
+  val targetTermTbl = Conf.prop.get("targetTermTbl").toString.toString
+  val targetTermTblDropAndCreate = Conf.prop.get("targetTermTblDropAndCreate").toString.toBoolean
+  val targetTermUsingSolr = Conf.prop.get("targetTermUsingSolr").toString.toBoolean
 
   val caseFactor = prop.get("caseFactor").toString.toFloat
   val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
@@ -142,8 +171,11 @@ object Conf extends java.io.Serializable{
   val umlsLikehoodLimit = prop.get("umlsLikehoodLimit").toString.toDouble
   val WinLen = prop.get("WinLen").toString.toInt
   val delimiter = prop.get("delimiter").toString.trim
+  val stopwordMatchType = prop.get("stopwordMatchType").toString.toInt
   val stopwordRegex = prop.get("stopwordRegex").toString.trim
+  val posFilterRegex = prop.get("posFilterRegex").toString.split(" ").filter(_.trim.length>0)
   val debugFilterNgram = prop.get("debugFilterNgram").toString
+  val saveNgram2file = prop.getProperty("saveNgram2file","").trim
 
   val ngramSaveFile = prop.get("ngramSaveFile").toString.trim
   val clusteringFromFile = prop.get("clusteringFromFile").toString.toBoolean
@@ -155,17 +187,55 @@ object Conf extends java.io.Serializable{
   val maxIterations=prop.get("maxIterations").toString.toInt
   val runs=prop.get("runs").toString.toInt
   val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
+  val clusterThresholSample=prop.get("clusterThresholSample").toString.toInt
+  val clusterThresholFactor=prop.get("clusterThresholFactor").toString.toDouble
+  val clusterThresholdLimit=prop.get("clusterThresholdLimit").toString.toInt
   val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
   val testSample=prop.get("testSample").toString.toInt
-  val useFeatures=prop.get("useFeatures").toString.trim.split(",")
+  val useFeatures4Train=prop.get("useFeatures4Train").toString.trim.split(",").map(fw=>{
+    val afw = fw.split(":").filter(_.trim.length>0)
+    (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
+  })
+  val useFeatures4Test=prop.get("useFeatures4Test").toString.trim.split(",").map(fw=>{
+    val afw = fw.split(":").filter(_.trim.length>0)
+    (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
+  })
+//  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
+  val semanticType=prop.get("semanticType").toString.trim.split(",")
+  val posInWindown=prop.get("posInWindown").toString.trim
+  val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
+  val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean
+  val normalize_standardize=prop.get("normalize_standardize").toString.toBoolean
+  val normalize_outlier_factor=prop.get("normalize_outlier_factor").toString.toDouble
+  val outputVectorOnly=prop.get("outputVectorOnly").toString.toBoolean
 
-  val runPredict=prop.get("runPredict").toString.toBoolean
+  val baseLineRank=prop.get("baseLineRank").toString.toBoolean
   val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
   val runRank=prop.get("runRank").toString.toBoolean
   val rankGranular=prop.get("rankGranular").toString.toInt
+  val rankLevelNumber=prop.get("rankLevelNumber").toString.toInt
+  val rankLevelBase=prop.get("rankLevelBase").toString.toInt
   val fscoreBeta=prop.get("fscoreBeta").toString.toDouble
   val showDetailRankPt=prop.get("showDetailRankPt").toString.toInt
   val rankWithTrainData=prop.get("rankWithTrainData").toString.toBoolean
+  val showOrgNgramNum=prop.get("showOrgNgramNum").toString.toInt
+  val showOrgNgramOfN=prop.get("showOrgNgramOfN").toString.split(",").map(_.toInt)
+  val showOrgNgramOfPosRegex=prop.get("showOrgNgramOfPosRegex").toString.trim
+  val showOrgNgramOfTextRegex=prop.get("showOrgNgramOfTextRegex").toString.trim
+  val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
+  val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
+  val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
+  val bagsOfWordFilter=prop.get("bagsOfWordFilter").toString.toBoolean
+  val tfdfLessLog=prop.get("tfdfLessLog").toString.toBoolean
+  var bowTopNgram=prop.get("bowTopNgram").toString.toInt
+  val reviseModel=prop.get("reviseModel").toString.toBoolean
+  val clusterScore=prop.get("clusterScore").toString.toBoolean
+  var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
+  var pcaDimension=prop.get("pcaDimension").toString.toInt
+  val sampleRuns=prop.get("sampleRuns").toString.toInt
+  val showSentence=prop.get("showSentence").toString.toBoolean
+  //val showTfAvgSdInCluster=prop.get("showTfAvgSdInCluster").toString.toBoolean
+  val showTfAvgSdInCluster=true
 
 }
 

@@ -38,8 +38,6 @@ import opennlp.tools.cmdline.PerformanceMonitor
 import opennlp.tools.postag.POSModel
 import opennlp.tools.postag.POSSample
 import opennlp.tools.postag.POSTaggerME
-import opennlp.tools.stemmer.PorterStemmer
-import opennlp.tools.stemmer.snowball.englishStemmer
 import opennlp.tools.tokenize.WhitespaceTokenizer
 import opennlp.tools.util.ObjectStream
 import opennlp.tools.util.PlainTextByLineStream
@@ -62,6 +60,35 @@ case class Suggestion(val score: Float,
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
   }
 }
+
+case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val sab: String,
+                            val descr:String, val descr_norm:String, val descr_sorted:String, val descr_stemmed:String) {
+  override
+  def toString(): String = {
+    "%d,%s,%s,%s,%s,%s,%s,%s".format(id, cui, aui, sab, descr,descr_norm,descr_sorted,descr_stemmed)
+  }
+  def getHead(): String = {
+    "id,cui,aui,sab,descr,descr_norm,descr_sorted,descr_stemmed"
+  }
+  def createTableSql(tblName:String) = {
+    val str=s"create table if not exists ${tblName} (`id` bigint default 0,`cui` varchar(20) DEFAULT NULL," +
+      "`aui` varchar(20) DEFAULT NULL,`sab` varchar(20) DEFAULT NULL,`descr` text DEFAULT NULL," +
+      "`descr_norm` text DEFAULT NULL,`descr_stemmed` text DEFAULT NULL,`descr_sorted` text DEFAULT NULL)"
+    println(str)
+    str
+  }
+  def insertSql(tblName:String) = {
+    val str= s"insert into ${tblName} values ($id,'$cui','$aui','$sab','${descr.replaceAll("\'","\\\\'")}','$descr_norm','$descr_stemmed','$descr_sorted')"
+    //println(str)
+    str
+  }
+  def createIndexSql(tblName:String) = {
+    val str=s"CREATE INDEX PIndex ON ${tblName} ( cui,descr (32),descr_norm (32),descr_sorted (32),descr_stemmed (32) );"
+    println(str)
+    str
+  }
+}
+
 
 /**
  * Main entry of the project.
@@ -103,8 +130,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * - step 2: stem
    * - step 3: sort
    *
-   * @param inputFile
-   * @param outputFile
+   * @param inputFile: csv format or table split file
+   * @param outputFile:
    */
   def buildIndexJson(inputFile: File,
                      outputFile: File): Unit = {
@@ -170,33 +197,99 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.close()
   }
 
-  /**
-   * Not for now.
-   *
-   * @param phrase
-   * @return
-   */
-  def annotateConcepts(phrase: String):
-  List[Suggestion] = {
-    // check for full match
-    val suggestions = ArrayBuffer[Suggestion]()
-    select(phrase) match {
-      case suggestion: Array[Suggestion] => suggestions ++= suggestion
-      case _ => tag(phrase) match {
-        case Some(subSuggs) => suggestions ++= subSuggs
-        case None => {}
-      }
-    }
-    suggestions.toList
-  }
+  def buildIndexCsv(inputFile: File,
+                     outputFile: File): Unit = {
 
+    implicit val codec = Codec("UTF-8")
+    codec.onMalformedInput(CodingErrorAction.REPLACE)
+    codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+    var writer = new PrintWriter(new FileWriter(outputFile))
+    writer.println(TargetTermsIndex(0,"","","","","","","").getHead())
+    var i = 0
+    var cntByte = 0
+    var cntFile = 1
+    var newFile = true
+    Source.fromFile(inputFile)
+      .getLines()
+      .foreach(line => {
+      val Array(cui, aui, sab, str) = line
+        .replace("\",\"", "\t")
+        .replaceAll("\"", "")
+        .replaceAll("\\\\", "")
+        .replaceAll(",", " ")
+        .split("\t")
+      // the string in a Glossary is always considered as a sentence. No sentence detecting step.
+      val strNorm = normalizeCasePunct(str)
+      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+      val strStemmed = stemWords(strNorm)
+      val strSorted = sortWords(strStemmed)
+      val obuf = new StringBuilder()
+      if (newFile == false) obuf.append(",")
+      newFile = false
+      val targetTerm = TargetTermsIndex(i,cui,aui,sab,str,strNorm,strSorted,strStemmed)
+      writer.println(targetTerm.toString())
+      i += 1
+      cntByte += obuf.toString().length
+
+      //Avoid the file is too big. it will fail to import to solr if the file bigger than 2.5G
+      if (cntByte > 1*1024*1024*1024) {
+        // close the old writer
+        println(cntByte)
+        writer.println("]")
+        writer.flush()
+        writer.close()
+        // create a new writer
+        cntByte = 0
+        cntFile += 1
+        newFile = true
+        writer = new PrintWriter(new FileWriter(outputFile + s"($cntFile)"))
+        writer.println("[")
+      }
+
+    })
+    writer.println("]")
+    writer.flush()
+    writer.close()
+  }
+  def buildIndex2db(inputFile: File): Unit = {
+    implicit val codec = Codec("UTF-8")
+    codec.onMalformedInput(CodingErrorAction.REPLACE)
+    codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
+    val emptyTerm = TargetTermsIndex(0,"","","","","","","")
+    // init table
+    if (Conf.targetTermTblDropAndCreate) execUpdate(s"drop table if exists ${Conf.targetTermTbl}")
+    execUpdate(emptyTerm.createTableSql( Conf.targetTermTbl))
+
+    var i = 0
+    Source.fromFile(inputFile)
+      .getLines()
+      .foreach(line => {
+      val Array(cui, aui, sab, str) = line
+        .replace("\",\"", "\t")
+        .replaceAll("\"", "")
+        .replaceAll("\\\\", "")
+        .replaceAll(",", " ")
+        .split("\t")
+      // the string in a Glossary is always considered as a sentence. No sentence detecting step.
+      val strNorm = normalizeCasePunct(str)
+      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+      val strStemmed = stemWords(strNorm)
+      val strSorted = sortWords(strStemmed)
+      val obuf = new StringBuilder()
+      val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
+      execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
+      i += 1
+      })
+    if (Conf.targetTermTblDropAndCreate)execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
+
+  }
   ///////////// phrase munging methods //////////////
 
   def normalizeCasePunct(str: String): String = {
     Nlp.normalizeCasePunct(str,null)
   }
 
-  val stemmer = new PorterStemmer()
   def sortWords(str: String): String = {
     val words = Nlp.getToken(str)
     Nlp.sortWords(words).mkString(" ")
@@ -208,20 +301,6 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     trace(DEBUG,s"after stem :${stemmedWords}")
     stemmedWords
   }
-  // please not use it again
-/*
-  def stemWordsOrg(str: String): String = {
-    val stemmedWords = ArrayBuffer[String]()
-    val tokenStream = getAnalyzer().tokenStream(
-      "str_stemmed", new StringReader(str))
-    val ctattr = tokenStream.addAttribute(
-      classOf[CharTermAttribute])
-    tokenStream.reset()
-    while (tokenStream.incrementToken()) {
-      stemmedWords += ctattr.toString()
-    }
-    stemmedWords.mkString(" ")
-  }*/
 
   def normalizeAll(str: String, isSort:Boolean=true, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str)
@@ -230,18 +309,15 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     ret
   }
 
-  //get pos after case/punctuation delete(input has done this work)?  // XXX: This may be not a correct approach!
+  //get pos after case/punctuation deleted(input has done this work)
+  // XXX: This may be not a correct approach! but we do not rely on POS too much
   def getPos(phraseNorm: Array[String]) = {
     Nlp.getPos(phraseNorm,false)
   }
-  //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
+  //get sentence
   def getSent(phrase: String) = {
     Nlp.getSent(phrase)
   }
-
-/*  def getAnalyzer(): Analyzer = {
-    new StandardAnalyzer(Version.LUCENE_46)
-  }*/
 
   ///////////////// solr search methods //////////////
   /**
@@ -254,6 +330,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return all the suggestion result in an array, sorted by score.
    */
   def select(phrase: String): Array[Suggestion] = {
+    if (Conf.targetTermUsingSolr)
+      select_solr(phrase.replaceAll("\'","\\\\'"))
+    else
+      select_db(phrase.replaceAll("\'","\\\\'"))
+  }
+  def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
     val queryPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
     val phraseStemmed = stemWords(phraseNorm)
@@ -289,56 +371,55 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     } else Array()
   }
 
+  ///////////////// solr search methods //////////////
   /**
-   * Not for now.
+   * Select all the result in Mysql
+   * The input string has to be normalized(case/puntuation delete, stemed, sorted), then search in
+   * database. All the result will be evaluated a score. The higher the score, the closer the
+   * result relative to the input.
    *
-   * @param phrase the input string to be queried in solr
-   * @return An array of Suggestion sorted by its score.
+   * @param phrase the words to be search in solr
+   * @return all the suggestion result in an array, sorted by score.
    */
-  def tag(phrase: String): Option[List[Suggestion]] = {
+  def select_db(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
-    val inputPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
-    val params = new ModifiableSolrParams()
-    params.add("overlaps", "LONGEST_DOMINANT_RIGHT")
-    val req = new ContentStreamUpdateRequest("")
-    req.addContentStream(new ContentStreamBase.StringStream(phrase))
-    req.setMethod(SolrRequest.METHOD.POST)
-    req.setPath("/tag")
-    req.setParams(params)
-    val rsp = req.process(solrServer)
-    val results = rsp.getResponse()
-      .get("matchingDocs")
-      .asInstanceOf[SolrDocumentList]
-    val nwordsInPhrase = phraseNorm.split(" ").length.toFloat
-    val suggestions = results.iterator().map(sdoc => {
-      val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
-      val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
-      val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
-      val sab = sdoc.getFieldValue("sab").asInstanceOf[String]
-      val nWordsInDescr = descr.split(" ").length.toFloat
+    val queryPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
+    val phraseStemmed = stemWords(phraseNorm)
+    val phraseSorted = sortWords(phraseStemmed)
+
+    // construct query. boost different score to stress fields.
+    val query = s"select * from ${Conf.targetTermTbl} where descr='%s'or descr_norm='%s'or descr_sorted='%s'or descr_stemmed='%s';"
+      .format(phrase, phraseNorm, phraseSorted, phraseStemmed)
+    trace(DEBUG, query)
+    val rsp = execQuery(query)
+    val suggs = new ArrayBuffer[Suggestion]()
+    //trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")
+    while(rsp.next()) {
+      val descr = rsp.getString("descr")
+      val descr_norm = rsp.getString("descr_norm")
+      val descr_sorted = rsp.getString("descr_sorted")
+      val descr_stemmed = rsp.getString("descr_stemmed")
+      trace(DEBUG,s"result from solr: $descr, $descr_norm, $descr_sorted, $descr_stemmed")
+      val cui = rsp.getString("cui")
+      val aui = rsp.getString("aui")
+      val sab = rsp.getString("sab")
       val descrNorm = normalizeCasePunct(descr)
       val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
-      val descrStemmed = stemWords(descrNorm)
-      val descrSorted = sortWords(descrStemmed)
-      val nwords = descrNorm.split(" ").length.toFloat
-      val score = (nwords / nwordsInPhrase) *
-        computeScore(descr,
-          scala.collection.immutable.List(descr, descrNorm, descrStemmed, descrSorted, inputPos, resultPos), Conf.caseFactor)
-      Suggestion(score, descr, cui, aui, sab)
-    })
-      .toList
-      .groupBy(_.cui) // dedup by cui
-      .map(_._2.toList.head)
-      .toList
-      .sortWith((a,b) => a.score > b.score) // sort by score
-    Some(suggestions)
+      val score = computeScore(descr,
+        scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
+      suggs.append(Suggestion(score, descr, cui, aui,sab))
+    }
+    suggs.toArray.sortBy(s => 1 - s.score) // Decrease
   }
+
 
   /**
    * The score is affect by 3 facts:
    * 1. a level or a base score: the more steps of transforming the string, the lower base score.
    * 2. a distance: for now it is getLevenshteinDistance.
    * 3. pos discount: if the pos is not the same, make a discount to the score directly.
+   *
+   * L-dist(t,s) / len *
    *
    * @param s
    * @param candidates
@@ -366,7 +447,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val dist_case = StringUtils.getLevenshteinDistance(candidate, s).toFloat
         val dist_no_case = StringUtils.getLevenshteinDistance(candidate.toLowerCase, s.toLowerCase).toFloat
         val dist = (dist_case * (1 - caseFactor) + dist_no_case * caseFactor)
-        (candidate, (1.0F - (dist / maxlen)) * level)
+        (candidate, (1.0F - (1.0F*dist / maxlen)) * level)
       } else {
         ("", 0.0f)
       }
@@ -374,33 +455,15 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       .sortWith((a, b) => a._2 > b._2)
       .head
     if (posFlag != true)
-      topscore._2 * 0.7f // pos are different, make a 30% discount
+      topscore._2 * 0.7f // pos are different, make a 30% penalty
     else
       topscore._2
-  }
-
-  def transferExcelCvs(excelCsvFile: String, outputFile:String): Int = {
-    val in = new FileReader(excelCsvFile)
-    val records = CSVFormat.DEFAULT
-      .withDelimiter(' ')
-      .parse(in).iterator()
-
-    var cnt =10
-    records.foreach(r => {
-      println(r.toString)
-      cnt = cnt - 1
-      if (cnt < 0) {
-        return 0
-      }
-    })
-    0
   }
 
 
   /////////////////// select for a text file ////////////////////
   /**
-   * find terms for dictionary for a field of cvs file.
-   *
+   * find terms from dictionary for a field in a cvs file.
    *
    * @param csvFile: Field order 0:blogId, 1: hash_tag,
    * @param ngram the ngram limited
@@ -438,7 +501,6 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       }
 
       val target = if (lastRecord != null)lastRecord.get(targetIndex) else ""
-
 
       if (target.length > 0 && skipSameBlog == false) {
         // process the newline as configuration. 1: replace with space; 2: replace with '.'; 0: do nothing
@@ -504,7 +566,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   }
 
   /**
-   * select for a sentence.
+   * find terms for a sentence.
    *
    * @param sentence
    * @param ngram
@@ -572,36 +634,51 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   }
 
   /**
-   * (umlsScore,chvScore,umlsCui,chvCui)
+   *
    * @param currTag
-   * @return (umlsScore,chvScore,umlsCui,chvCui)
+   * @return ((umlsScore,chvScore,umlsCui,chvCui), semanticTypeArray)
    */
-  def getUmlsScore(currTag: String): (Double,Double,String,String) = {
+  def getUmlsScore(currTag: String): ((Double,Double,String,String),Array[Boolean]) = {
     var umlsScore = 0.0
     var umlsCui = ""
     var chvScore = 0.0
     var chvCui = ""
+    var stys:Array[Boolean] = null
+
     select(currTag) match {
       case suggestions: Array[Suggestion] => {
         // for each UMLS terms, get their TUI from MRSTY table
 
         if (suggestions.length > 0) {
           suggestions.foreach(suggestion => {
-            if (suggestion.sab.contains("CHV")){
-              if (suggestion.score>chvScore) {
+            if (suggestion.sab.contains("CHV")) {
+              if (suggestion.score > chvScore) {
                 chvScore = suggestion.score
                 chvCui = suggestion.cui
               }
             }
-            if (suggestion.score>umlsScore) {
+            if (suggestion.score > umlsScore) {
               umlsScore = suggestion.score
               umlsCui = suggestion.cui
             }
           })
+          if (umlsScore > 0.01) {
+            stys = Array.fill(Conf.semanticType.size)(false)
+            suggestions.foreach(suggestion => {
+              //get all tui from mrsty table.
+              val mrsty = getMrsty(suggestion.cui)
+              while (mrsty.next) {
+                //for each TUI, get their semantic type
+                val tui = mrsty.getString("TUI")
+                val index = Conf.semanticType.indexOf(tui)
+                if (index >= 0) stys(index) = true
+              }
+            })
+          }
         }
-      }
+        }
     }
-    (umlsScore,chvScore,umlsCui,chvCui)
+    ((umlsScore,chvScore,umlsCui,chvCui), stys)
   }
 
   /**
@@ -667,30 +744,6 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   }
 
   /**
-   * Filer the words in a sentence by POS. Currently only noun is processed.
-   * see:
-   * http://blog.pengyifan.com/how-to-use-opennlp-to-do-part-of-speech-tagging/
-   * http://paula.petcu.tm.ro/init/default/post/opennlp-part-of-speech-tags
-   *
-   * @param phraseNorm
-   */
-  def posFilter(phraseNorm: Array[String], filter:String=" NN ") = {
-    val retPos = Nlp.getPos(phraseNorm)
-    val retFilter = if (filter.length>0) {
-      phraseNorm.filter(item => {
-        val flag = retPos(phraseNorm.indexOf(item))
-        filter.contains(s" ${flag} ")
-      } )
-    } else {
-      phraseNorm
-    }
-
-    trace(DEBUG, phraseNorm.mkString(",") + " pos is: " + retPos.mkString(",") + ", result: " + retFilter.mkString(","))
-
-    retFilter
-  }
-
-  /**
    * If the sentence contains all the pos in $filter, return true, else false
    * @param phraseNorm the sentence to evaluate
    * @param filter the pos as a eligible criteria
@@ -741,7 +794,14 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     val rs = sqlStatement.executeQuery(sql)
     rs
   }
-
+  def execUpdate (sql: String):Int = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeUpdate(sql)
+    rs
+  }
 }
 
 object UmlsTagger2 {
