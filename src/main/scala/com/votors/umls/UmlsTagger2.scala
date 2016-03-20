@@ -258,7 +258,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
     val emptyTerm = TargetTermsIndex(0,"","","","","","","")
     // init table
-    execUpdate(s"drop table if exists ${Conf.targetTermTbl}")
+    if (Conf.targetTermTblDropAndCreate) execUpdate(s"drop table if exists ${Conf.targetTermTbl}")
     execUpdate(emptyTerm.createTableSql( Conf.targetTermTbl))
 
     var i = 0
@@ -281,7 +281,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
       i += 1
       })
-    execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
+    if (Conf.targetTermTblDropAndCreate)execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
 
   }
   ///////////// phrase munging methods //////////////
@@ -390,7 +390,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     // construct query. boost different score to stress fields.
     val query = s"select * from ${Conf.targetTermTbl} where descr='%s'or descr_norm='%s'or descr_sorted='%s'or descr_stemmed='%s';"
       .format(phrase, phraseNorm, phraseSorted, phraseStemmed)
-    println(query)
+    trace(DEBUG, query)
     val rsp = execQuery(query)
     val suggs = new ArrayBuffer[Suggestion]()
     //trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")

@@ -146,6 +146,7 @@ object Conf extends java.io.Serializable{
   val blogTextCol = Conf.prop.get("blogTextCol").toString
   val blogLimit = Conf.prop.get("blogLimit").toString.toInt
   val targetTermTbl = Conf.prop.get("targetTermTbl").toString.toString
+  val targetTermTblDropAndCreate = Conf.prop.get("targetTermTblDropAndCreate").toString.toBoolean
   val targetTermUsingSolr = Conf.prop.get("targetTermUsingSolr").toString.toBoolean
 
   val caseFactor = prop.get("caseFactor").toString.toFloat
@@ -174,6 +175,7 @@ object Conf extends java.io.Serializable{
   val stopwordRegex = prop.get("stopwordRegex").toString.trim
   val posFilterRegex = prop.get("posFilterRegex").toString.split(" ").filter(_.trim.length>0)
   val debugFilterNgram = prop.get("debugFilterNgram").toString
+  val saveNgram2file = prop.getProperty("saveNgram2file","").trim
 
   val ngramSaveFile = prop.get("ngramSaveFile").toString.trim
   val clusteringFromFile = prop.get("clusteringFromFile").toString.toBoolean

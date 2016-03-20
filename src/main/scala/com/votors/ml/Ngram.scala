@@ -298,6 +298,7 @@ class Ngram (var text: String) extends java.io.Serializable{
       s"\t${posString}\t${bool2Str(isPosNN)}\t${bool2Str(isPosAN)}\t${bool2Str(isPosPN)}\t${bool2Str(isPosANPN)}\t${isTrain}\t${capt_first}\t${capt_term}\t${capt_all}\t${if(stys!=null)stys.map(bool2Int(_)).mkString("") else null}\t"+
     f"${textOrg.replaceAll("\\\"","'")}\t${if(Conf.showSentence)sent.mkString(" ").replaceAll("\\\"","'") else "" }"
   }
+
 }
 
 /**
@@ -511,6 +512,10 @@ object Ngram {
     })
 
     s.iterator
+  }
+  def getVectorHead() = {
+    "ngram\ttrain\tn\ttfdf\ttf\tdf\tcvalue\tnest\tumls_score\tchv_score\tcui\tcui\tcontain_umls\tcontain_chv\twin_umls\twin_chv\tsent_umls" +
+      "\tsent_chv\tumls_dist\tchv_dist\twin_pos\tprefix\tsuffix\tbow_total\tbow_words\tsytax\tnn\tan\tpn\tanpn\tisTrain\tcapt_first\tcapt_term\tcapt_all\tstys\ttext_org\tsentence"
   }
   def main (argv: Array[String]): Unit = {
   }
