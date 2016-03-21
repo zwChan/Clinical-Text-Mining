@@ -44,7 +44,7 @@ class UmlsTagger2Test   {
     @Test
     def testGetFull(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
-      val phrases = List("Sepsis", "sEPSIS", "Progressive systemic sclerosis")
+      val phrases = List("vitamin", "green tea", "Vitamin D")
       phrases.foreach(phrase => {
         Console.println()
         Console.println("Query: %s".format(phrase))
@@ -65,10 +65,9 @@ class UmlsTagger2Test   {
     def testStermWord(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
 
-      val phrases = List("the pets", "the men", "two dishes", "three Babies", "holidays"  ,"the datum",
-        "politics", "news ")
+      val phrases = List("green tea")
       phrases.foreach(phrase => {
-        Console.println(s"$phrase,${tagger.stemWords(phrase)}")
+        Console.println(s"$phrase,${tagger.normalizeAll(phrase)}")
        // Console.println(s"$phrase,${tagger.normalizeCasePunct(phrase)}")
 
       })

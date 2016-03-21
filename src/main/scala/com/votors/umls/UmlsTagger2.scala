@@ -3,11 +3,13 @@ package com.votors.umls
 import java.io._
 import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
-import java.util.Properties
+import java.util.{Date, Properties}
 
 import com.votors.common.Conf
-import com.votors.ml.Nlp
+import com.votors.ml.{Clustering, Nlp}
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.{SparkContext, SparkConf}
 
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
@@ -71,8 +73,8 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
     "id,cui,aui,sab,descr,descr_norm,descr_sorted,descr_stemmed"
   }
   def createTableSql(tblName:String) = {
-    val str=s"create table if not exists ${tblName} (`id` bigint default 0,`cui` varchar(20) DEFAULT NULL," +
-      "`aui` varchar(20) DEFAULT NULL,`sab` varchar(20) DEFAULT NULL,`descr` text DEFAULT NULL," +
+    val str=s"create table if not exists ${tblName} (`id` bigint default 0,`cui` varchar(100) DEFAULT NULL," +
+      "`aui` varchar(100) DEFAULT NULL,`sab` varchar(100) DEFAULT NULL,`descr` text DEFAULT NULL," +
       "`descr_norm` text DEFAULT NULL,`descr_stemmed` text DEFAULT NULL,`descr_sorted` text DEFAULT NULL)"
     println(str)
     str
@@ -86,6 +88,38 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
     val str=s"CREATE INDEX PIndex ON ${tblName} ( cui,descr (32),descr_norm (32),descr_sorted (32),descr_stemmed (32) );"
     println(str)
     str
+  }
+}
+
+/*the output format for tag parsing*/
+/**
+ *
+ * @param blogid the blog id
+ * @param target the tag of the blog
+ * @param umlsFlag if it is matched by UMLS, TRUE; else false
+ * @param score the score to metric how much the target word match the AUI's string
+ * @param cui CUI
+ * @param sab source of the CUI
+ * @param aui auto unique id?
+ * @param desc the value of STR file in MRCONSON table
+ * @param tui the semantic type id
+ * @param styName the semantic type name
+ * @param semName the semantic group name
+ * @param tagId if the target word is a tag, this is the index of the tag; if not a tag, this is 0.
+ * @param wordIndex the position of the target word in the content
+ */
+case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
+                  val score: Float, val cui: String, val sab: String="", val aui: String="", val desc: String="",
+                  val tui: String="", styName: String="", val semName: String="",
+                  val tagId: Int=0, val wordIndex: Int=0, val wordIndexInSentence: Int=0, val sentenceIndex: Int=0,
+                  val targetNorm: String="", val tags: String="", val sentence: String=""){
+  override def toString(): String = {
+    val str = f""""${blogid.trim}","${target.trim}","${if(umlsFlag)'Y' else 'N'}","${score}%2.2f","${cui}","${sab}","${aui}","${desc}","${tui}","${styName}","${semName}","${tagId}","${wordIndex}","${wordIndexInSentence}","${sentenceIndex}","${targetNorm}","${tags}","${sentence}"\n"""
+    trace(INFO, "Get Tag parsing result: " + str)
+    str
+  }
+  def getTitle(): String = {
+    """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","targetNorm","tags","sentence"""" + "\n"
   }
 }
 
@@ -265,22 +299,25 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     Source.fromFile(inputFile)
       .getLines()
       .foreach(line => {
-      val Array(cui, aui, sab, str) = line
+      val Array(cui, str) = line
         .replace("\",\"", "\t")
         .replaceAll("\"", "")
         .replaceAll("\\\\", "")
         .replaceAll(",", " ")
         .split("\t")
-      // the string in a Glossary is always considered as a sentence. No sentence detecting step.
-      val strNorm = normalizeCasePunct(str)
-      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
-      val strStemmed = stemWords(strNorm)
-      val strSorted = sortWords(strStemmed)
-      val obuf = new StringBuilder()
-      val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
-      execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
-      i += 1
-      })
+        // the string in a Glossary is always considered as a sentence. No sentence detecting step.
+        val strNorm = normalizeCasePunct(str)
+        val aui = "null"
+        val sab = "null"
+        //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+        val strStemmed = stemWords(strNorm)
+        val strSorted = sortWords(strStemmed)
+        val obuf = new StringBuilder()
+        val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
+        // skip first line
+        if (i>0)execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
+        i += 1
+        })
     if (Conf.targetTermTblDropAndCreate)execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
 
   }
@@ -565,6 +602,37 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     })
   }
 
+  /* not finish yet*/
+  def annotateTextInDB(textId:String,sent:String, ngram:Int=3) = {
+    var sentenceIndex = 0
+    val retList = new ListBuffer[TagRow]()
+    //get tags based on sentence, the result is suggestions(list)  for each (noun) words in the sentence.
+    val suggestionsList = annotateSentence(sent, ngram)
+    if (suggestionsList != null && suggestionsList.length > 0) {
+      // word index in the sentence
+      var wordIndex_in_sent = 0
+      sentenceIndex += 1
+      // process each word's suggestions(list)
+      val ret = suggestionsList.foreach(wordSuggestions => {
+        if (wordSuggestions._2.length > 0) {
+          wordIndex_in_sent += 1
+        }
+        // process eache suggestion for a word in the sentence
+        wordSuggestions._2.foreach(suggestion =>{
+          //get the tagIndex of the word match. 0: not match. start from 1 if matched
+          //get all tui from mrsty table.
+          retList.append(TagRow(textId, wordSuggestions._1.trim, false,
+            suggestion.score, suggestion.cui, suggestion.sab, suggestion.aui, suggestion.descr,
+            "null","null", "null",
+            0,0,wordIndex_in_sent,sentenceIndex,
+            normalizeAll(wordSuggestions._1.trim),"null",sent))
+        })
+      })
+    }
+    retList
+  }
+
+
   /**
    * find terms for a sentence.
    *
@@ -573,18 +641,18 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @ return arry of (target-word, Suggestions-of-target-word)
    */
   def annotateSentence(sentence: String, ngram:Int=5): ListBuffer[(String,Array[Suggestion])] = {
-    trace(INFO,"\nsentence:" + sentence)
+    trace(DEBUG,"\nsentence:" + sentence)
     val sentenceNorm = normalizeCasePunct(sentence)
     //val sentencePosFilter = posFilter(sentenceNorm)
     var retList = new ListBuffer[(String,Array[Suggestion])]()
     val tokens = sentenceNorm.split(" ")
     for (n <- Range(ngram,0,-1)) {
-      trace(INFO,"  gram:" + n)
+      trace(DEBUG,"  gram:" + n)
       if (tokens.length >= n) {
         for (idx <- 0 to (tokens.length - n)) {
           val gram = tokens.slice(idx,idx+n)
           val pos = getPos(gram)
-          if (posContains(gram,Conf.posInclusive)) {
+          if (Conf.posInclusive.length == 0 || posContains(gram,Conf.posInclusive)) {
             select(gram.mkString(" ")) match {
               case suggestions: Array[Suggestion] => {
                 retList :+= (gram.mkString(" "), suggestions)
@@ -601,37 +669,6 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     retList
   }
 
-  /*the output format for tag parsing*/
-  /**
-   *
-   * @param blogid the blog id
-   * @param target the tag of the blog
-   * @param umlsFlag if it is matched by UMLS, TRUE; else false
-   * @param score the score to metric how much the target word match the AUI's string
-   * @param cui CUI
-   * @param sab source of the CUI
-   * @param aui auto unique id?
-   * @param desc the value of STR file in MRCONSON table
-   * @param tui the semantic type id
-   * @param styName the semantic type name
-   * @param semName the semantic group name
-   * @param tagId if the target word is a tag, this is the index of the tag; if not a tag, this is 0.
-   * @param wordIndex the position of the target word in the content
-   */
-  case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
-                    val score: Float, val cui: String, val sab: String="", val aui: String="", val desc: String="",
-                    val tui: String="", styName: String="", val semName: String="",
-                    val tagId: Int=0, val wordIndex: Int=0, val wordIndexInSentence: Int=0, val sentenceIndex: Int=0,
-                    val targetNorm: String="", val tags: String="", val sentence: String=""){
-    override def toString(): String = {
-      val str = f""""${blogid.trim}","${target.trim}","${if(umlsFlag)'Y' else 'N'}","${score}%2.2f","${cui}","${sab}","${aui}","${desc}","${tui}","${styName}","${semName}","${tagId}","${wordIndex}","${wordIndexInSentence}","${sentenceIndex}","${targetNorm}","${tags}","${sentence}"\n"""
-      trace(INFO, "Get Tag parsing result: " + str)
-      str
-    }
-    def getTitle(): String = {
-      """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","tags","sentence"""" + "\n"
-    }
-  }
 
   /**
    *
@@ -823,6 +860,64 @@ object UmlsTagger2 {
     tagger.annotateTag(s"${args(1)}", s"${args(2)}")
 
     tagger.jdbcClose()
+  }
+
+}
+
+object BuildTargetTerm {
+  def main(args: Array[String]) = {
+    println(s"The input is: ${args.mkString(",")}")
+    if (args.length <1) {
+      println("Input invalid: args should be: targetTermFile. The file format could be a [tab] separated or csv")
+      sys.exit(1)
+    }
+    val tagger = new UmlsTagger2()
+    tagger.buildIndex2db(new File(args(0)))
+    println(s"target term is imported to table ${Conf.targetTermTbl} in Mysql")
+  }
+}
+
+object IdentfyTargetTerm {
+
+  def main(args: Array[String]) = {
+    println(s"The input is: ${args.mkString(",")}")
+    if (args.length <1) {
+      println("Input invalid: args should be: targetTermFile. The file format could be a [tab] separated or csv")
+      sys.exit(1)
+    }
+
+    // init spark
+    val startTime = new Date()
+    val conf = new SparkConf()
+      .setAppName("NLP")
+    if (Conf.sparkMaster.length>0)
+      conf .setMaster(Conf.sparkMaster)
+    val sc = new SparkContext(conf)
+
+    val rootLogger = Logger.getRootLogger()
+    rootLogger.setLevel(Level.WARN)
+
+    // printf more debug info of the gram that match the filter
+    Trace.filter = Conf.debugFilterNgram
+    val clustering = new Clustering(sc)
+
+    var writer = new PrintWriter(new FileWriter(args(0)))
+    writer.print(TagRow("","",true,0,"","","","","","","",0,0).getTitle())
+    val rdd = clustering.getBlogIdRdd(Conf.partitionNumber)
+    val rddText = clustering.getBlogTextRdd(rdd)
+    val rddSent = clustering.getSentRdd(rddText).persist()
+    val rows = rddSent.flatMap(s=>s).mapPartitions(pt => {
+      val tagger = new UmlsTagger2()
+      val retList = new ListBuffer[TagRow]()
+      pt.foreach(sent =>{
+        retList ++= tagger.annotateTextInDB(sent.blogId.toString,sent.words.mkString(" "),5)
+      })
+      retList.iterator
+    })
+    rows.collect().foreach(r=>{
+      writer.write(r.toString())
+    })
+    writer.close()
   }
 
 }

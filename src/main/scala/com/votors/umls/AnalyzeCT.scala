@@ -1,10 +1,10 @@
 package com.votors.umls
 
 import java.io.{FileWriter, PrintWriter, FileReader}
+import java.util.concurrent.atomic.AtomicInteger
 import com.votors.common.Conf
 import com.votors.common.Utils.Trace._
 import org.apache.commons.csv._
-import scala.actors.threadpool.AtomicInteger
 import scala.collection.mutable.ListBuffer
 
 import scala.collection.JavaConversions.asScalaIterator

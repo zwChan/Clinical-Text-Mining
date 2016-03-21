@@ -115,7 +115,7 @@ class Clustering (sc: SparkContext) {
         .map(_._2)
         .filter(_.tfAll > Conf.stag1TfFilter)
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
-        .filter(_.cvalue > Conf.stag1CvalueFilter)
+        .filter(t=>t.cvalue > Conf.stag1CvalueFilter && t.umlsScore._1 > Conf.stag2UmlsScoreFilter && t.umlsScore._2 > Conf.stag2ChvScoreFilter)
       //.persist()
 
       //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))

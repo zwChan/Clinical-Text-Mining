@@ -20,21 +20,7 @@ object Utils extends java.io.Serializable{
       case e: Exception => default
     }
   }
-  /**
-   * if a input item is invalid, return a good enough item instead.
-   * @param factor
-   */
-  def fixInvalid(item:Double, INVALID_NUM: Double, interObj: InterObject, default: Double, factor: Double): Double = {
-    if (item == INVALID_NUM) {
-      if (! interObj.empty)
-        interObj.mean
-      else
-        default
-    } else {
-      interObj add item
-      item
-    }
-  }
+
 
   def str2Date(s: String): java.util.Date = {
     val format = new java.text.SimpleDateFormat("yyyyMMddHHmm")
@@ -92,35 +78,6 @@ object Utils extends java.io.Serializable{
 
 
 }
-/**
-  This Class is designed for some "global" variance when we walk items of the RDD. It may not be the best idea for such function.
-  e.g. when we run map on RDD[Row], and we want a value of last Row:
-  {{{
-    var o = new InterObject{value = 1}
-    RDD.map{r =>
-      val result = if (r._1>o.mean) true else false
-      o.add(r._1)
-      result
-  }}}
- */
-class InterObject(factor: Double=0.5, capacity: Int=3) extends java.io.Serializable {
-  val valueList = new Array[Double](capacity)
-  var counter = 0
-  def pos = counter%capacity
-  def empty = counter == 0
-  def mean = {
-    if (empty)
-      0.0
-    else if (counter <= pos)
-      valueList.sum / counter
-    else
-      valueList.sum / valueList.length
-  }
-  def add(elm: Double) {
-    valueList(pos) = elm
-    counter += 1
-  }
-}
 
 object Conf extends java.io.Serializable{
   // Load properties. root dir is importance. the configuration and resource files are under the root dir.
@@ -156,6 +113,8 @@ object Conf extends java.io.Serializable{
   val stag1CvalueFilter = prop.get("stag1CvalueFilter").toString.toDouble
   val stag2TfFilter = prop.get("stag2TfFilter").toString.toInt
   val stag2CvalueFilter = prop.get("stag2CvalueFilter").toString.toDouble
+  val stag2UmlsScoreFilter = prop.get("stag2UmlsScoreFilter").toString.toDouble
+  val stag2ChvScoreFilter = prop.get("stag2ChvScoreFilter").toString.toDouble
 
   val topTfNgram = prop.get("topTfNgram").toString.toInt
   val topCvalueNgram = prop.get("topCvalueNgram").toString.toInt
