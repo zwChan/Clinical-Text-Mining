@@ -26,7 +26,7 @@ Given a list of terms T {(tid,term)} and some textual data set D {(did,text)}, i
     ```
     blogDbUrl=jdbc:mysql://[hostname or IP]:3306/[database name]?user=[username of Mysql]&password=[password of the user]         
     blogTbl= the table name of you data set 
-    blogIdCol=the column name of the id in the table. it has to be a integer
+    blogIdCol=the column name of the id in the table. it has to be integer
     blogTextCol= the column name of the text in the table 
     ```
     * Run the identification command. Note that if the data set is large, it will take a long time. 
