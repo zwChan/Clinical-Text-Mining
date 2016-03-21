@@ -3,7 +3,7 @@ Given a list of terms T {(tid,term)} and some textual data set D {(did,text)}, i
 
 ## Steps of method
 * Build the lockup table for the given terms T;
-* Convert the text into N-gram, and match the N-gram in the lookup table to see if an N-gram match any of the terms.
+* Convert the text into N-gram, and match the N-gram in the lookup table to see if an N-gram matches any of the terms.
  
 ## steps of operation
 * preparation: 
@@ -33,3 +33,22 @@ Given a list of terms T {(tid,term)} and some textual data set D {(did,text)}, i
     ```
     run-extract-term /tmp/ret_list.csv
     ```
+    
+## More configuration
+### stop words list: data/stopwords.txt
+### conf/default.properties
+    * how to get the text to get Ngram; the blogId will select as distict, and the blogTextCol will be limit to 1 row.  
+      blogDbUrl=jdbc:mysql://localhost:3306/ytex?user=root&password=root  
+      blogTbl=tmp_org_yahoo  
+      blogIdCol=id  
+      blogTextCol=concat(subject, ". ", content, ". ", chosenanswer)  
+      
+     * limit the blog to be analyzed, mainly for test    
+      blogLimit=200  
+     *target term info in database
+     targetTermTbl=_target_term_
+     targetTermTblDropAndCreate=true
+     * if true, using solr for matching a ngram with target terms, else using database query for matching
+     targetTermUsingSolr=false
+### Other configuration items may affect the result too!
+
