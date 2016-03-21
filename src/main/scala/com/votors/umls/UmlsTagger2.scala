@@ -119,7 +119,7 @@ case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
     str
   }
   def getTitle(): String = {
-    """"blogId","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","targetNorm","tags","sentence"""" + "\n"
+    """"id","target","umlsFlag","score","cui","sab","aui","umlsStr","tui","styName","semName","tagId","wordIndex","wordIndexInSentence","sentenceIndex","targetNorm","tags","sentence"""" + "\n"
   }
 }
 
