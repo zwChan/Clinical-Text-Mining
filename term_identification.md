@@ -17,7 +17,8 @@ Given a list of terms T {(tid,term)} and some textual data set D {(did,text)}, i
     * Store you textual data set in Mysql. Make sure there is a unique integer id for every text.
     
 * execution
-    * Import the term list to build a lookup table.
+    * Import the term list to build a lookup table. The format of input should be one term one line: id [tab] term,
+    you can write it in the Excel file, and save it as table separated (*.txt) file.
     ```
     run-import-term /tmp/supp_list.txt 
     ```
