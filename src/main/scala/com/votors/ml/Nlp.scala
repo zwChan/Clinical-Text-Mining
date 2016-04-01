@@ -504,7 +504,7 @@ object Nlp {
     2. (Adj|Noun)+Noun, named ANN
     3. ((Adj|Noun)+|((Adj|Noun)?(NounPrep)?)(Adj|Noun)?)Noun, named ANAN
       */
-    val nounPos = Conf.posInclusive.split(" ")
+    val nounPos = "NN NNS NNP NNPS".split(" ")
     if (nounPos.contains(pos))
       "N" // noun
     else if (pos == "JJ" || pos == "JJR" || pos == "JJS")
@@ -551,19 +551,24 @@ object Nlp {
 
     Trace.currLevel = DEBUG
 
-    val lvg =  new Lvg()
-    val ret = lvg.getNormTerm("glasses")
-    println(s"lvg out put ${ret}")
+//    val lvg =  new Lvg()
+//    val ret = lvg.getNormTerm("glasses")
+//    println(s"lvg out put ${ret}")
 //
 //    val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
 //    def textPreprocess(blogId: Int, text: String) = {
 //      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
 //      (blogId, ret)
 //    }
-//    val text = "Impaired fasting glucose"
-//    //val orgPos = postagger.tag(text.split(" "))
-//    //orgPos.map(Nlp.posTransform(_))
-//
+    val text = "I lost a tone of weight i was alway 130 or above , i eat fine but i cant have really big meals ."
+    val tokens = Nlp.getToken(text)
+    val orgPos = postagger.tag(tokens)
+    val pos = orgPos.map(Nlp.posTransform(_))
+    println(tokens.mkString("\t"))
+    println(orgPos.mkString("\t"))
+    println(pos.mkString("\t"))
+
+
 //    val ret = Nlp.getToken(text)
 //    val ret2 = ret.map(Nlp.normalizeAll(_))
 //

@@ -21,11 +21,13 @@
  occurs in the text.
  To put it simply, Clinical-Text-Mining includes steps:
 
+
+ - For the list of tems, we do the same general process, also remove stop words, normalization and 
+   resort the order of ther words in the terms, to get the basic form of the term, then store the result in Mysql (or solr)
  - For the texts, applay the general process mentioned above, then we obtain a vector of words for every
-   text. 
- - For the list of tems, we do the same general process, and then store the result in Mysql (or solr)
- - We construct [N-gram](https://en.wikipedia.org/wiki/N-gram) from the vector, and then execute a 
- query for the Ngram to check if is is found in the term list stored in Mysql (or solr).
+   text also the syntax information of the text.  
+ - We construct [N-gram](https://en.wikipedia.org/wiki/N-gram) from the vector of the texts and also 
+   find its basic for as above description, and then match the Ngram to check if it is found in the term list stored in Mysql (or solr).
  - For a N-gram, it may match more than one term in the list. We will give a similarity score based on
    the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance), and we also collecting
    other information about the term, such as the semantic type if it is a term in UMLS.
@@ -38,25 +40,24 @@
   Each of the synonyms has a AUI (term unique identifier). In this basic task, it extracts the AUIs
   like A1303513, A18648338 according to the text.
     - [x] Use sentence as the basic unit to apply the n-gram algorithm (currently use a line as unit). Using opennlp.
-    - [x] Use the pos of a word when match.(if pos not match, 70% discount)
-    - [x] Filter the gram (in n-gram algorithm) to search by pos, e.g. ignore the gram without noun
-    - [x] Get all the resault from solr, sorted with the score
+    - [x] Use the POS tag of a word when match.(if pos not match, 70% discount)
+    - [x] Filter the gram (in n-gram algorithm) to search by POS tag, e.g. ignore the gram without noun
+    - [x] Get all the resault from Mysql/Solr, sorted with the score
     - [ ] Choose a best result. It is about Word Sense Disambiguation.
-    - [x] The case different should be concern less than other different when compare UMLS term and input term.
+    - [x] The case different should get penalty less than other different when compare UMLS term and input term.
  - [x] Map the extracted CUI to a semantic type
     - [x] Get all STY from MRSTY table by cui
     - [x] Get semantic group name from semGroups.txt by TUI
- 
-## clustering
-
+ - [x] Term identification
+ - [x] Term recommendation
 
 ## How to run
 
-1. Download this project use: `git clone http://somelab08.cci.fsu.edu/zc15d/Clinical-Text-Mining.git`. I recommend
+1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
    you use an IDE such as IDEA.  Is is a maven project, so it should be easy to build it.
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
-2. **Prepare the UMLS data for test**. **(This step may take lost of time, but if you just try to test
+2. **Prepare the UMLS data for test**. **(This step may take lots of time, but if you just try to test
    the basic function of this project, just directly use the example data in data/umls/first_10000.csv)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
    or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
@@ -66,91 +67,21 @@
    ```
     select CUI, AUI, STR from MRCONSO
         where LAT = 'ENG'
-        limit 10000
+        limit 10000  -- No limit if you want to use all the umls terms
         into outfile 'your-path/first_10000.csv'
         fields terminated by ','
         enclosed by '"' lines
         terminated by '\n';
    ```
-   use the test function `testBuildIndex()` in the project to transform this csv file into json file,
-   and you have to modify the file path and name in the test function.
-3. **Download and Build SolrTextTagger**    
-   The code for SolrTextTagger resides on GitHub, so to download and build the custom Solr JAR,
-    execute the following sequence of commands. This will create a solr-text-tagger-1.3-SNAPSHOT.
-    jar file in your target subdirectory in the SolrTextTagger project.
-
-   ```
-   git clone  https://github.com/OpenSextant/SolrTextTagger.git
-   cd SolrTextTagger
-   git checkout -b v1x --track origin/v1x
-   mvn test
-   mvn package
-   ```
+   Configure the jdbc of you Mysql in configuration file (conf\default.properties), then
+   use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
    
-6. Now, you can run the test functions, and you should get the result as the **Test Result using first 10,000 record of UMLS** show.  
-   I suggest using the IDEA as your IDE, and mark the src/main as a source directory and src/test as the test directory. Then you can directly 
-   run the junit test function. Before you run it, set the UmlsTagger2Test.dataDir (in class UmlsTagger2Test) to the directory of the "data"
-   directory under the project directory.
-   
-7. Good luck and enjoy it!
+6. Good luck and enjoy it!
 
 ## Dependency
  - UMLS data
 
-## Test Result using all UMLM record of UMLS 
-(if you use first 10,000 record of UMLS, the result should be less then this)
-```
-Query: Sepsis
-select get 19 result for [Sepsis].
-[100.00%] (C0243026) (A17943618) Sepsis
-[100.00%] (C0243026) (A16979314) Sepsis
-[100.00%] (C0243026) (A10862868) Sepsis
-[100.00%] (C0036690) (A23920704) Sepsis
-[100.00%] (C0036690) (A23943328) Sepsis
-[100.00%] (C0243026) (A23449659) Sepsis
-[100.00%] (C0243026) (A23635326) Sepsis
-[100.00%] (C0243026) (A21145176) Sepsis
-[100.00%] (C0243026) (A23037453) Sepsis
-[100.00%] (C0036690) (A7567979) Sepsis
-[100.00%] (C0243026) (A0000638) Sepsis
-[100.00%] (C0243026) (A0000640) Sepsis
-[100.00%] (C1090821) (A0000641) Sepsis
-[ 90.00%] (C0243026) (A18580070) sepsis
-[ 90.00%] (C0243026) (A1203207) sepsis
-[ 90.00%] (C0036690) (A23895141) sepsis
-[ 16.67%] (C0243026) (A0454607) SEPSIS
-[ 16.67%] (C0243026) (A0454608) SEPSIS
-[ 16.67%] (C0036690) (A23914386) SEPSIS
-
-Query: Biliary tract disease
-select get 7 result for [Biliary tract disease].
-[100.00%] (C0005424) (A0001596) Biliary tract disease
-[100.00%] (C0005424) (A0001597) Biliary tract disease
-[ 95.24%] (C0005424) (A18590143) biliary tract disease
-[ 90.48%] (C0005424) (A0394721) Biliary Tract Disease
-[ 50.00%] (C0005424) (A18571497) biliary disease tract
-[ 15.91%] (C0005424) (A0406938) Disease, Biliary Tract
-[ 12.73%] (C0005424) (A1933178) Tract Disease, Biliary
-
-Query: Progressive systemic sclerosis
-select get 15 result for [Progressive systemic sclerosis].
-[100.00%] (C0036421) (A17314189) Progressive systemic sclerosis
-[100.00%] (C1258104) (A17316705) Progressive systemic sclerosis
-[100.00%] (C0036421) (A8339669) Progressive systemic sclerosis
-[100.00%] (C0036421) (A0001403) Progressive systemic sclerosis
-[ 96.67%] (C0036421) (A18631043) progressive systemic sclerosis
-[ 96.67%] (C1258104) (A18663298) progressive systemic sclerosis
-[ 96.67%] (C0036421) (A4366684) progressive systemic sclerosis
-[ 93.33%] (C0036421) (A0449216) Progressive Systemic Sclerosis
-[ 93.33%] (C0036421) (A0449217) Progressive Systemic Sclerosis
-[ 93.33%] (C1258104) (A2783441) Progressive Systemic Sclerosis
-[ 20.32%] (C1258104) (A17921315) Sclerosis, Progressive Systemic
-[ 20.32%] (C1258104) (A2782910) Sclerosis, Progressive Systemic
-[ 17.74%] (C1258104) (A2782943) Systemic Sclerosis, Progressive
-[ 10.00%] (C0036421) (A0443846) PROGRESSIVE SYSTEMIC SCLEROSIS
-[ 10.00%] (C0036421) (A0443847) PROGRESSIVE SYSTEMIC SCLEROSIS
-
-```
+## Test Result
 
 ## Contributor
   Anyone interested in the project is welcome!

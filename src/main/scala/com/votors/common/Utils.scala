@@ -161,6 +161,7 @@ object Conf extends java.io.Serializable{
   })
 //  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
   val semanticType=prop.get("semanticType").toString.trim.split(",")
+  val semanticTypeFilter=prop.get("semanticTypeFilter").toString.trim
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
   val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean

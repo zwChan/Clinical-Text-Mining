@@ -89,3 +89,17 @@
       -jar post.jar ${your-path}/first_10000.csv
     curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
     ```
+    
+    
+6. **Download and Build SolrTextTagger**    
+   The code for SolrTextTagger resides on GitHub, so to download and build the custom Solr JAR,
+    execute the following sequence of commands. This will create a solr-text-tagger-1.3-SNAPSHOT.
+    jar file in your target subdirectory in the SolrTextTagger project.
+
+   ```
+   git clone  https://github.com/OpenSextant/SolrTextTagger.git
+   cd SolrTextTagger
+   git checkout -b v1x --track origin/v1x
+   mvn test
+   mvn package
+   ```

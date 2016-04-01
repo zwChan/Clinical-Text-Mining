@@ -187,7 +187,8 @@ class Clustering (sc: SparkContext) {
   def trainSampleMark(ngramRdd: RDD[Ngram]):RDD[Ngram] = {
       ngramRdd.map(ngram=>{
         if (Conf.testSample>0) {
-          if (Utils.random.nextInt(100) >= Conf.testSample && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
+          // take a random number for each Ngram, if the random number is not in the 'test' percentage, it is a training percentage.
+          if (Utils.random.nextInt(100000000) >= Conf.testSample*1000000 && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
             ngram.isTrain = true
           else
             ngram.isTrain = false
@@ -361,9 +362,9 @@ class Clustering (sc: SparkContext) {
         })
         f
       })
-      // average
+      // get average
       avg = sum.map(_ / currNgramCnt)
-      // get squard sum
+      // get variance
       val sumSquare = tmp_vecter.map(_._2).map(v => {
         val f = new ArrayBuffer[Double]()
         f.appendAll(Array.fill(v.size)(0.0))

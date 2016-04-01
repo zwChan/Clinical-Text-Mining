@@ -56,7 +56,7 @@ import org.apache.commons.csv._
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val aui: String, val sab: String) {
+                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="") {
   override
   def toString(): String = {
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
@@ -367,10 +367,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return all the suggestion result in an array, sorted by score.
    */
   def select(phrase: String): Array[Suggestion] = {
-    if (Conf.targetTermUsingSolr)
+    val ret = if (Conf.targetTermUsingSolr)
       select_solr(phrase.replaceAll("\'","\\\\'"))
     else
       select_db(phrase.replaceAll("\'","\\\\'"))
+    //println(s"select: ${phrase}, number ${ret.size}")
+    ret.filter(_.sab.matches(Conf.semanticTypeFilter))
   }
   def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
@@ -379,8 +381,11 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     val phraseSorted = sortWords(phraseStemmed)
 
     // construct query. boost different score to stress fields.
-    val query = """descr:"%s"^10 descr_norm:"%s"^5 descr_sorted:"%s" descr_stemmed:"%s"^2"""
-      .format(phrase, phraseNorm, phraseSorted, phraseStemmed)
+//    val query = """descr:"%s"^10 descr_norm:"%s"^5 descr_sorted:"%s" descr_stemmed:"%s"^2"""
+//      .format(phrase, phraseNorm, phraseSorted, phraseStemmed)
+    val query = """descr_norm:"%s"^5 descr_sorted:"%s" descr_stemmed:"%s"^2"""
+      .format(phraseNorm, phraseSorted, phraseStemmed)
+    //println(query)
     val params = new ModifiableSolrParams()
     params.add(CommonParams.Q, query)
     params.add(CommonParams.ROWS, String.valueOf(10000))
@@ -402,7 +407,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
         val score = computeScore(descr,
           scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-        Suggestion(score, descr, cui, aui,sab)
+        Suggestion(score, descr, cui, aui,sab,phraseSorted)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
     } else Array()
@@ -444,7 +449,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
       val score = computeScore(descr,
         scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-      suggs.append(Suggestion(score, descr, cui, aui,sab))
+      suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted))
     }
     suggs.toArray.sortBy(s => 1 - s.score) // Decrease
   }
@@ -568,7 +573,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
                     wordIndex_in_sent += 1
                   }
                   // process eache suggestion for a word in the sentence
-                  wordSuggestions._2.foreach(suggestion =>{
+                  wordSuggestions._2.filter(sugg=>sugg.sab.matches("SNOMEDCT_US")).foreach(suggestion =>{
                     //get the tagIndex of the word match. 0: not match. start from 1 if matched
                     val tagIndex = tagList.indexOf(normalizeAll(wordSuggestions._1)) + 1
                     //get all tui from mrsty table.
@@ -708,7 +713,9 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
                 //for each TUI, get their semantic type
                 val tui = mrsty.getString("TUI")
                 val index = Conf.semanticType.indexOf(tui)
-                if (index >= 0) stys(index) = true
+                if (index >= 0) {
+                  stys(index) = true
+                }
               }
             })
           }
@@ -723,7 +730,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    *
    * @param tagFile
    */
-  def annotateTag(tagFile: String, outputFile: String): Unit = {
+  def annotateTag(tagFile: String, outputFile: String,targetIndex:Int=1,sep:String="\t"): Unit = {
     val source = Source.fromFile(tagFile, "UTF-8")
     var writer = new PrintWriter(new FileWriter(outputFile))
     writer.print(TagRow("","",true,0,"","","","","","","",0,0).getTitle())
@@ -733,19 +740,21 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     var lastBlogId = ""
     lineIterator.foreach(line =>{
       if (line.trim().length>0) {
-        val tokens = line.split(",| ",2)
-        if (tokens.length>1) {
+        val tokens = line.split(sep)
+        if (tokens.length>targetIndex) {
           //get all terms from solr
-          val currTag = tokens(1).trim
+          val currTag = tokens(targetIndex).trim
           val currBlogId = tokens(0).trim
           tagId = if (lastBlogId == currBlogId) tagId + 1 else 1
           lastBlogId = currBlogId
+          //println(currTag)
           select(currTag) match {
             case suggestions: Array[Suggestion] => {
               // for each UMLS terms, get their TUI from MRSTY table
               if (suggestions.length > 0) {
                 suggestions.foreach(suggestion => {
                   //get all tui from mrsty table.
+                  println(suggestion)
                   val mrsty = getMrsty(suggestion.cui)
                   while (mrsty.next) {
                     //for each TUI, get their semantic type from SemGroups.txt
@@ -770,7 +779,49 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.flush()
     writer.close()
   }
-
+  def annotateTagAppend(tagFile: String, outputFile: String,targetIndex:Int=1,sep:String="\t"): Unit = {
+    val source = Source.fromFile(tagFile, "UTF-8")
+    val writer = new PrintWriter(new FileWriter(outputFile))
+    //writer.print(TagRow("","",true,0,"","","","","","","",0,0).getTitle())
+    val lineIterator = source.getLines
+    // for each tag, get the UMLS terms
+    var lineCnt = 0
+    lineIterator.foreach(line =>{
+      if (line.trim().length>0) {
+        lineCnt += 1
+        var code = ""
+        val tokens = line.split(sep)
+        if (lineCnt == 1) code = "new-code"
+        if (tokens.length>targetIndex && lineCnt > 1) {
+          //get all terms from solr
+          val currTag = tokens(targetIndex).trim
+          //println(currTag)
+          select(currTag) match {
+            case suggestions: Array[Suggestion] => {
+              // for each UMLS terms, get their TUI from MRSTY table
+              if (suggestions.length > 0) {
+                suggestions.foreach(suggestion => {
+                  //get all tui from mrsty table.
+                  println(suggestion)
+                  val ret = execQuery(s"select code from umls.mrconso where CUI='${suggestion.cui}' and AUI='${suggestion.aui}';")
+                  while (ret.next) {
+                    //for each TUI, get their semantic type from SemGroups.txt
+                    code += ret.getString("code") + ','
+                  }
+                })
+              } else {
+                //writer.println(line)
+              }
+            }
+            case _ =>
+          }
+        }
+        writer.println(line+"\t"+code)
+      }
+    })
+    writer.flush()
+    writer.close()
+  }
   /**
    *
    * @param cui

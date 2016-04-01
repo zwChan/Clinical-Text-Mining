@@ -7,7 +7,10 @@
   <groupId>com.votors</groupId>
   <artifactId>Clinical-Text-Mining</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-    <packaging>pom</packaging>
+  <modules>
+    <module>../../../e/05.code/java/ra/coc</module>
+  </modules>
+  <packaging>pom</packaging>
   <name>"Clinical-Text-Mining"</name>
   
   <repositories>
@@ -16,16 +19,16 @@
       <name>Scala-tools Maven2 Repository</name>
       <url>http://scala-tools.org/repo-releases</url>
     </repository>
-    <repository>
-      <id>maven-hadoop</id>
-      <name>Hadoop Releases</name>
-      <url>https://repository.cloudera.com/content/repositories/releases/</url>
-    </repository>
-    <repository>
-      <id>cloudera-repos</id>
-      <name>Cloudera Repos</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-    </repository>
+    <!--<repository>-->
+      <!--<id>maven-hadoop</id>-->
+      <!--<name>Hadoop Releases</name>-->
+      <!--<url>https://repository.cloudera.com/content/repositories/releases/</url>-->
+    <!--</repository>-->
+    <!--<repository>-->
+      <!--<id>cloudera-repos</id>-->
+      <!--<name>Cloudera Repos</name>-->
+      <!--<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>-->
+    <!--</repository>-->
   </repositories>
 
   <pluginRepositories>
@@ -124,19 +127,19 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-mllib_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
 
     <dependency>
@@ -222,6 +225,12 @@
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-pickling_2.10</artifactId>
       <version>0.10.1</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.4</version>
     </dependency>
 
 
