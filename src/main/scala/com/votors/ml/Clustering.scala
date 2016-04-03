@@ -86,12 +86,13 @@ class Clustering (sc: SparkContext) {
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
       val gramId = new AtomicInteger()
+      val hPreNgram =  firstStageNgram.value
       itr.foreach(sents => {
         gramId.set(0)
         if (firstStageNgram == null) {
           Nlp.generateNgram(sents, gramId, hNgrams)
         }else{
-          Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram)
+          Nlp.generateNgramStage2(sents,gramId,hNgrams,hPreNgram)
         }
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)

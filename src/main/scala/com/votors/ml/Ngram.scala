@@ -97,6 +97,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   var capt_all= 0    // it is update at stage 2
   var capt_term = 0  // it is update at stage 2
   var sent: Array[String] = null // original words in the sentence. nothing is filtered. the first occurring sentence only
+  var indexOfSent = -1
 
   /* //XXX: ### !!!! add a file should also check it is processed in method merge !!!!####*/
 
@@ -144,6 +145,7 @@ class Ngram (var text: String) extends java.io.Serializable{
     newNgram
   }
 
+  // Some feature may be variant in different occurring sentence of the ngram, we should use the information that we detect the ngram first time.
   def getInfoFromPrevious(other: Ngram) = {
     this.umlsScore = other.umlsScore  // To get this info is expensive, it has to access database
     // pos info get from stage 2 is not better than the stage 1
@@ -155,7 +157,10 @@ class Ngram (var text: String) extends java.io.Serializable{
 
     this.stys = other.stys
     if(other.textOrg.length>0)this.textOrg=other.textOrg
-    if(other.sent==null)this.sent=other.sent
+    if(other.sent!=null){
+      this.sent=other.sent
+      this.indexOfSent = other.indexOfSent
+    }
 
     if (Conf.bagsOfWord)this.context.wordsInbags = Array.fill(Nlp.wordsInbags.size)(0)
   }
@@ -197,6 +202,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   def updateOnCreated(sentence: Sentence, start: Int, end: Int) = {
     textOrg = sentence.words.slice(start,end).mkString(" ")
     sent = sentence.words
+    indexOfSent = start
     // update the pos pattern syntax of the gram.
     val gramPos = Array() ++ sentence.Pos.slice(start, end)
     /**

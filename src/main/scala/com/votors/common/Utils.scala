@@ -1,9 +1,18 @@
 package com.votors.common
 
-import java.io.{File, FileOutputStream, ObjectOutputStream, FileInputStream}
-import java.lang.Exception
+import java.io._
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Random, Properties, Date}
+
+import org.apache.commons.csv.{CSVFormat}
+
+import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.immutable.{List, Range}
+import scala.collection.mutable
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.io.Source
+import scala.io.Codec
 
 
 /**
@@ -76,6 +85,24 @@ object Utils extends java.io.Serializable{
     obj.asInstanceOf[T]
   }
 
+  def annotateFile(csvFile: String, targetIndex: Int, ngram:Int=3, delimiter:Char=',',separator:Char='\n') = {
+    //get text content from csv file
+    val in = new FileReader(csvFile)
+    val records = CSVFormat.DEFAULT
+      .withRecordSeparator(separator)
+      .withDelimiter(delimiter)
+      .withSkipHeaderRecord(true)
+      .withEscape('\\')
+      .parse(in)
+      .iterator()
+
+    val tagList = ListBuffer[String]()
+    // for each row of csv file
+    records.map(rec => {
+      // if current record is the last record, we have to process it now.
+      rec.get(targetIndex)
+    })
+  }
 
 }
 
@@ -230,6 +257,14 @@ class SqlUtils(driverUrl: String) extends java.io.Serializable{
     }
     // Execute Query
     val rs = sqlStatement.executeQuery(sql)
+    rs
+  }
+  def execUpdate (sql: String):Int = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeUpdate(sql)
     rs
   }
 }

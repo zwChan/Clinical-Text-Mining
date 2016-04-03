@@ -5,7 +5,7 @@ import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 import java.util.{Date, Properties}
 
-import com.votors.common.Conf
+import com.votors.common.{SqlUtils, Conf}
 import com.votors.ml.{Clustering, Nlp}
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 import org.apache.log4j.{Level, Logger}
@@ -779,6 +779,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.flush()
     writer.close()
   }
+  // the only different from 'annotateTag' is that it append the result to the original file format. should merge these two method.
   def annotateTagAppend(tagFile: String, outputFile: String,targetIndex:Int=1,sep:String="\t"): Unit = {
     val source = Source.fromFile(tagFile, "UTF-8")
     val writer = new PrintWriter(new FileWriter(outputFile))
@@ -867,29 +868,10 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       sqlStatement = jdbcConnect.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     }
   }
-
-  def jdbcClose() = {
-    if (isInitJdbc) {
-      isInitJdbc = false
-      jdbcConnect.close()
-    }
-  }
-  def execQuery (sql: String):ResultSet = {
-    if (isInitJdbc == false){
-      initJdbc()
-    }
-    // Execute Query
-    val rs = sqlStatement.executeQuery(sql)
-    rs
-  }
-  def execUpdate (sql: String):Int = {
-    if (isInitJdbc == false){
-      initJdbc()
-    }
-    // Execute Query
-    val rs = sqlStatement.executeUpdate(sql)
-    rs
-  }
+  val sqlUtil = new SqlUtils(Conf.dbUrl.toString)
+  def jdbcClose() = sqlUtil.jdbcClose()
+  def execQuery (sql: String):ResultSet = sqlUtil.execQuery(sql)
+  def execUpdate (sql: String):Int = sqlUtil.execUpdate(sql)
 }
 
 object UmlsTagger2 {

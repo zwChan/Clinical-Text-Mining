@@ -71,12 +71,10 @@ object Nlp {
 
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
-
   //opennlp models path
   val modelRoot = Conf.rootDir + "/data"
   val posModlePath = s"${modelRoot}/en-pos-maxent.bin"
   val sentModlePath = s"${modelRoot}/en-sent.bin"
-
 
   //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
   val sentmodelIn = new FileInputStream(sentModlePath)
@@ -270,7 +268,7 @@ object Nlp {
       sent_tmp
     })
   }
-  def generateNgram(sentence: Seq[Sentence], gramId: AtomicInteger, hNgrams: mutable.LinkedHashMap[String,Ngram], ngram: Int = Ngram.N): Unit = {
+  def generateNgram(sentence: Seq[Sentence], gramId: AtomicInteger, hNgrams: mutable.LinkedHashMap[String,Ngram], maxN: Int = Ngram.N): Unit = {
     sentence.foreach(sent => {
       // process ngram
       var pos = 0
@@ -281,7 +279,7 @@ object Nlp {
           // the start token should not be blank
           // for each stat position, get the ngram
           var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
-          Range(0, ngram).foreach(n => {
+          Range(0, maxN).foreach(n => {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
@@ -318,11 +316,9 @@ object Nlp {
   def generateNgramStage2(sentence: Seq[Sentence],
                     gramId: AtomicInteger,
                     hNgrams: mutable.LinkedHashMap[String,Ngram],
-                    firstStageNgram: Broadcast[mutable.HashMap[String, Ngram]]=null,
+                    hPreNgram: mutable.HashMap[String, Ngram]=null,
                     ngram: Int = Ngram.N
                     ): Unit = {
-    val hPreNgram =  firstStageNgram.value
-
     if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
       Nlp.wordsInbags = if (Conf.bowTopNgram>0) {
         (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopNgram).map(_._1).zipWithIndex.toMap
@@ -357,6 +353,7 @@ object Nlp {
                   if (gram.id < 0) {
                     gram.id = gramId.getAndAdd(1)
                     gram.n = n + 1
+                    // first we obtain the information of this occurring sentence, but it may be overlap by first occurring info.
                     gram.updateOnCreated(sent, pos, pos + n + 1)
                     gram.getInfoFromPrevious(pre_gram)
                   }
