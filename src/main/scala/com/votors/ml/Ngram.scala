@@ -84,7 +84,7 @@ class Ngram (var text: String) extends java.io.Serializable{
   var nestedTf: Long =0     // the total frequency of terms that contains this gram
   //@transient
   var nestTerm = new mutable.HashSet[String]()         // nested term
-  var umlsScore = (-1.0,-1.0,"","") // ** (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term)
+  var umlsScore = (-1.0,-1.0,"","") // ** (score as UMLS, score as CHV, CUI of the UMLS term, CUI of the CHV term, UMLS string)
   var posString = ""    // **
   var isPosNN = false  // ** sytax pattern :Noun.*Noun
   var isPosAN = false  // ** sytax pattern : (Adj.*Noun) +Noun
@@ -507,7 +507,7 @@ object Ngram {
       // the following not run at stage 2
       if (!isStage2) {
         val (umlsscore, stysTmp) = tagger.getUmlsScore(gram.text)
-        gram.umlsScore = umlsscore
+        gram.umlsScore = (umlsscore._1,umlsscore._2,umlsscore._3.cui,umlsscore._4.cui)
         if (stysTmp == null)
           gram.stys = Ngram.stysEmpty
         else

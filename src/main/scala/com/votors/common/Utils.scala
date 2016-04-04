@@ -4,7 +4,7 @@ import java.io._
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Random, Properties, Date}
 
-import org.apache.commons.csv.{CSVFormat}
+import org.apache.commons.csv.{CSVRecord, CSVFormat}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions.asScalaIterator
@@ -85,23 +85,23 @@ object Utils extends java.io.Serializable{
     obj.asInstanceOf[T]
   }
 
-  def annotateFile(csvFile: String, targetIndex: Int, ngram:Int=3, delimiter:Char=',',separator:Char='\n') = {
+  def readCsvFile(csvFile: String, delimiter:Char=',',separator:Char='\n'):Iterator[CSVRecord] = {
     //get text content from csv file
     val in = new FileReader(csvFile)
     val records = CSVFormat.DEFAULT
       .withRecordSeparator(separator)
       .withDelimiter(delimiter)
-      .withSkipHeaderRecord(true)
+      .withSkipHeaderRecord(false)
       .withEscape('\\')
       .parse(in)
       .iterator()
-
-    val tagList = ListBuffer[String]()
-    // for each row of csv file
-    records.map(rec => {
-      // if current record is the last record, we have to process it now.
-      rec.get(targetIndex)
-    })
+    records
+//    val tagList = ListBuffer[String]()
+//    // for each row of csv file
+//    records.map(rec => {
+//      // if current record is the last record, we have to process it now.
+//      rec
+//    })
   }
 
 }
@@ -188,7 +188,7 @@ object Conf extends java.io.Serializable{
   })
 //  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
   val semanticType=prop.get("semanticType").toString.trim.split(",")
-  val semanticTypeFilter=prop.get("semanticTypeFilter").toString.trim
+  val sabFilter=prop.get("sabFilter").toString.trim
   val posInWindown=prop.get("posInWindown").toString.trim
   val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
   val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean

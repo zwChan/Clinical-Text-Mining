@@ -372,7 +372,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     else
       select_db(phrase.replaceAll("\'","\\\\'"))
     //println(s"select: ${phrase}, number ${ret.size}")
-    ret.filter(_.sab.matches(Conf.semanticTypeFilter))
+    ret.filter(_.sab.matches(Conf.sabFilter))
   }
   def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
@@ -676,15 +676,15 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
 
   /**
-   *
+   *Get the UMLS term with the best score.
    * @param currTag
    * @return ((umlsScore,chvScore,umlsCui,chvCui), semanticTypeArray)
    */
-  def getUmlsScore(currTag: String): ((Double,Double,String,String),Array[Boolean]) = {
+  def getUmlsScore(currTag: String, getStys:Boolean=true): ((Double,Double,Suggestion,Suggestion),Array[Boolean]) = {
     var umlsScore = 0.0
-    var umlsCui = ""
+    var umlsSugg:Suggestion = null
     var chvScore = 0.0
-    var chvCui = ""
+    var chvSugg:Suggestion = null
     var stys:Array[Boolean] = null
 
     select(currTag) match {
@@ -696,15 +696,15 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
             if (suggestion.sab.contains("CHV")) {
               if (suggestion.score > chvScore) {
                 chvScore = suggestion.score
-                chvCui = suggestion.cui
+                chvSugg = suggestion
               }
             }
             if (suggestion.score > umlsScore) {
               umlsScore = suggestion.score
-              umlsCui = suggestion.cui
+              umlsSugg = suggestion
             }
           })
-          if (umlsScore > 0.01) {
+          if (getStys && umlsScore > 0.01) {
             stys = Array.fill(Conf.semanticType.size)(false)
             suggestions.foreach(suggestion => {
               //get all tui from mrsty table.
@@ -722,7 +722,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         }
         }
     }
-    ((umlsScore,chvScore,umlsCui,chvCui), stys)
+    ((umlsScore,chvScore,umlsSugg,chvSugg), stys)
   }
 
   /**
