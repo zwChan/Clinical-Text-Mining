@@ -3,80 +3,92 @@
 ## Overview
 
  A project focus on recommendation of CHV terms from social media, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
-   and platform [Apcache Spark](http://spark.apache.org/). 
+   and platform [Apcache Spark](http://spark.apache.org/).   
+ Conceptual idea is shwon in flowing figure. 
+ ![Conceptual idea](https://raw.githubusercontent.com/zwChan/Clinical-Text-Mining/chv-term-recommendation/docs/figurs/conceptual.png)
  
-## Features
-### General text processing
- We call it "general" because anytime given a text dataset, we have to transform the text into
- the form that we can process them, usually it can be a vector of words.
- Currently, we use [Apache openNLP](https://opennlp.apache.org/) to process the text, 
- including sentence detection, tokenization and  Part-of-Speech parsing. We may adopt
-  [Stanford NLP](http://nlp.stanford.edu/) in the future since it provide  richer of features.
- We use Lexical Variant Generation (LVG) to convert the variant of a word to its basic form.
- We use a user-defined stop word list to filter out the meaningless words. Note that a term contains
- more than one word, we will filter out it if it begins or ends with a stop word.
-
-### Term identification
- Term identification is a feature that given some texts and a list of term, we identify if the term 
- occurs in the text.
- To put it simply, Clinical-Text-Mining includes steps:
-
-
- - For the list of tems, we do the same general process, also remove stop words, normalization and 
-   resort the order of ther words in the terms, to get the basic form of the term, then store the result in Mysql (or solr)
- - For the texts, applay the general process mentioned above, then we obtain a vector of words for every
-   text also the syntax information of the text.  
- - We construct [N-gram](https://en.wikipedia.org/wiki/N-gram) from the vector of the texts and also 
-   find its basic for as above description, and then match the Ngram to check if it is found in the term list stored in Mysql (or solr).
- - For a N-gram, it may match more than one term in the list. We will give a similarity score based on
-   the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance), and we also collecting
-   other information about the term, such as the semantic type if it is a term in UMLS.
-
-### Tasks List:
-
- - [x] Extract UMLS terms (AUIs or CUI and so on) from text, just a basic function as an example.
-  For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
-  is the preferred term. It has many synonyms such as “heart attack” (A1303513), “coronary attack” (A18648338).
-  Each of the synonyms has a AUI (term unique identifier). In this basic task, it extracts the AUIs
-  like A1303513, A18648338 according to the text.
-    - [x] Use sentence as the basic unit to apply the n-gram algorithm (currently use a line as unit). Using opennlp.
-    - [x] Use the POS tag of a word when match.(if pos not match, 70% discount)
-    - [x] Filter the gram (in n-gram algorithm) to search by POS tag, e.g. ignore the gram without noun
-    - [x] Get all the resault from Mysql/Solr, sorted with the score
-    - [ ] Choose a best result. It is about Word Sense Disambiguation.
-    - [x] The case different should get penalty less than other different when compare UMLS term and input term.
- - [x] Map the extracted CUI to a semantic type
-    - [x] Get all STY from MRSTY table by cui
-    - [x] Get semantic group name from semGroups.txt by TUI
- - [x] Term identification
- - [x] Term recommendation
-
+- We first extract n-gram from Yahoo!Answers textual dataset (of course, you can
+ use any other textual dataset); 
+- Second, identify the CHV terms using fuzzy matching method with UMLS database. We also call these terms as seed terms.
+   The other terms which do not match with any CHV term is considered as candidate terms.
+- Third, we use K-means algorithm to train a model from the identified CHV terms, and we get K centers for the model..
+- Fourth, we calculate the distance between a candidate term to all the K centers, and we choose the shortest distance 
+  as the score to measure whether we should recommend a term as a CHV term. The smaller the score is, the more likely a candidate 
+  term should considered as a CHV term.
+ 
+ 
+ The workflow of the project is shown in following figure.
+ ![workflow](https://raw.githubusercontent.com/zwChan/Clinical-Text-Mining/chv-term-recommendation/docs/figurs/work-flow.png)
+ 
+ For more detail of the methodology, please read our paper.
+ 
 ## How to run
 
 1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
-   you use an IDE such as IDEA.  Is is a maven project, so it should be easy to build it.
+   you use an IDE such as IDEA.  It is a maven project, so it should be easy to build it.
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
-2. **Prepare the UMLS data for test**. **(This step may take lots of time, but if you just try to test
-   the basic function of this project, just directly use the example data in data/umls/first_10000.csv)**
-   You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
+
+2. Download LVG tool from [https://lexsrv3.nlm.nih.gov/LexSysGroup/Projects/lvg/current/web/download.html]
+   (https://lexsrv3.nlm.nih.gov/LexSysGroup/Projects/lvg/current/web/download.html), then unzip it to your local
+   file system. Configure the root directory of LVG to the configuration file ${CTM_ROOT_PATH}/conf/default.properties
+   ```
+   #root dir of lvg
+   lvgdir=C:\\lvg2015\\
+   ```
+   
+3. Prepare the UMLS data . First, you have to establish the UMLS database. You can follow the Sujit's post 
+   [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
    or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
    At the end, you will import the UMLS data into Mysql.
-   Then export the test data  using sql:
-
+   Then export the CHV terms using sql query:
    ```
     select CUI, AUI, STR from MRCONSO
-        where LAT = 'ENG'
-        limit 10000  -- No limit if you want to use all the umls terms
-        into outfile 'your-path/first_10000.csv'
+        where LAT = 'ENG' and SAB='CHV'
+        into outfile 'your-path/output-chv.csv'
         fields terminated by ','
         enclosed by '"' lines
         terminated by '\n';
    ```
-   Configure the jdbc of you Mysql in configuration file (conf\default.properties), then
-   use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
+   Configure the jdbc of you Mysql in configuration file (conf\default.properties), 
+   ```
+   jdbcDriver=jdbc:mysql://localhost:3306/umls?user=root&password=root
+   ```
+   then use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
+   ```
+     @Test
+     def testBuildIndex2db(): Unit = {
+       val tagger = new UmlsTagger2("",rootDir)
+       tagger.buildIndex2db(
+         new File("your-path/output-chv.csv"))
+     }
+   ```
    
-6. Good luck and enjoy it!
+4. Prepare you textual dataset. The tool will read the dataset from a configured database, so you have
+ to import you dataset into a database (e.g. Mysql), and then configure the database name, table name and 
+ other information in the configuration file (conf\default.properties). The table should contain an index column
+ to identify a unique text.
+    ```
+    ########## data source configuration ######################
+    # how to get the text to get Ngram; the blogId will select as distict, and the blogTextCol will be limit to 1 row.  
+    blogDbUrl=jdbc:mysql://localhost:3306/ytex?user=root&password=root  
+    blogTbl=tmp_org_yahoo  
+    blogIdCol=id  
+    blogTextCol=concat(subject, ". ", content, ". ", chosenanswer)  
+    ```
+ 
+5. Take a look at the whole configuration file, and change the configuration based on you need.
+   You have to configure the following items properly:
+   ```
+   #####*_*####get the training data from (previous save) file, do not construct the Ngram again.
+   clusteringFromFile=false
+   ngramSaveFile=c:\\fsu\\ra\\data\\ngram_yahoo_0211.serd.no_bow
+   ```
+
+6. Now you can run the Clustering object in your IDE (e.g. IDEA, and don't forget to setup the env CTM_ROOT_PATH 
+   in the Run/Debug configuration of the IDE).
+   
+7. Good luck and enjoy it!
 
 ## Dependency
  - UMLS data
