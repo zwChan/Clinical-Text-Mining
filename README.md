@@ -1,8 +1,8 @@
-# Clinical-Text-Mining
+# CHV terms recommendation
 
 ## Overview
 
- A project focus on mining potential knowledge from clinical text, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
+ A project focus on recommendation of CHV terms from social media, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
    and platform [Apcache Spark](http://spark.apache.org/). 
  
 ## Features
