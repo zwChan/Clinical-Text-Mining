@@ -3,7 +3,7 @@
 ## Overview
 
  A project focus on recommendation of CHV terms from social media, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
-   and platform [Apcache Spark](http://spark.apache.org/).   
+   and platform [Apcache Spark](http://spark.apache.org/).
  Conceptual idea is shwon in flowing figure. 
  ![Conceptual idea](https://raw.githubusercontent.com/zwChan/Clinical-Text-Mining/chv-term-recommendation/docs/figurs/conceptual.png)
  
@@ -25,7 +25,7 @@
 ## How to run
 
 1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
-   you use an IDE such as IDEA.  It is a maven project, so it should be easy to build it.
+   you use an IDE such as [IDEA](https://www.jetbrains.com/idea/download).  It is a maven project, so it should be easy to build it.
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
 
@@ -82,11 +82,11 @@
    ```
    #####*_*####get the training data from (previous save) file, do not construct the Ngram again.
    clusteringFromFile=false
-   ngramSaveFile=c:\\fsu\\ra\\data\\ngram_yahoo_0211.serd.no_bow
+   ngramSaveFile=c:\\ngram_yahoo_0211.serd.no_bow
    ```
 
-6. Now you can run the Clustering object in your IDE (e.g. IDEA, and don't forget to setup the env CTM_ROOT_PATH 
-   in the Run/Debug configuration of the IDE).
+6. Now you can run the object `Clustering` in your IDE (e.g. IDEA, and don't forget to setup the env CTM_ROOT_PATH 
+   in the Run/Debug configuration of the IDE). Read the code for more detail.
    
 7. Good luck and enjoy it!
 
