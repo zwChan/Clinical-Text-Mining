@@ -1,15 +1,28 @@
 package com.votors.ml
 
 import java.io._
+import java.lang.Exception
 import java.util
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
+
+import edu.stanford.nlp.parser.lexparser.LexicalizedParser
+import edu.stanford.nlp.process.PTBTokenizer.PTBTokenizerFactory
+import edu.stanford.nlp.tagger.maxent.{MaxentTagger, TaggerConfig}
+
+import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.immutable.{List, Range}
+import scala.collection.mutable
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.JavaConverters._
 
 import breeze.numerics.abs
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
 import com.votors.common._
 import com.votors.umls.UmlsTagger2
+import edu.stanford.nlp.io.EncodingPrintWriter.out
 import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
 import opennlp.tools.chunker._
 import opennlp.tools.cmdline.parser.ParserTool
@@ -26,13 +39,18 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.io.File
 import scala.util.control.Breaks._
 
+import edu.stanford.nlp.ling.{Word, CoreLabel, HasWord}
+;
+import edu.stanford.nlp.process.{WordTokenFactory, CoreLabelTokenFactory, DocumentPreprocessor, PTBTokenizer}
+;
+
+import scala.util.control.Exception
+;
+
+
 /**
  * Created by Jason on 2015/11/9 0009.
  */
-class Nlp {
-
-}
-
 class Lvg(lvgdir: String=Conf.lvgdir) {
   val properties = new util.Hashtable[String, String]()
   properties.put("LVG_DIR", lvgdir)
@@ -76,31 +94,49 @@ object Nlp {
   val posModlePath = s"${modelRoot}/en-pos-maxent.bin"
   val sentModlePath = s"${modelRoot}/en-sent.bin"
 
-  //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
-  val sentmodelIn = new FileInputStream(sentModlePath)
-  val sentmodel = new SentenceModel(sentmodelIn)
-  val sentDetector = new SentenceDetectorME(sentmodel)
+  // get a new tokenizorFactor based on the new options
+  val tokenizerFactory = PTBTokenizerFactory.newPTBTokenizerFactory(new WordTokenFactory(), Conf.stanfordTokenizerOption)
 
+  //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
+  var sentDetector:SentenceDetectorME = null
   def getSent(phrase: String) = {
-    val retSent = sentDetector.sentDetect(phrase)
+    val retSent = if (Conf.useStanfordNLP) {
+      val reader = new StringReader(phrase)
+      val dp = new DocumentPreprocessor(reader)
+      dp.setTokenizerFactory(tokenizerFactory)
+      dp.iterator().map(_.toArray.mkString(" ")).toArray
+    }else{
+      if (sentDetector == null) {
+        val sentmodelIn = new FileInputStream(sentModlePath)
+        val sentmodel = new SentenceModel(sentmodelIn)
+        sentDetector = new SentenceDetectorME(sentmodel)
+      }
+      sentDetector.sentDetect(phrase)
+    }
     trace(DEBUG, retSent.mkString(","))
     retSent
   }
 
-  val tokenModeIn = new FileInputStream(s"${modelRoot}/en-token.bin");
-  val model = new TokenizerModel(tokenModeIn);
-  val tokenizer = new TokenizerME(model);
-
+  var tokenizer:TokenizerME = null
   def getToken(str: String) = {
-    tokenizer.tokenize(str).filter(_.trim.length>0)
+    if (Conf.useStanfordNLP) {
+      val reader = new StringReader(str)
+      val dp = new DocumentPreprocessor(reader)
+      dp.setTokenizerFactory(tokenizerFactory)
+      dp.iterator().map(_.toArray().map(_.toString)).flatMap(_.toSeq).toArray
+    }else{
+      if (tokenizer == null) {
+        val tokenModeIn = new FileInputStream(s"${modelRoot}/en-token.bin");
+        val model = new TokenizerModel(tokenModeIn);
+        tokenizer = new TokenizerME(model);
+      }
+      tokenizer.tokenize(str).filter(_.trim.length > 0)
+    }
   }
 
   //get pos after case/punctuation delete(input has done this work)?  // XXX: This may be not a correct approach!
-  val posmodelIn = new FileInputStream(posModlePath)
-  val posmodel = new POSModel(posmodelIn)
-  val postagger = new POSTaggerME(posmodel)
-  val allPosTag = postagger.getAllPosTags
-
+  var postagger:POSTaggerME = null
+  var tagger:MaxentTagger = null
   /**
    * If a token have no pos tag, use '*' instead.
    * see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html for the meaning of tags.
@@ -108,10 +144,30 @@ object Nlp {
    * @return
    */
   def getPos(phraseNorm: Array[String], transfer: Boolean=false) = {
-    val orgPos = postagger.tag(phraseNorm)
-    if (transfer)orgPos.map(Nlp.posTransform(_)) else orgPos
+    if (Conf.useStanfordNLP) {
+      if (tagger == null) {
+        val options = Conf.stanfordTaggerOption.split(" ").map(_.split("=")).filter(_.length>=2).map(t=>(t(0),t(1))).toMap
+        val properties = new Properties()
+        options.foreach(p=>properties.setProperty(p._1,p._2))
+        println(properties)
+        val config: TaggerConfig = new TaggerConfig(properties)
+        tagger = new MaxentTagger(config.getModel, config)
+      }
+      val orgPos = tagger.tagSentence(phraseNorm.map(w=>new Word(w)).toList.asJava).iterator().map(t=>t.tag).toArray
+      if (transfer) orgPos.map(Nlp.posTransform(_)) else orgPos
+    }else {
+      if (postagger ==null) {
+        val posmodelIn = new FileInputStream(posModlePath)
+        val posmodel = new POSModel(posmodelIn)
+        postagger = new POSTaggerME(posmodel)
+        println("all openNLP POS TAGS: " + postagger.getAllPosTags)
+      }
+      val orgPos = postagger.tag(phraseNorm)
+      if (transfer) orgPos.map(Nlp.posTransform(_)) else orgPos
+    }
   }
 
+  // never used for now
   val chunkerModeIn = new FileInputStream(s"${modelRoot}/en-chunker.bin")
   val chunkerModel = new ChunkerModel(chunkerModeIn)
   val chunker = new ChunkerME(chunkerModel)
@@ -121,13 +177,29 @@ object Nlp {
     chunker.chunkAsSpans(words,tags)
   }
 
-  val parserModeIn = new FileInputStream(s"${modelRoot}/en-parser-chunking.bin")
-  val parserModel = new ParserModel(parserModeIn);
-  val parser = ParserFactory.create(parserModel)
-
+  var parser: opennlp.tools.parser.Parser = null
   def getParser(words: Array[String]) = {
-    val topParses = ParserTool.parseLine(words.mkString(" "), parser, 1)
-    if (topParses != null) topParses(0) else null
+    if (Conf.useStanfordNLP) {
+      println("you used the wrong parser api. Current configuration is stanford.")
+      null
+    }else {
+      if (parser == null) {
+        val parserModeIn = new FileInputStream(s"${modelRoot}/en-parser-chunking.bin")
+        val parserModel = new ParserModel(parserModeIn);
+        parser = ParserFactory.create(parserModel)
+      }
+      val topParses = ParserTool.parseLine(words.mkString(" "), parser, 1)
+      if (topParses != null) topParses(0) else null
+    }
+  }
+
+  var lexicalParser: LexicalizedParser = null
+  def getStanfordParse(words: Array[String]) = {
+    if (lexicalParser==null) {
+      lexicalParser = LexicalizedParser.loadModel()
+    }
+    val tree = lexicalParser.parse(words.map(new Word(_)).toList.asJava)
+    tree
   }
 
   ///////////// phrase munging methods //////////////
@@ -557,14 +629,16 @@ object Nlp {
 //      val ret = text.replaceAll("([:|;\"\\[\\]\\(\\)\\{\\}\\.!\\?/\\\\])"," $1 ").replaceAll("\\s+"," ")
 //      (blogId, ret)
 //    }
-    val text = "I lost a tone of weight i was alway 130 or above , i eat fine but i cant have really big meals ."
+    val text = "The girl you love has more than 2 dozens of boy friends in the last 3 years before you met her."
     val tokens = Nlp.getToken(text)
-    val orgPos = postagger.tag(tokens)
+//    val orgPos = postagger.tag(tokens)
+    val orgPos = Nlp.getPos(tokens)
     val pos = orgPos.map(Nlp.posTransform(_))
     println(tokens.mkString("\t"))
     println(orgPos.mkString("\t"))
     println(pos.mkString("\t"))
-
+    val tree = Nlp.getStanfordParse(tokens)
+    tree.pennPrint()
 
 //    val ret = Nlp.getToken(text)
 //    val ret2 = ret.map(Nlp.normalizeAll(_))
