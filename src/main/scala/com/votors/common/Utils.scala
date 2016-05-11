@@ -223,6 +223,9 @@ object Conf extends java.io.Serializable{
   val showSentence=prop.get("showSentence").toString.toBoolean
   //val showTfAvgSdInCluster=prop.get("showTfAvgSdInCluster").toString.toBoolean
   val showTfAvgSdInCluster=true
+  val useStanfordNLP=prop.get("useStanfordNLP").toString.toBoolean
+  val stanfordTokenizerOption=prop.get("stanfordTokenizerOption").toString
+  val stanfordTaggerOption=prop.get("stanfordTaggerOption").toString
 
 }
 
