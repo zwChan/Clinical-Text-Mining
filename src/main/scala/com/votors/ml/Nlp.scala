@@ -639,6 +639,10 @@ object Nlp {
     println(pos.mkString("\t"))
     val tree = Nlp.getStanfordParse(tokens)
     tree.pennPrint()
+    //println(tree.flatten())
+    tree.iterator().foreach(t=>{
+      println(s"label: ${t.label()}, tags: ${t.taggedYield()}, span: ${t.getSpan}, size: ${t.size}, value: ${t.value}")
+    })
 
 //    val ret = Nlp.getToken(text)
 //    val ret2 = ret.map(Nlp.normalizeAll(_))
