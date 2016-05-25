@@ -56,7 +56,7 @@ import org.apache.commons.csv._
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="") {
+                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="") {
   override
   def toString(): String = {
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
@@ -407,7 +407,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
         val score = computeScore(descr,
           scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-        Suggestion(score, descr, cui, aui,sab,phraseSorted)
+        Suggestion(score, descr, cui, aui,sab,phraseSorted,phrase)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
     } else Array()
@@ -449,7 +449,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
       val score = computeScore(descr,
         scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-      suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted))
+      suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase))
     }
     suggs.toArray.sortBy(s => 1 - s.score) // Decrease
   }

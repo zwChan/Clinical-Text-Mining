@@ -4,13 +4,24 @@ import java.io.{FileWriter, PrintWriter, FileReader}
 import java.util.concurrent.atomic.AtomicInteger
 import com.votors.common.Conf
 import com.votors.common.Utils.Trace._
+import com.votors.ml.StanfordNLP
+import edu.stanford.nlp.ie.machinereading.structure.MachineReadingAnnotations.RelationMentionsAnnotation
+import edu.stanford.nlp.ling.CoreAnnotations._
+import edu.stanford.nlp.ling.Label
+import edu.stanford.nlp.ling.tokensregex.{NodePattern, MatchedExpression, CoreMapExpressionExtractor, TokenSequencePattern}
+import edu.stanford.nlp.parser.lexparser.BinaryHeadFinder
+import edu.stanford.nlp.pipeline.Annotation
+import edu.stanford.nlp.semgraph.SemanticGraph
+import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation
+import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
+import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
+import edu.stanford.nlp.util.{IntPair, CoreMap}
 import org.apache.commons.csv._
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import scala.io.Source
 import scala.io.Codec
 
@@ -18,17 +29,193 @@ import scala.io.Codec
  * Created by Jason on 2016/1/13 0013.
  */
 
+/* The tokens that is matched in a group of the regular expression.
+* First we mark it as a special ner-type, than extracted them from the ner-annotation*/
+class RegexGroup(var name:String) {
+  private val tokens = new ListBuffer[CoreMap]
+  val span = new IntPair(-1,-1)
+  val cuis = new ListBuffer[Suggestion]
+  var duration: String = null //the string after within or without, describe how long of the history
+
+  def addToken(t:CoreMap) = {
+    tokens.append(t)
+    // set the span of this group. Using index start of 0, caz the span of tree is start with 0
+    val index = t.get(classOf[IndexAnnotation]) - 1
+    if(span.getSource < 0 || span.getSource > index) {
+      span.set(0,index)
+    }
+    if(span.getTarget < 0 || span.getTarget < index) {
+      span.set(1,index)
+    }
+  }
+  def getTokens = tokens
+  def isOverlap(spanOther: IntPair) = {
+    !(spanOther.get(1)<span.get(0) || spanOther.get(0)>span.get(1))
+  }
+  def isContains(spantarget: IntPair) = {
+    (spantarget.get(0)>=span.get(0) && spantarget.get(1)<=span.get(1))
+  }
+
+  def update() = {
+    getDuration()
+  }
+
+  def getDuration() = {
+    if (name.contains("DURATION")){
+      duration = getTokens(0).get(classOf[NormalizedNamedEntityTagAnnotation])
+    }
+  }
+  override def toString = {
+    if (name.contains("CUI_")) {
+      val cuiBuff = if (cuis.size > 0){
+        s"[${cuis(0).orgStr}]=(${cuis(0).cui}:${cuis(0).descr});"
+      }else{
+        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}"
+      }
+      s"${name}\t[${span}]:${cuiBuff}"
+    }else if (name.contains("DURATION")) {
+      s"${name}\t[${span}]:${duration}"
+    }else{
+      s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}"
+    }
+  }
+  def getTitle = "Name\tValue"
+}
+
+
+/* The basic pattern result for each pattern that is mathched. */
+class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
+  var negation = false // if it is negation (
+
+  /* *******************************************************
+   * Init the information that is used in all Pattern
+   ********************************************************/
+  println(s"Creating pattern: ${name}")
+  val ann = matched.getAnnotation()
+  //println(matched.getAnnotation().keySet())
+  // it is the matched tokens, not all tokens in the sentence
+  val tokens = ann.get(classOf[TokensAnnotation])
+  // syntactic tree (constituency parse)
+  val tree = sentence.get(classOf[TreeAnnotation])
+  tree.setSpans()
+  //println("test tree:")
+  tree.iterator().foreach(t=>{
+    //println(t.getSpan) // span start with 0
+    //println(t.constituents()) // ranges
+    //if(!t.isLeaf)println(t.headPreTerminal(new LeftHeadFinder()))
+    //println(t.dependencies) //  null exp
+    //println(t.`yield`()) // all words
+    //println(t.value()) // word or POS
+    //println(t.getLeaves()) // word or POS
+  })
+
+
+  // dependency parse
+  val dep = sentence.get(classOf[CollapsedCCProcessedDependenciesAnnotation])
+
+  // ner2tokens aggregate the congruous tokens with the same ner
+  val ner2groups = new ListBuffer[RegexGroup]()
+  var lastNer = ""
+  // aggregate the congruous tokens with the same ner
+  tokens.iterator().foreach(t=>{
+    val ner = t.get(classOf[NamedEntityTagAnnotation])
+    //println(s"ner ${t} -> ${ner}")
+    if (!ner.equals("O")) {
+      if (ner != lastNer) {
+        val rg = new RegexGroup(ner)
+        rg.addToken(t)
+        ner2groups.append(rg)
+      } else {
+        ner2groups.last.addToken(t)
+      }
+      lastNer = ner
+    }
+  })
+  // update information of regular groups
+  ner2groups.foreach(_.update)
+  println(s"ner2groups: ${ner2groups}")
+
+  val norm = ann.get(classOf[NormalizedNamedEntityTagAnnotation])
+  //println(s"TokensAnnotation: ${ann.get(classOf[TokensAnnotation])}")
+
+  /* Get cui if necessary*/
+  def getCui(n:Int=5, tree: Tree=tree):Boolean = {
+    if (tree.isLeaf) {
+      // do not find a cui
+      return false
+    }
+    // the tree has to contain some token in some group
+    if (false == ner2groups.map(_.isOverlap(tree.getSpan)).reduce(_ || _)) {
+      return false
+    }
+
+    ner2groups.filter(_.name.startsWith("CUI_")).foreach(g=>{
+      //println(s"[${tree.getLeaves.size}]${tree.getSpan},${ner2groups.map(_.isOverlap(tree.getSpan)).reduce(_ || _)}, ${StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan)},${tree.value()}\t${tree.getLeaves.iterator().mkString(" ")}")
+      if (!tree.isLeaf && StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan) && tree.getLeaves.size <= n) {
+        // if cui is found, return, else continue to search in the subtree.
+        val cuis = UmlsTagger2.tagger.select(tree.getLeaves.iterator().mkString(" "))
+        if (cuis.size>0) {
+          g.cuis.appendAll(cuis)
+          //println(s"get cuis ${cuis.mkString("\t")}")
+          return true
+        }
+      }
+    })
+
+    val kids = tree.children
+    for (kid <- kids) {
+      getCui(n,kid)
+    }
+    // should not reach here
+    return false
+  }
+  /* Get the negation status of the sentence. */
+  def getNegation() = {
+    //dep.typedDependencies.iterator.map(_.toString()).foreach(println)
+    negation = dep.typedDependencies.iterator.map(_.toString()).filter(_.startsWith("neg")).size > 0
+  }
+
+  def getSentence() = {
+    tokens.iterator().map(_.get(classOf[TextAnnotation])).mkString(" ")
+  }
+
+  def update() = {
+    getCui()
+    getNegation()
+  }
+  private def value = {
+    ner2groups.map(g=>s"${g.toString}").mkString("\t")
+  }
+  override def toString = s"${name}\t${negation}\t${value}"
+}
+object CTPattern {
+  def getTitle = "PatternName\tNegation\tGroup1Name\tGroup1VAlue\tGroup2Name\tGroup2VAlue\tGroup3Name\tGroup3VAlue..."
+}
 
 case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var markedType:String="", var depth:String="-1", var cui:String="None", var cuiStr:String="None"){
   var hitNumType = false
   val sentId = AnalyzeCT.sentIdIncr.getAndIncrement()
+  val patternList = new ArrayBuffer[CTPattern]()
   override def toString(): String = {
-    val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${sentId}","${sentence.trim.replaceAll("\\\"","'")}"""" + "\n"
+    val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${sentId}","${sentence.trim.replaceAll("\\\"","'")}""""
     if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
     str
   }
-  def getTitle(): String = {
-    """"tid","type","Numerical type","depth" ,"cui" ,"cuiStr","sentence_id","sentence"""" + "\n"
+  def patternOutput(pattern: CTPattern) = {
+    s"${tid.trim}\t${criteriaType}\t${sentId}\t${pattern.getSentence()}\t${pattern.toString}"
+  }
+  /**
+   *
+   * @param jobType
+   * @return
+   */
+  def getTitle(jobType: String="parse"): String = {
+    if (jobType == "parse")
+    """"tid","type","Numerical type","depth" ,"cui" ,"cuiStr","sentence_id","sentence""""
+    else if (jobType == "pattern")
+      s"tid\ttype\tsentenceId\tsentence\t${CTPattern.getTitle}"
+    else
+      ""
   }
 }
 
@@ -111,13 +298,11 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     }
   }
 
-
   val tagger = new UmlsTagger2(Conf.solrServerUrl,Conf.rootDir)
 
-
-  def analyzeFile(): Unit = {
+  def analyzeFile(jobType:String="parse"): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
-    writer.print(CTRow("","","").getTitle())
+    writer.print(CTRow("","","").getTitle(jobType))
     val in = new FileReader(csvFile)
     val records = CSVFormat.DEFAULT
       .withRecordSeparator("\"")
@@ -180,11 +365,14 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
               }
               case _ =>
                 CTRow(tid, "None", sent)
-
             }
           }
-        //detectQuantity(ctRow,writer)
-        detectKeyword(ctRow,writer)
+        if (jobType == "parse")
+          detectKeyword(ctRow,writer)
+        else if (jobType == "quantity")
+          detectQuantity(ctRow,writer)
+        else if (jobType == "pattern")
+          detectPattern(ctRow,writer)
       })
 
     })
@@ -204,7 +392,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
         println("********" + reg._1)
         ctRow.markedType = reg._1
         ctRow.hitNumType = true
-        writer.print(ctRow)
+        writer.println(ctRow)
       }else{
         //ctRow.numericalType = reg._1
         //ctRow.hitNumType = false
@@ -213,7 +401,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     if (ctRow.markedType.size==0) {
       ctRow.markedType="None"
       ctRow.hitNumType=false
-      writer.print(ctRow)
+      writer.println(ctRow)
     }
 
   }
@@ -251,7 +439,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
         ctRow.cui = kw._3
         ctRow.cuiStr = kw._4
         ctRow.hitNumType = true
-        writer.print(ctRow)
+        writer.println(ctRow)
       }else{
         //ctRow.numericalType = reg._1
         //ctRow.hitNumType = false
@@ -260,7 +448,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     if (ctRow.markedType.size==0) {
       ctRow.markedType="None"
       ctRow.hitNumType=false
-      writer.print(ctRow)
+      writer.println(ctRow)
     }
 
   }
@@ -360,11 +548,126 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     })
     writer.close()
   }
+
+  def detectPattern (ctRow: CTRow, writer:PrintWriter) = {
+    //writer.println(s"Tid\tType\tsentenId}")
+    ctRow.patternList ++= StanfordNLP.findPattern(ctRow.sentence)
+    ctRow.patternList.foreach(p=>{
+      writer.println(s"${ctRow.patternOutput(p)}")
+    })
+  }
+
+
+}
+
+
+case class ParseText(val text: String) {
+  // create an empty Annotation just with the given text
+  val document: Annotation = new Annotation(text);
+
+  // run all Annotators on this text
+  StanfordNLP.pipeline.annotate(document)
+  val sentences = document.get(classOf[SentencesAnnotation])
+  for( sentence <- sentences.iterator()) {
+    println("### sentence\n" + sentence)
+    val sent = ParseSentence(sentence)
+    sent.getPattern()
+  }
+
+}
+
+/**
+ *  Parse a sentence.
+ *  */
+case class ParseSentence(val sentence: CoreMap) {
+  /**
+   * The sentence is annotated before this method is call.
+   * @return
+   */
+  def getPattern() = {
+    val matched = ParseSentence.extractor.extractExpressions(sentence)
+
+    // this is the parse tree of the current sentence
+    val tree: Tree = sentence.get(classOf[TreeAnnotation])
+    //println("### tree\n" + tree)
+    // this is the Stanford dependency graph of the current sentence
+    val dependencies: SemanticGraph = sentence.get(classOf[CollapsedCCProcessedDependenciesAnnotation])
+    //println("### dependencies\n" + dependencies)
+
+    val tokens = sentence.get(classOf[TokensAnnotation])
+    println("### tokens\n" + tokens)
+
+    val retList = new ArrayBuffer[CTPattern]()
+
+/*
+    var lastNer = ""
+    var what = ""
+    var pattern: HistoryPatter = null
+    for (token <- tokens.iterator()) {
+      // this is the text of the token
+      val word = token.get(classOf[TextAnnotation])
+      // this is the POS tag of the token
+      val pos = token.get(classOf[PartOfSpeechAnnotation])
+      // this is the NER label of the token
+      val lemma = token.get(classOf[LemmaAnnotation])
+      //println(s"${token} lemma is " + lemma)
+      val ner = token.get(classOf[NamedEntityTagAnnotation])
+      if (ner == "DISEASE") {
+        if (lastNer != "DISEASE") {
+          retList += pattern
+        }
+        pattern.what += word + " "
+
+      } else if (ner == "DURATION") {
+        val nerNorm = token.get(classOf[NormalizedNamedEntityTagAnnotation])
+        if (pattern != null) {
+          pattern.duration = nerNorm
+          pattern.cuis ++= ParseSentence.cuiTagger.annotateSentence(pattern.what)
+          pattern = null // duration is the end of the pattern
+        }
+      } else {
+      }
+      lastNer = ner
+      println(s"### ${word} ner ${ner}")
+    }
+*/
+
+
+    /* for every mached expressed, we collect the result information. */
+    matched.iterator.foreach(m => {
+      println(s"keys of annotation: ${m.getValue}")
+      val pattern = m.getValue.toString match {
+      case _ => {
+          new CTPattern(m.getValue.get.toString, m, sentence)
+        }
+      }
+      if (pattern != null) {
+        pattern.update()
+        retList.append(pattern)
+      }
+      val ann = m.getAnnotation()
+      println(m.getAnnotation().keySet())
+      val tokens = ann.get(classOf[TokensAnnotation])
+      val ner = ann.get(classOf[NamedEntityTagAnnotation])
+      val norm = ann.get(classOf[NormalizedNamedEntityTagAnnotation])
+      //println(s"TokensAnnotation: ${ann.get(classOf[TokensAnnotation])}")
+    })
+    retList
+  }
+}
+
+object ParseSentence {
+  val env = TokenSequencePattern.getNewEnv()
+  env.setDefaultStringMatchFlags(NodePattern.CASE_INSENSITIVE)
+  val extractor = CoreMapExpressionExtractor.createExtractorFromFiles(env, Conf.stanfordPatternFile)
+  val cuiTagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
+
 }
 
 object AnalyzeCT {
   val sentIdIncr = new AtomicInteger()
-
+  var jobType = "parse"
+  
   def doGetKeywords(dir:String, f: String, externFile:String) = {
     val ct = new AnalyzeCT(s"${dir}${f}.csv",
       s"${dir}${f}_ret.csv",
@@ -378,7 +681,7 @@ object AnalyzeCT {
       s"${dir}${f}_ret.csv",
       s"${dir}${externFile}.txt",
       s"${dir}${externFile}_ret.txt")
-    ct.analyzeFile()
+    ct.analyzeFile(AnalyzeCT.jobType)
   }
 
   /**
@@ -406,7 +709,7 @@ object AnalyzeCT {
       println(s"invalid inputs, should be: prepare|parse dir file1,file2... extern-file")
       sys.exit(1)
     }
-    val jobType = avgs(0)
+    jobType = avgs(0)
     val dir = avgs(1)
     val iFiles = avgs(2).split(",")
     val extFile = avgs(3)
@@ -415,7 +718,7 @@ object AnalyzeCT {
 
     iFiles.foreach(f =>{
       println(s"processing: ${f}")
-      if (jobType == "parse")doAnaly(dir, f, extFile)
+      if (jobType != "prepare")doAnaly(dir, f, extFile)
     })
 
 

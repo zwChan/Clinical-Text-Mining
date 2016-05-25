@@ -226,6 +226,7 @@ object Conf extends java.io.Serializable{
   val useStanfordNLP=prop.get("useStanfordNLP").toString.toBoolean
   val stanfordTokenizerOption=prop.get("stanfordTokenizerOption").toString
   val stanfordTaggerOption=prop.get("stanfordTaggerOption").toString
+  val stanfordPatternFile=prop.get("stanfordPatternFile").toString
 
 }
 
