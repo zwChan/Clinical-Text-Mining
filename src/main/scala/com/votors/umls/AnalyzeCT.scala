@@ -4,15 +4,16 @@ import java.io.{FileWriter, PrintWriter, FileReader}
 import java.util.concurrent.atomic.AtomicInteger
 import com.votors.common.Conf
 import com.votors.common.Utils.Trace._
+import com.votors.common.Utils._
 import com.votors.ml.StanfordNLP
 import edu.stanford.nlp.ie.machinereading.structure.MachineReadingAnnotations.RelationMentionsAnnotation
 import edu.stanford.nlp.ling.CoreAnnotations._
-import edu.stanford.nlp.ling.Label
+import edu.stanford.nlp.ling.{IndexedWord, Label}
 import edu.stanford.nlp.ling.tokensregex.{NodePattern, MatchedExpression, CoreMapExpressionExtractor, TokenSequencePattern}
 import edu.stanford.nlp.parser.lexparser.BinaryHeadFinder
 import edu.stanford.nlp.pipeline.Annotation
 import edu.stanford.nlp.semgraph.SemanticGraph
-import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation
+import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.{EnhancedPlusPlusDependenciesAnnotation, EnhancedDependenciesAnnotation, BasicDependenciesAnnotation, CollapsedCCProcessedDependenciesAnnotation}
 import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
 import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
 import edu.stanford.nlp.util.{IntPair, CoreMap}
@@ -29,13 +30,36 @@ import scala.io.Codec
  * Created by Jason on 2016/1/13 0013.
  */
 
+case class Term(name:String, head:IndexedWord) {
+  private val modifiers = ListBuffer[IndexedWord]()
+  val span = new IntPair(head.index,head.index)
+
+  def addModifier(m:IndexedWord, rel:String) = {
+    modifiers.append(m)
+    spanMerge(span,m.index,m.index)
+  }
+  def getModifiers = modifiers
+  def hashcode():Int = {
+    return name.hashCode + head.hashCode()
+  }
+  def equals(t:Term): Boolean = {
+    return name.equals(t.name) && head.equals(t.head)
+  }
+  override def toString() = {
+    s"Term: ${name}, ${head}, [${modifiers}]"
+  }
+}
+
 /* The tokens that is matched in a group of the regular expression.
 * First we mark it as a special ner-type, than extracted them from the ner-annotation*/
 class RegexGroup(var name:String) {
   private val tokens = new ListBuffer[CoreMap]
   val span = new IntPair(-1,-1)
   val cuis = new ListBuffer[Suggestion]
+  var cuiSource = "tree"  // "fullDep" / "partDep" / "tree".
   var duration: String = null //the string after within or without, describe how long of the history
+  val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
+  var logic = "None"  // logic in the group, for now, 'or' / 'and',
 
   def addToken(t:CoreMap) = {
     tokens.append(t)
@@ -60,23 +84,29 @@ class RegexGroup(var name:String) {
     getDuration()
   }
 
-  def getDuration() = {
+  def getDuration() {
     if (name.contains("DURATION")){
-      duration = getTokens(0).get(classOf[NormalizedNamedEntityTagAnnotation])
+      getTokens.foreach(d=>{
+        if(duration == null || duration.size == 0) {
+          duration = d.get(classOf[NormalizedNamedEntityTagAnnotation])
+        }
+      })
     }
   }
+
   override def toString = {
+    val termStr = terms.values.map(_.getModifiers.map(_.value).mkString(" ")).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${cuis(0).orgStr}]=(${cuis(0).cui}:${cuis(0).descr});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})]=(${cuis.map(c=>s"${c.cui}:${c.descr}").mkString(";")});"
       }else{
-        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}"
+        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})"
       }
-      s"${name}\t[${span}]:${cuiBuff}"
+      s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {
       s"${name}\t[${span}]:${duration}"
     }else{
-      s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}"
+      s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}:(${termStr})"
     }
   }
   def getTitle = "Name\tValue"
@@ -85,12 +115,12 @@ class RegexGroup(var name:String) {
 
 /* The basic pattern result for each pattern that is mathched. */
 class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
-  var negation = false // if it is negation (
-
+  var negation = 0 // if it is negation (
+  val span = new IntPair(-1,-1)
   /* *******************************************************
    * Init the information that is used in all Pattern
    ********************************************************/
-  println(s"Creating pattern: ${name}")
+  //println(s"Creating pattern: ${name}")
   val ann = matched.getAnnotation()
   //println(matched.getAnnotation().keySet())
   // it is the matched tokens, not all tokens in the sentence
@@ -120,7 +150,8 @@ class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
   tokens.iterator().foreach(t=>{
     val ner = t.get(classOf[NamedEntityTagAnnotation])
     //println(s"ner ${t} -> ${ner}")
-    if (!ner.equals("O")) {
+    if (ner != null && !ner.equals("O")) {
+      //println(s"found group: ${t}->${ner}")
       if (ner != lastNer) {
         val rg = new RegexGroup(ner)
         rg.addToken(t)
@@ -138,8 +169,12 @@ class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
   val norm = ann.get(classOf[NormalizedNamedEntityTagAnnotation])
   //println(s"TokensAnnotation: ${ann.get(classOf[TokensAnnotation])}")
 
-  /* Get cui if necessary*/
-  def getCui(n:Int=5, tree: Tree=tree):Boolean = {
+  def getSentence() = {
+    sentence.get(classOf[TextAnnotation])
+  }
+
+  /* Get cui if the group have not found cui by dependency.*/
+  def getCuiByTree(n:Int=5, tree: Tree=tree):Boolean = {
     if (tree.isLeaf) {
       // do not find a cui
       return false
@@ -149,13 +184,14 @@ class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
       return false
     }
 
-    ner2groups.filter(_.name.startsWith("CUI_")).foreach(g=>{
+    // filter out these already found cui by dependency.
+    ner2groups.filter(g=>g.name.startsWith("CUI_") && g.cuis.size == 0).foreach(g=>{
       //println(s"[${tree.getLeaves.size}]${tree.getSpan},${ner2groups.map(_.isOverlap(tree.getSpan)).reduce(_ || _)}, ${StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan)},${tree.value()}\t${tree.getLeaves.iterator().mkString(" ")}")
       if (!tree.isLeaf && StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan) && tree.getLeaves.size <= n) {
         // if cui is found, return, else continue to search in the subtree.
         val cuis = UmlsTagger2.tagger.select(tree.getLeaves.iterator().mkString(" "))
         if (cuis.size>0) {
-          g.cuis.appendAll(cuis)
+          g.cuis.append(cuis(0))
           //println(s"get cuis ${cuis.mkString("\t")}")
           return true
         }
@@ -164,24 +200,121 @@ class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
 
     val kids = tree.children
     for (kid <- kids) {
-      getCui(n,kid)
+      getCuiByTree(n,kid)
     }
     // should not reach here
     return false
   }
+
+  def getCuiByDep() = {
+    ner2groups.foreach(g=>{
+      g.terms.foreach(kv=>{
+        val term = kv._2
+        val words = term.getModifiers
+        words.append(term.head)
+        val str = words.sortBy(_.index).map(_.value()).mkString(" ")
+        val cuis = UmlsTagger2.tagger.select(str)
+        if (cuis.size>0) {
+          g.cuis.append(cuis(0))
+          g.cuiSource = "fullDep"
+          //println(s"get cuis ${cuis.mkString("\t")}")
+        } else if (term.getModifiers.size > 1) {
+          // if we can't get any cui using all the modifiers, we try to use each modifier to fetch cui.
+          term.getModifiers.foreach(m=>{
+            val str2 = s"${m.value} ${term.head.value}"
+            val cuis2 = UmlsTagger2.tagger.select(str2)
+            if (cuis2.size>0) {
+              g.cuis.append(cuis2(0))
+              g.cuiSource = "partDep"
+            }
+          })
+        }
+      })
+    })
+  }
+
+  /**
+   * 
+   * @param dep the dependency tree
+   * @param pos the current node
+   * @param accessed the nodes that is accessed
+   */
+  def walkDep(dep:SemanticGraph, pos: IndexedWord, accessed:mutable.HashSet[IndexedWord]): Unit= {
+    if(accessed.contains(pos)){
+      return
+    }else{
+      accessed.add(pos)
+    }
+    val children = dep.getChildList(pos)
+    //if (children.size == 0) return
+
+    println(s"${pos}***:" + dep.getPathToRoot(pos).size)
+    val semGraph = dep.getOutEdgesSorted(pos)
+    semGraph.iterator.foreach(s=>{
+      println(s"### ${s} : ${s.getRelation.toString}")
+      val rel = s.getRelation.toString
+      // first check if the relation in any group
+      var hitGroup = false
+      ner2groups.filter(g=>g.isContains(new IntPair(math.min(s.getSource.index,s.getTarget.index), math.max(s.getSource.index,s.getTarget.index()))))
+        .foreach(g=>{
+          hitGroup = true
+          if (rel.equals("conj:or") || rel.equals("conj:and")) {
+            val start = s.getSource.index()
+            val end = s.getTarget.index()
+            println(s"${rel}: ${start}, ${end}")
+            g.logic = rel
+          }else if (rel.equals("neg")){
+
+          }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn")){
+            val tmp = Term(rel,s.getSource)
+            val t = g.terms.getOrElseUpdate(tmp.hashcode(),tmp)
+            t.getModifiers += s.getTarget
+          }
+      })
+      if (hitGroup == false) {
+        if (rel.equals("neg")){
+          // only the negation before the pattern is counter for negation.
+          if (s.getSource.index() < span.getSource) {
+            println("negation detect!")
+            negation += 1
+          }
+        }
+      }
+    })
+
+    children.iterator.foreach(cld=>{
+      walkDep(dep,cld,accessed)
+    })
+  }
+
   /* Get the negation status of the sentence. */
   def getNegation() = {
     //dep.typedDependencies.iterator.map(_.toString()).foreach(println)
-    negation = dep.typedDependencies.iterator.map(_.toString()).filter(_.startsWith("neg")).size > 0
+    negation = dep.typedDependencies.iterator.map(_.toString()).filter(_.startsWith("neg")).size
+    println(s"###neg:${negation}###")
   }
 
-  def getSentence() = {
+  def getMatchedTokens() = {
     tokens.iterator().map(_.get(classOf[TextAnnotation])).mkString(" ")
   }
 
+  /**
+   * should be call after ner2groups initialed.
+   */
+  def getSpan() = {
+    val s = ner2groups.map(_.span).reduce((s1,s2)=>new IntPair(math.min(s1.getSource,s2.getSource), math.max(s1.getTarget,s2.getTarget)))
+    span.set(0,s.getSource)
+    span.set(1,s.getTarget)
+    println(s"Update span of pattern is ${span}")
+  }
+
   def update() = {
-    getCui()
-    getNegation()
+    getSpan()
+    //getNegation()
+    walkDep(dep,dep.getFirstRoot,new mutable.HashSet[IndexedWord]())
+    getCuiByDep()
+    // if there is no cui found by dependency, use syntactic to find cui again
+    getCuiByTree()
   }
   private def value = {
     ner2groups.map(g=>s"${g.toString}").mkString("\t")
@@ -194,15 +327,21 @@ object CTPattern {
 
 case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var markedType:String="", var depth:String="-1", var cui:String="None", var cuiStr:String="None"){
   var hitNumType = false
-  val sentId = AnalyzeCT.sentIdIncr.getAndIncrement()
-  val patternList = new ArrayBuffer[CTPattern]()
+  val criteriaId = AnalyzeCT.criteriaIdIncr.getAndIncrement()
+  val patternList = new ArrayBuffer[(CoreMap, CTPattern)]()
   override def toString(): String = {
-    val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${sentId}","${sentence.trim.replaceAll("\\\"","'")}""""
+    val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${criteriaId}","${sentence.trim.replaceAll("\\\"","'")}""""
     if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
     str
   }
-  def patternOutput(pattern: CTPattern) = {
-    s"${tid.trim}\t${criteriaType}\t${sentId}\t${pattern.getSentence()}\t${pattern.toString}"
+  def patternOutput(pattern: CTPattern, sent:String=null) = {
+      val paternStr = if (pattern == null)
+        sent + "\tNone"
+      else
+        pattern.getSentence() + "\t" + pattern.toString
+
+    s"${tid.trim}\t${criteriaType}\t${criteriaId}\t" + paternStr
+
   }
   /**
    *
@@ -213,7 +352,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     if (jobType == "parse")
     """"tid","type","Numerical type","depth" ,"cui" ,"cuiStr","sentence_id","sentence""""
     else if (jobType == "pattern")
-      s"tid\ttype\tsentenceId\tsentence\t${CTPattern.getTitle}"
+      s"tid\ttype\tcriteriaId\tsentence\t${CTPattern.getTitle}"
     else
       ""
   }
@@ -267,7 +406,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           }else{
             ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
           }
-        println(s"${name}\t${reg2}")
+        //println(s"${name}\t${reg2}")
         numericReg.append((name,reg2))
       })
     }
@@ -302,7 +441,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 
   def analyzeFile(jobType:String="parse"): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
-    writer.print(CTRow("","","").getTitle(jobType))
+    writer.println(CTRow("","","").getTitle(jobType))
     val in = new FileReader(csvFile)
     val records = CSVFormat.DEFAULT
       .withRecordSeparator("\"")
@@ -374,6 +513,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
         else if (jobType == "pattern")
           detectPattern(ctRow,writer)
       })
+      writer.flush()
 
     })
 
@@ -552,11 +692,17 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
   def detectPattern (ctRow: CTRow, writer:PrintWriter) = {
     //writer.println(s"Tid\tType\tsentenId}")
     ctRow.patternList ++= StanfordNLP.findPattern(ctRow.sentence)
-    ctRow.patternList.foreach(p=>{
-      writer.println(s"${ctRow.patternOutput(p)}")
-    })
+    if (ctRow.patternList.size>0) {
+      ctRow.patternList.foreach(p => {
+        if (p._2 != null)
+          writer.println(s"${ctRow.patternOutput(p._2)}")
+        else
+          writer.println(s"${ctRow.patternOutput(null,p._1.get(classOf[TextAnnotation]))}")
+      })
+    }else{
+      writer.println(s"${ctRow.patternOutput(null,ctRow.sentence)}")
+    }
   }
-
 
 }
 
@@ -573,7 +719,6 @@ case class ParseText(val text: String) {
     val sent = ParseSentence(sentence)
     sent.getPattern()
   }
-
 }
 
 /**
@@ -589,53 +734,27 @@ case class ParseSentence(val sentence: CoreMap) {
 
     // this is the parse tree of the current sentence
     val tree: Tree = sentence.get(classOf[TreeAnnotation])
-    //println("### tree\n" + tree)
+    println("### tree\n" + tree.pennPrint())
     // this is the Stanford dependency graph of the current sentence
-    val dependencies: SemanticGraph = sentence.get(classOf[CollapsedCCProcessedDependenciesAnnotation])
-    //println("### dependencies\n" + dependencies)
+    val dependencies: SemanticGraph = sentence.get(classOf[BasicDependenciesAnnotation])
+    //println("### basic dependencies 1\n" + dependencies)
+    val dependencies2: SemanticGraph = sentence.get(classOf[EnhancedDependenciesAnnotation])
+    //println("### enhanced dependencies 2\n" + dependencies2)
+    val dependencies3: SemanticGraph = sentence.get(classOf[EnhancedPlusPlusDependenciesAnnotation])
+    println("### ++ dependencies 3\n" + dependencies3)
 
     val tokens = sentence.get(classOf[TokensAnnotation])
-    println("### tokens\n" + tokens)
+    //println("### tokens\n" + tokens)
+    for (t <- tokens.iterator()) {
+      val ner = t.get(classOf[NamedEntityTagAnnotation])
+      //print(s"${t}:${ner}\n")
+    }
 
     val retList = new ArrayBuffer[CTPattern]()
-
-/*
-    var lastNer = ""
-    var what = ""
-    var pattern: HistoryPatter = null
-    for (token <- tokens.iterator()) {
-      // this is the text of the token
-      val word = token.get(classOf[TextAnnotation])
-      // this is the POS tag of the token
-      val pos = token.get(classOf[PartOfSpeechAnnotation])
-      // this is the NER label of the token
-      val lemma = token.get(classOf[LemmaAnnotation])
-      //println(s"${token} lemma is " + lemma)
-      val ner = token.get(classOf[NamedEntityTagAnnotation])
-      if (ner == "DISEASE") {
-        if (lastNer != "DISEASE") {
-          retList += pattern
-        }
-        pattern.what += word + " "
-
-      } else if (ner == "DURATION") {
-        val nerNorm = token.get(classOf[NormalizedNamedEntityTagAnnotation])
-        if (pattern != null) {
-          pattern.duration = nerNorm
-          pattern.cuis ++= ParseSentence.cuiTagger.annotateSentence(pattern.what)
-          pattern = null // duration is the end of the pattern
-        }
-      } else {
-      }
-      lastNer = ner
-      println(s"### ${word} ner ${ner}")
-    }
-*/
-
-
     /* for every mached expressed, we collect the result information. */
     matched.iterator.foreach(m => {
-      println(s"keys of annotation: ${m.getValue}")
+      //println(s"keys of annotation: ${m.getValue}")
+
       val pattern = m.getValue.toString match {
       case _ => {
           new CTPattern(m.getValue.get.toString, m, sentence)
@@ -646,7 +765,7 @@ case class ParseSentence(val sentence: CoreMap) {
         retList.append(pattern)
       }
       val ann = m.getAnnotation()
-      println(m.getAnnotation().keySet())
+      //println(m.getAnnotation().keySet())
       val tokens = ann.get(classOf[TokensAnnotation])
       val ner = ann.get(classOf[NamedEntityTagAnnotation])
       val norm = ann.get(classOf[NormalizedNamedEntityTagAnnotation])
@@ -661,11 +780,10 @@ object ParseSentence {
   env.setDefaultStringMatchFlags(NodePattern.CASE_INSENSITIVE)
   val extractor = CoreMapExpressionExtractor.createExtractorFromFiles(env, Conf.stanfordPatternFile)
   val cuiTagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
-
 }
 
 object AnalyzeCT {
-  val sentIdIncr = new AtomicInteger()
+  val criteriaIdIncr = new AtomicInteger()
   var jobType = "parse"
   
   def doGetKeywords(dir:String, f: String, externFile:String) = {

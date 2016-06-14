@@ -72,11 +72,14 @@ object StanfordNLP {
   def init() = {
     // creates a StanfordCoreNLP object, with POS tagging, lemmatization, NER, parsing, and coreference resolution
     val props:Properties = new Properties()
-    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, parse, depparse");
+    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
+//    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
     props.setProperty("ner.useSUTime","true")
     props.setProperty("ner.applyNumericClassifiers","true")
     props.setProperty("ner.sutime.includeRange","true")
     props.setProperty("ner.sutime.markTimeRanges","true")
+//    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
+//    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
 
     val pipeline: StanfordCoreNLP = new StanfordCoreNLP(props)
     pipeline
@@ -84,137 +87,37 @@ object StanfordNLP {
   val pipeline = init()
 
   def findPattern(text: String) = {
-    val retList = new ArrayBuffer[CTPattern]()
+    val retList = new ArrayBuffer[(CoreMap,CTPattern)]()
     val document: Annotation = new Annotation(text)
     pipeline.annotate(document)
     val sentences = document.get(classOf[SentencesAnnotation])
     for( sentence <- sentences.iterator()) {
-      retList ++= ParseSentence(sentence).getPattern()
+      val retPatterns = ParseSentence(sentence).getPattern()
+      if (retPatterns.size > 0) {
+        retList ++= retPatterns.map((sentence, _))
+      } else {
+        retList.append((sentence, null.asInstanceOf[CTPattern]))
+      }
     }
-    println("matched result: \n" + retList)
+    retList.filter(_._2 != null).foreach(p=>{
+      println(s"findPattern: ${p._1.get(classOf[TextAnnotation])}, ${p._2.toString}")
+    })
     retList
   }
 
   def main (args: Array[String]): Unit= {
     // read some text in the text variable
-    val text: String = "History of hereditary cancer syndrome within 30 days. History of hereditary cancer syndrome within 2 weeks." // Add your text here!
+    //val text: String = "No history of prior malignancy within the past 5 years except for curatively treated basal cell carcinoma of the skin." // Add your text here!
     //val text: String = "The girl you love has more than 2 dozens of boy friends in the last 3 years before you met her on January 1, 2010." // Add your text here!
     //val text: String = """you have no history OF hereditary cancer syndrome within 30 days, but you have  history OF hereditary cancer syndrome without 60 days. """+
       //"""History of diabetes within 3 days 5 days""" // Add your text here!
-    //val text: String = "you have no history OF hereditary cancer syndrome within 30 days."
+    //val text: String = "History of abdominal fistula, gastrointestinal perforation, or intra-abdominal abscess, within 6 months prior to start of study drug. No prior diabetes for 4 days."
+    //val text = "History of any black or white coffee."
+    val text = "History of significant cerebrovascular, cardiovascular, or peripheral vascular disease."
     // create an empty Annotation just with the given text
 
-    findPattern(text)
+    findPattern(text).foreach(println(_))
     return
-
-    val document: Annotation = new Annotation(text);
-
-    // run all Annotators on this text
-    pipeline.annotate(document)
-
-
-    // these are all the sentences in this document
-    // a CoreMap is essentially a Map that uses class objects as keys and has values with custom types
-    val sentences = document.get(classOf[SentencesAnnotation])
-
-
-    for( sentence <- sentences.iterator()) {
-//      val timexAnnsAll = sentence.get(classOf[TimeAnnotations.TimexAnnotations]);
-//      if (timexAnnsAll != null)
-//      for (cm <- timexAnnsAll.iterator()) {
-//        val tokens = cm.get(classOf[CoreAnnotations.TokensAnnotation]);
-//        System.out.println(cm + " [from char offset " +
-//          tokens.get(0).get(classOf[CoreAnnotations.CharacterOffsetBeginAnnotation]) +
-//          " to " + tokens.get(tokens.size() - 1).get(classOf[CoreAnnotations.CharacterOffsetEndAnnotation]) + ']' +
-//          " --> " + cm.get(classOf[TimeExpression.Annotation]).getTemporal());
-//      }
-//      System.out.println("--");
-
-//      val matched = ParseSentence.extractor.extractExpressions(sentence)
-//      println("matched result: \n" + matched)
-
-//      println("### sentence\n" + sentence)
-      val tokens = sentence.get(classOf[TokensAnnotation])
-      println("### tokens\n" + tokens)
-
-      //val retPattern = ParseSentence(sentence).getPattern()
-      //println(s"# patternList:\n${retPattern.mkString("\n")}")
-
-//
-//      val rels = sentence.get(classOf[RelationMentionsAnnotation ])
-//      //println("### rels\n" + rels)
-//      // traversing the words in the current sentence
-//      // a CoreLabel is a CoreMap with additional token-specific methods
-      for (token <- tokens.iterator()) {
-        val ta = token.get(classOf[TimexAnnotation])
-        if(ta!=null){
-
-          println(s"ta: ${ta},${ta.altVal()},${ta.beginPoint()}")
-        }
-//        // this is the text of the token
-//        val word = token.get(classOf[TextAnnotation])
-//        // this is the POS tag of the token
-//        val pos = token.get(classOf[PartOfSpeechAnnotation])
-//        // this is the NER label of the token
-//        val ne = token.get(classOf[NamedEntityTagAnnotation])
-//        val lemma = token.get(classOf[LemmaAnnotation])
-//        //println(s"${token} lemma is " + lemma)
-//        val ner = token.get(classOf[NamedEntityTagAnnotation ])
-//        println(s"### ${word} ner ${ner}")
-      }
-
-      // this is the parse tree of the current sentence
-//      val tree: Tree = sentence.get(classOf[TreeAnnotation])
-//      println("### tree\n" + tree)
-
-      // this is the Stanford dependency graph of the current sentence
-//      val dependencies: SemanticGraph = sentence.get(classOf[CollapsedCCProcessedDependenciesAnnotation])
-//      println("### dependencies\n" + dependencies)
-
-//      val p = ["history"] ["of"] ( []{1,5} ) ["within"] ( [ { ner:DURATION } ]+) =>"HHHH-1" """
-//      println(p)
-//      val pattern:TokenSequencePattern = TokenSequencePattern.compile(p);
-//      val matcher:TokenSequenceMatcher = pattern.getMatcher(tokens);
-//
-//      while (matcher.find()) {
-//        val matchedString = matcher.group();
-//        println(s"matchedString:${matchedString}")
-//        val matchedTokens = matcher.groupNodes()
-//        matchedTokens.iterator().foreach(g=>println(s"group: ${g}"))
-//
-//      }
-
-
-
-//
-//      matched.iterator().foreach(r =>{
-//        println(s"# ${r}, ${r.getCharOffsets},${r.getChunkOffsets},${r.getAnnotation}")
-//        val ann = r.getAnnotation
-//
-//        for (token <- tokens.iterator()) {
-//          // this is the text of the token
-//          val word = token.get(classOf[TextAnnotation])
-//          // this is the POS tag of the token
-//          val pos = token.get(classOf[PartOfSpeechAnnotation])
-//          // this is the NER label of the token
-//          val ne = token.get(classOf[NamedEntityTagAnnotation])
-//          val lemma = token.get(classOf[LemmaAnnotation])
-//          //println(s"${token} lemma is " + lemma)
-//          val ner = token.get(classOf[NamedEntityTagAnnotation ])
-//          println(s"### ${word}  ${ner}")
-//        }
-//
-//
-//      })
-
-
-    }
-
-    // This is the coreference link graph
-    // Each chain stores a set of mentions that link to each other,
-    // along with a method for getting the most representative mention
-    // Both sentence and token offsets start at 1!
-    //val graph  = document.get(classOf[CorefChainAnnotation])
 
   }
 

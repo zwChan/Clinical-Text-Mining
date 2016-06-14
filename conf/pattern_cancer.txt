@@ -1,0 +1,183 @@
+# Case insensitive pattern matching (see java.util.regex.Pattern flags)
+ENV.defaultStringPatternFlags = 2
+
+# Map variable names to annotation keys
+ner = { type: "CLASS", value: "edu.stanford.nlp.ling.CoreAnnotations$NamedEntityTagAnnotation" }
+normalized = { type: "CLASS", value: "edu.stanford.nlp.ling.CoreAnnotations$NormalizedNamedEntityTagAnnotation" }
+tokens = { type: "CLASS", value: "edu.stanford.nlp.ling.CoreAnnotations$TokensAnnotation" }
+
+# Define ruleType to be over tokens
+ENV.defaults["ruleType"] = "tokens"
+
+#history of ()
+{
+  ruleType: "tokens",
+  pattern: ( "history" "of" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_1")),
+  priority:0,
+  stage:50,
+  matchWithResults: TRUE,
+  result: "HISTORY"
+}
+
+
+#history of () within/in ()
+{
+  ruleType: "tokens",  
+  pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:20,
+  result: "HISTORY_WITHIN"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "history" "of" ( []{1,20} ) "in" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:20,
+  result: "HISTORY_WITHIN"
+}
+
+
+
+#history of () within () except for ()
+{
+  ruleType: "tokens",
+  pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+ []{0,5}) "except" "for" ( []{1,20}) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_3"),Annotate($3, ner, "CUI_DISEASE_EF")),
+  priority:0,
+  stage:10,              
+  matchWithResults: TRUE,
+  result: "HISTORY_WITHIN_EF"
+}
+
+#history of () within () including ()
+{
+  ruleType: "tokens", 
+  pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_4"),Annotate($3, ner, "CUI_DISEASE_IN")),
+  priority:102.0,
+  stage:10,
+  result: "HISTORY_WITHIN_IN"
+}
+
+#history of () within () prior to ()
+{
+  ruleType: "tokens",  
+  pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "prior" "to" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_5"),Annotate($3, ner, "CUI_DISEASE_PT")),
+  priority:104.0,
+  stage:10,
+  result: "HISTORY_WITHIN_PT"
+}
+
+#more than () prior ()
+{
+  ruleType: "tokens",  
+  pattern: ( "more" "than" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "prior" ( []{1,20} ) ),
+  action: (Annotate($2, ner, "CUI_DISEASE_6")),
+  priority:104.0,
+  stage:10,
+  result: "MORETHAN_P"
+}
+
+#prior () except for ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "except" "for" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_7"),Annotate($2, ner, "CUI_DISEASE_8")),
+  priority:104.0,
+  stage:20,
+  result: "PRIOR_EF"
+}
+
+# prior () for ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_9"),Annotate($2, ner, "CUI_DISEASE_10")),
+  priority:104.0,
+  stage:50,
+  result: "PRIOR_F"
+}
+
+# prior () for () except for ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) "except" "for"  ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_11"),Annotate($2, ner, "CUI_DISEASE_12"),Annotate($3, ner, "CUI_DISEASE_13")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_FEF"
+}
+
+#prior () for () including ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) "including"  ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_14"),Annotate($2, ner, "CUI_DISEASE_15"),Annotate($3, ner, "CUI_DISEASE_16")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_FI"
+}
+
+#prior () for more than ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "for" "more" "than" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_17"),Annotate($2, ner, "CUI_DISEASE_18")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_MT"
+}
+
+#prior () in combination with ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "in" "combination" "with" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_19"),Annotate($2, ner, "CUI_DISEASE_20")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_CW"
+}
+
+#prior () unless ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "unless" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_21"),Annotate($2, ner, "CUI_DISEASE_22")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_U"
+}
+
+#prior or concurrent ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" "or" "concurrent" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_23")),
+  priority:104.0,
+  stage:50,
+  result: "PRIOR_CONCURRENT"
+}
+
+#prior or concurrent () except for ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" "or" "concurrent" ( []{1,20} ) "except" "for" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_24"),Annotate($1, ner, "CUI_DISEASE_25")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_CONCURRENT_EF"
+}
+
+# prior or concurrent () including ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" "or" "concurrent" ( []{1,20} ) "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_26"),Annotate($1, ner, "CUI_DISEASE_27")),
+  priority:104.0,
+  stage:10,
+  result: "PRIOR_CONCURRENT_I"
+}

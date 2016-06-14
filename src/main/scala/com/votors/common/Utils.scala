@@ -4,6 +4,7 @@ import java.io._
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Random, Properties, Date}
 
+import edu.stanford.nlp.util.IntPair
 import org.apache.commons.csv.{CSVRecord, CSVFormat}
 
 import scala.collection.mutable.ListBuffer
@@ -104,6 +105,11 @@ object Utils extends java.io.Serializable{
 //    })
   }
 
+  def spanMerge(span:IntPair, v1:Int, v2:Int) = {
+    span.set(0,math.min(span.getSource,math.min(v1,v2)))
+    span.set(1,math.max(span.getTarget,math.max(v1,v2)))
+    span
+  }
 }
 
 object Conf extends java.io.Serializable{
