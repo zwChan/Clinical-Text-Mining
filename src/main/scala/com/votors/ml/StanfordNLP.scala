@@ -112,8 +112,8 @@ object StanfordNLP {
     //val text: String = """you have no history OF hereditary cancer syndrome within 30 days, but you have  history OF hereditary cancer syndrome without 60 days. """+
       //"""History of diabetes within 3 days 5 days""" // Add your text here!
     //val text: String = "History of abdominal fistula, gastrointestinal perforation, or intra-abdominal abscess, within 6 months prior to start of study drug. No prior diabetes for 4 days."
-    //val text = "History of any black or white coffee."
-    val text = "History of significant cerebrovascular, cardiovascular, or peripheral vascular disease."
+    //val text = "History of red, black or white coffee."
+    val text = "History of significant cerebrovascular, cardiovascular or peripheral vascular disease."
     // create an empty Annotation just with the given text
 
     findPattern(text).foreach(println(_))

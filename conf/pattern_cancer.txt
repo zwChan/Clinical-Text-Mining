@@ -1,4 +1,7 @@
 # Case insensitive pattern matching (see java.util.regex.Pattern flags)
+
+#docs: http://nlp.stanford.edu/software/tokensregex.html
+
 ENV.defaultStringPatternFlags = 2
 
 # Map variable names to annotation keys
@@ -16,8 +19,25 @@ ENV.defaults["ruleType"] = "tokens"
   action: (Annotate($1, ner, "CUI_DISEASE_1")),
   priority:0,
   stage:50,
-  matchWithResults: TRUE,
   result: "HISTORY"
+}
+
+#() within/in ()
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:50,
+  result: "HISTORY_WITHIN"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "in" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:50,
+  result: "HISTORY_WITHIN"
 }
 
 
@@ -48,7 +68,6 @@ ENV.defaults["ruleType"] = "tokens"
   action: (Annotate($1, ner, "CUI_DISEASE_3"),Annotate($3, ner, "CUI_DISEASE_EF")),
   priority:0,
   stage:10,              
-  matchWithResults: TRUE,
   result: "HISTORY_WITHIN_EF"
 }
 

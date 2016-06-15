@@ -2,7 +2,7 @@ package com.votors.umls
 
 import java.io.{FileWriter, PrintWriter, FileReader}
 import java.util.concurrent.atomic.AtomicInteger
-import com.votors.common.Conf
+import com.votors.common.{TimeX, Conf}
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
 import com.votors.ml.StanfordNLP
@@ -18,6 +18,7 @@ import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
 import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
 import edu.stanford.nlp.util.{IntPair, CoreMap}
 import org.apache.commons.csv._
+import org.joda.time.Duration
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
 import scala.collection.JavaConversions.asScalaIterator
@@ -57,7 +58,7 @@ class RegexGroup(var name:String) {
   val span = new IntPair(-1,-1)
   val cuis = new ListBuffer[Suggestion]
   var cuiSource = "tree"  // "fullDep" / "partDep" / "tree".
-  var duration: String = null //the string after within or without, describe how long of the history
+  var duration: Duration = null //the string after within or without, describe how long of the history
   val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
   var logic = "None"  // logic in the group, for now, 'or' / 'and',
 
@@ -87,8 +88,8 @@ class RegexGroup(var name:String) {
   def getDuration() {
     if (name.contains("DURATION")){
       getTokens.foreach(d=>{
-        if(duration == null || duration.size == 0) {
-          duration = d.get(classOf[NormalizedNamedEntityTagAnnotation])
+        if(duration == null || duration.getStandardSeconds <= 0) {
+          duration = TimeX.parse(d.get(classOf[NormalizedNamedEntityTagAnnotation]))
         }
       })
     }
@@ -104,7 +105,7 @@ class RegexGroup(var name:String) {
       }
       s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {
-      s"${name}\t[${span}]:${duration}"
+      s"${name}\t[${span}]:${duration.getStandardDays}"
     }else{
       s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}:(${termStr})"
     }

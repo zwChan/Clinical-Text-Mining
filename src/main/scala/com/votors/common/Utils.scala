@@ -6,6 +6,7 @@ import java.util.{Random, Properties, Date}
 
 import edu.stanford.nlp.util.IntPair
 import org.apache.commons.csv.{CSVRecord, CSVFormat}
+import org.joda.time.{Duration, DateTime, Period}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions.asScalaIterator
@@ -14,7 +15,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 import scala.io.Source
 import scala.io.Codec
-
+import org.joda.time.format.ISOPeriodFormat
 
 /**
  * Created by chenzhiwei on 2/28/2015.
@@ -276,5 +277,32 @@ class SqlUtils(driverUrl: String) extends java.io.Serializable{
     // Execute Query
     val rs = sqlStatement.executeUpdate(sql)
     rs
+  }
+}
+
+/**
+ * Some methods that warp the method of joda-time (http://www.joda.org/joda-time/)
+ * For now, it is use to parse the duration string this is output of Stanford NLP.
+ * For duration, we use "2000-01-01T00:00:00" as the start point.
+ */
+object TimeX {
+  val timeParser = ISOPeriodFormat.standard()
+  val periodStart = new DateTime("2000-01-01T00:00:00")
+
+  /**
+   * Parse a 'Duration' string of stanfordNLP to a standard comparable 'Duration' using joda-time.
+   * @param timeStr Duration string from StanfordNLP 'Duration'
+   * @return
+   */
+  def parse(timeStr: String):Duration = {
+    try {
+      val p = timeParser.parsePeriod(timeStr).toDurationFrom(periodStart)
+      p
+    }catch {
+      case e:Exception => {
+        println(s"*** TimeX: parse duration fail. error: ${e}")
+        new Duration(-1)
+      }
+    }
   }
 }
