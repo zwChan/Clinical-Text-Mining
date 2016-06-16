@@ -142,7 +142,7 @@ class CTPattern (name:String, matched: MatchedExpression, sentence:CoreMap){
 
 
   // dependency parse
-  val dep = sentence.get(classOf[CollapsedCCProcessedDependenciesAnnotation])
+  val dep = sentence.get(classOf[EnhancedPlusPlusDependenciesAnnotation])
 
   // ner2tokens aggregate the congruous tokens with the same ner
   val ner2groups = new ListBuffer[RegexGroup]()

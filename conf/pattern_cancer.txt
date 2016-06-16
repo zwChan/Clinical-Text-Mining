@@ -22,14 +22,14 @@ ENV.defaults["ruleType"] = "tokens"
   result: "HISTORY"
 }
 
-#() within/in ()
+#() within/in/less than/equal to ()
 {
   ruleType: "tokens",  
   pattern: ( ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+) ),
   action: (Annotate($1, ner, "CUI_DISEASE_2")),
   priority:100.0,
   stage:50,
-  result: "HISTORY_WITHIN"
+  result: "WITHIN"
 }
 {
   ruleType: "tokens",  
@@ -37,9 +37,24 @@ ENV.defaults["ruleType"] = "tokens"
   action: (Annotate($1, ner, "CUI_DISEASE_2")),
   priority:100.0,
   stage:50,
-  result: "HISTORY_WITHIN"
+  result: "WITHIN_IN"
 }
-
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "less" "than" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:50,
+  result: "WITHIN_LT"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "equal" "to" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:50,
+  result: "WITHIN_ET"
+}
 
 #history of () within/in ()
 {

@@ -281,7 +281,7 @@ class SqlUtils(driverUrl: String) extends java.io.Serializable{
 }
 
 /**
- * Some methods that warp the method of joda-time (http://www.joda.org/joda-time/)
+ * Some methods that wrap the method of joda-time (http://www.joda.org/joda-time/)
  * For now, it is use to parse the duration string this is output of Stanford NLP.
  * For duration, we use "2000-01-01T00:00:00" as the start point.
  */
