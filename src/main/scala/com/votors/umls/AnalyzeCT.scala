@@ -330,6 +330,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
   var hitNumType = false
   val criteriaId = AnalyzeCT.criteriaIdIncr.getAndIncrement()
   val patternList = new ArrayBuffer[(CoreMap, CTPattern)]()
+  var subTitle = "None"
   override def toString(): String = {
     val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${criteriaId}","${sentence.trim.replaceAll("\\\"","'")}""""
     if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
@@ -341,7 +342,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       else
         pattern.getSentence() + "\t" + pattern.toString
 
-    s"${tid.trim}\t${criteriaType}\t${criteriaId}\t" + paternStr
+    s"${tid.trim}\t${criteriaType}\t${criteriaId}\t${subTitle}\t" + paternStr
 
   }
   /**
@@ -353,7 +354,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     if (jobType == "parse")
     """"tid","type","Numerical type","depth" ,"cui" ,"cuiStr","sentence_id","sentence""""
     else if (jobType == "pattern")
-      s"tid\ttype\tcriteriaId\tsentence\t${CTPattern.getTitle}"
+      s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else
       ""
   }
@@ -440,6 +441,18 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 
   val tagger = new UmlsTagger2(Conf.solrServerUrl,Conf.rootDir)
 
+  /**
+   * A sentence has a sub-title if:
+   *  1. it is a item of a list
+   *    a) start with '- ' or '[1-9]. '
+   * then the sub-title is the closest sentence before the first item of the list
+   * @param sent
+   * @return
+   */
+  def hasSubTitle(sent:String) = {
+    sent.trim.matches("^[\\-\\*]\\s.*|[0-9]+\\.?\\s.*")
+  }
+
   def analyzeFile(jobType:String="parse"): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
     writer.println(CTRow("","","").getTitle(jobType))
@@ -459,8 +472,10 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       val criteria = row.get(1)
 
       var stagFlag = STAG_HEAD
+      var subTitle = ""
       criteria.split("#|\\n").foreach(sent_org =>{
         val sent = sent_org.trim.replaceAll("^\\p{Punct}*","")
+
         val ctRow =
           if (stagFlag != STAG_INCLUDE && sent.toUpperCase.startsWith("INCLUSION CRITERIA")){
             stagFlag = STAG_INCLUDE
@@ -507,6 +522,14 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
                 CTRow(tid, "None", sent)
             }
           }
+
+        // cache the sentence, it will be use as the sub-title of the next sentence
+        if (hasSubTitle(sent_org)){
+          ctRow.subTitle = subTitle
+        }else{
+          subTitle = sent
+        }
+
         if (jobType == "parse")
           detectKeyword(ctRow,writer)
         else if (jobType == "quantity")

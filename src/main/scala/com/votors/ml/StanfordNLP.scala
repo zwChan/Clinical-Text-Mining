@@ -88,17 +88,20 @@ object StanfordNLP {
 
   def findPattern(text: String) = {
     val retList = new ArrayBuffer[(CoreMap,CTPattern)]()
-    val document: Annotation = new Annotation(text)
-    pipeline.annotate(document)
-    val sentences = document.get(classOf[SentencesAnnotation])
-    for( sentence <- sentences.iterator()) {
-      val retPatterns = ParseSentence(sentence).getPattern()
-      if (retPatterns.size > 0) {
-        retList ++= retPatterns.map((sentence, _))
-      } else {
-        retList.append((sentence, null.asInstanceOf[CTPattern]))
+    // we split using semicolon first, because stanfordNlp doesnot treat semicolon as a delimiter.
+    text.split(";").filter(_.trim.length>0).foreach(sent=>{
+      val document: Annotation = new Annotation(sent)
+      pipeline.annotate(document)
+      val sentences = document.get(classOf[SentencesAnnotation])
+      for( sentence <- sentences.iterator()) {
+        val retPatterns = ParseSentence(sentence).getPattern()
+        if (retPatterns.size > 0) {
+          retList ++= retPatterns.map((sentence, _))
+        } else {
+          retList.append((sentence, null.asInstanceOf[CTPattern]))
+        }
       }
-    }
+    })
     retList.filter(_._2 != null).foreach(p=>{
       println(s"findPattern: ${p._1.get(classOf[TextAnnotation])}, ${p._2.toString}")
     })
