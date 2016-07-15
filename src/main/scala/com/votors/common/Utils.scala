@@ -4,6 +4,7 @@ import java.io._
 import java.sql.{ResultSet, DriverManager, Statement, Connection}
 import java.util.{Random, Properties, Date}
 
+import edu.stanford.nlp.util
 import edu.stanford.nlp.util.IntPair
 import org.apache.commons.csv.{CSVRecord, CSVFormat}
 import org.joda.time.{Duration, DateTime, Period}
@@ -110,6 +111,9 @@ object Utils extends java.io.Serializable{
     span.set(0,math.min(span.getSource,math.min(v1,v2)))
     span.set(1,math.max(span.getTarget,math.max(v1,v2)))
     span
+  }
+  def span1based(span: IntPair) = {
+    new util.IntPair(span.get(0)+1, span.get(1)+1)
   }
 }
 

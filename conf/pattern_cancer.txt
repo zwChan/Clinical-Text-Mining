@@ -12,6 +12,10 @@ tokens = { type: "CLASS", value: "edu.stanford.nlp.ling.CoreAnnotations$TokensAn
 # Define ruleType to be over tokens
 ENV.defaults["ruleType"] = "tokens"
 
+########## Use stage to control the priority of the patern:
+## 50: lowest 
+## 10: highest
+
 #history of ()
 {
   ruleType: "tokens",
@@ -101,7 +105,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "prior" "to" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_5"),Annotate($3, ner, "CUI_DISEASE_PT")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "HISTORY_WITHIN_PT"
 }
@@ -111,7 +115,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "more" "than" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "prior" ( []{1,20} ) ),
   action: (Annotate($2, ner, "CUI_DISEASE_6")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "MORETHAN_P"
 }
@@ -121,7 +125,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "except" "for" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_7"),Annotate($2, ner, "CUI_DISEASE_8")),
-  priority:104.0,
+  priority:100,
   stage:20,
   result: "PRIOR_EF"
 }
@@ -131,7 +135,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_9"),Annotate($2, ner, "CUI_DISEASE_10")),
-  priority:104.0,
+  priority:100,
   stage:50,
   result: "PRIOR_F"
 }
@@ -141,7 +145,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) "except" "for"  ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_11"),Annotate($2, ner, "CUI_DISEASE_12"),Annotate($3, ner, "CUI_DISEASE_13")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "PRIOR_FEF"
 }
@@ -151,7 +155,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "for" ( []{1,20} ) "including"  ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_14"),Annotate($2, ner, "CUI_DISEASE_15"),Annotate($3, ner, "CUI_DISEASE_16")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "PRIOR_FI"
 }
@@ -161,7 +165,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "for" "more" "than" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_17"),Annotate($2, ner, "CUI_DISEASE_18")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "PRIOR_MT"
 }
@@ -171,7 +175,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "in" "combination" "with" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_19"),Annotate($2, ner, "CUI_DISEASE_20")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "PRIOR_CW"
 }
@@ -181,7 +185,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" ( []{1,20} ) "unless" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_21"),Annotate($2, ner, "CUI_DISEASE_22")),
-  priority:104.0,
+  priority:100,
   stage:10,
   result: "PRIOR_U"
 }
@@ -191,7 +195,7 @@ ENV.defaults["ruleType"] = "tokens"
   ruleType: "tokens",  
   pattern: ( "prior" "or" "concurrent" ( []{1,20} ) ),
   action: (Annotate($1, ner, "CUI_DISEASE_23")),
-  priority:104.0,
+  priority:100,
   stage:50,
   result: "PRIOR_CONCURRENT"
 }
@@ -200,9 +204,17 @@ ENV.defaults["ruleType"] = "tokens"
 {
   ruleType: "tokens",  
   pattern: ( "prior" "or" "concurrent" ( []{1,20} ) "except" "for" ( []{1,20} )),
-  action: (Annotate($1, ner, "CUI_DISEASE_24"),Annotate($1, ner, "CUI_DISEASE_25")),
-  priority:104.0,
+  action: (Annotate($1, ner, "CUI_DISEASE_24"),Annotate($2, ner, "CUI_DISEASE_25")),
+  priority:100,
   stage:10,
+  result: "PRIOR_CONCURRENT_EF"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "concurrent" ( []{1,20} ) "except" "for" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_24"),Annotate($2, ner, "CUI_DISEASE_25")),
+  priority:100,
+  stage:20,
   result: "PRIOR_CONCURRENT_EF"
 }
 
@@ -210,8 +222,169 @@ ENV.defaults["ruleType"] = "tokens"
 {
   ruleType: "tokens",  
   pattern: ( "prior" "or" "concurrent" ( []{1,20} ) "including" ( []{1,20} ) ),
-  action: (Annotate($1, ner, "CUI_DISEASE_26"),Annotate($1, ner, "CUI_DISEASE_27")),
-  priority:104.0,
+  action: (Annotate($1, ner, "CUI_DISEASE_26"),Annotate($2, ner, "CUI_DISEASE_27")),
+  priority:100,
   stage:10,
-  result: "PRIOR_CONCURRENT_I"
+  result: "PRIOR_CONCURRENT_IN"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "concurrent" ( []{1,20} ) "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_26"),Annotate($2, ner, "CUI_DISEASE_27")),
+  priority:100,
+  stage:20,
+  result: "PRIOR_CONCURRENT_IN"
+}
+
+#concurrent () for ()
+{
+  ruleType: "tokens",  
+  pattern: ( "concurrent" ( []{1,20} ) "for" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_24"),Annotate($2, ner, "CUI_DISEASE_25")),
+  priority:100,
+  stage:10,
+  result: "PRIOR_CONCURRENT_EF"
+}
+
+
+# (DISEASE) in the past (DURATION)
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "in" "the" "past" []{0,5} [ { ner:DURATION } ]+  ),
+  action: (Annotate($1, ner, "CUI_DISEASE_28")),
+  priority:100,
+  stage:50,
+  result: "PAST"
+}
+
+# (Disease) (Duration) prior to
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) [ { ner:DURATION } ]+  "in" "the" "past" ),
+  action: (Annotate($1, ner, "CUI_DISEASE_29")),
+  priority:100,
+  stage:50,
+  result: "DISEASE_PRIOR_TO"
+}
+
+# Histologically or cytologically confirmed (DISEASE)
+{
+  ruleType: "tokens",  
+  pattern: ( "Histologically" "or" "cytologically" "confirmed" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_30")),
+  priority:100,
+  stage:40,
+  result: "CONFIRMED_HC"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "Histologically" "confirmed" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_31")),
+  priority:100,
+  stage:50,
+  result: "CONFIRMED_H"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "cytologically" "confirmed" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_32")),
+  priority:100,
+  stage:50,
+  result: "CONFIRMED_HC"
+}
+
+# at least () since prior ()
+# At least (DURATION) prior to 
+# at least () prior () for (?)
+# at least () since (?) prior to ()
+# at least () since prior () except for (?)
+# at least () since prior () including (?)
+# at least () to () since prior ()
+
+{
+  ruleType: "tokens",  
+  pattern: ( "at" "least" []{0,5} [ { ner:DURATION } ]+ []{0,5} "prior" ),
+  action: (Annotate($1, ner, "CUI_DISEASE_32")),
+  priority:100,
+  stage:50,
+  result: "ATLEAST_PT"
+}
+
+
+#negative () within ()
+#negative () within () prior to ()
+{
+  ruleType: "tokens",  
+  pattern: ( "negative" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_33")),
+  priority:100.0,
+  stage:20,
+  result: "NEGATIVE_WITHIN"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( "negative" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+ []{0,5} ) "prior" "to"  ),
+  action: (Annotate($1, ner, "CUI_DISEASE_34")),
+  priority:100.0,
+  stage:10,
+  result: "NEGATIVE_WITHIN_PT"
+}
+
+
+#prior () allowed
+#prior () allowed for ()
+#prior () allowed if ()
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) "allowed" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_35"),Annotate($2, ner, "CUI_DISEASE_36")),
+  priority:100,
+  stage:20,
+  result: "PRIOR_ALLOWED"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "allowed" "for" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_35"),Annotate($2, ner, "CUI_DISEASE_36")),
+  priority:100,
+  stage:50,
+  result: "ALLOWED_FOR"
+}
+
+# received at least () of ()
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "received" "at" "least" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_37"),Annotate($2, ner, "CUI_DISEASE_38")),
+  priority:100,
+  stage:50,
+  result: "RECEIVED_AT_LEAST"
+}
+
+#required () for at least ()
+#required () for period () prior to ()
+#required time () for ()
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "required" []* "for" "at" "least" ( []{1,20} )),
+  action: (Annotate($1, ner, "CUI_DISEASE_39"),Annotate($2, ner, "CUI_DISEASE_40")),
+  priority:100,
+  stage:20,
+  result: "REQUIRED_FOR_AL"
+}
+{
+  ruleType: "tokens",  
+  pattern: ( ( []{1,20} ) "required" []* "for" "period" ( []{0,5} [ { ner:DURATION } ]+ []{0,5} ) "prior" "to" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_41"),Annotate($3, ner, "CUI_DISEASE_42")),
+  priority:100,
+  stage:20,
+  result: "REQUIRED_FOR_PERIOD"
+}
+{
+  ruleType: "tokens",
+  pattern: ( ( []{1,20} ) "required" "time" []* "for" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "CUI_DISEASE_43"),Annotate($3, ner, "CUI_DISEASE_44")),
+  priority:100,
+  stage:20,
+  result: "REQUIRED_TIME"
 }

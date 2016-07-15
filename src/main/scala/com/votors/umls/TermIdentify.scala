@@ -64,7 +64,7 @@ object TermIdentify {
         hNgrams.foreach(kv=>{
           val key = kv._1
           val gram = kv._2
-          val (umlsBestScore, stys) = tagger.getUmlsScore(gram.text,false)
+          val (umlsBestScore, stys) = tagger.getUmlsScore(gram.text)
           if (umlsBestScore._3 != null && umlsBestScore._3.score>Conf.umlsLikehoodLimit) {
             val ret = tagger.execQuery(s"select code from umls.mrconso where CUI='${umlsBestScore._3.cui}' and AUI='${umlsBestScore._3.aui}';")
             var code = ""

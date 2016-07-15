@@ -678,9 +678,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   /**
    *Get the UMLS term with the best score.
    * @param currTag
+   * @param getStysOp
+   *                  1. "fetch": get if contains configured semantic type
+   *                  2. "filter": removes if it is not contained by configured semantic type
    * @return ((umlsScore,chvScore,umlsCui,chvCui), semanticTypeArray)
    */
-  def getUmlsScore(currTag: String, getStys:Boolean=true): ((Double,Double,Suggestion,Suggestion),Array[Boolean]) = {
+  def getUmlsScore(currTag: String, getStysOp:String="fetch"): ((Double,Double,Suggestion,Suggestion),Array[Boolean]) = {
     var umlsScore = 0.0
     var umlsSugg:Suggestion = null
     var chvScore = 0.0
@@ -690,37 +693,38 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     select(currTag) match {
       case suggestions: Array[Suggestion] => {
         // for each UMLS terms, get their TUI from MRSTY table
-
         if (suggestions.length > 0) {
+          var hitSemanticType = false
+          stys = Array.fill(Conf.semanticType.size)(false)
           suggestions.foreach(suggestion => {
-            if (suggestion.sab.contains("CHV")) {
-              if (suggestion.score > chvScore) {
-                chvScore = suggestion.score
-                chvSugg = suggestion
+            //get all tui from mrsty table.
+            hitSemanticType = false
+            val mrsty = getMrsty(suggestion.cui)
+            while (mrsty.next) {
+              //for each TUI, get their semantic type
+              val tui = mrsty.getString("TUI")
+              val index = Conf.semanticType.indexOf(tui)
+              if (index >= 0) {
+                stys(index) = true
+                hitSemanticType = true
               }
             }
-            if (suggestion.score > umlsScore) {
-              umlsScore = suggestion.score
-              umlsSugg = suggestion
-            }
-          })
-          if (getStys && umlsScore > 0.01) {
-            stys = Array.fill(Conf.semanticType.size)(false)
-            suggestions.foreach(suggestion => {
-              //get all tui from mrsty table.
-              val mrsty = getMrsty(suggestion.cui)
-              while (mrsty.next) {
-                //for each TUI, get their semantic type
-                val tui = mrsty.getString("TUI")
-                val index = Conf.semanticType.indexOf(tui)
-                if (index >= 0) {
-                  stys(index) = true
+            // filter out the cui that is not contained  in the configured list.
+            if (hitSemanticType || !getStysOp.equals("filter")) {
+              if (suggestion.sab.contains("CHV")) {
+                if (suggestion.score > chvScore) {
+                  chvScore = suggestion.score
+                  chvSugg = suggestion
                 }
               }
-            })
-          }
+              if (suggestion.score > umlsScore) {
+                umlsScore = suggestion.score
+                umlsSugg = suggestion
+              }
+            }
+          })
         }
-        }
+      }
     }
     ((umlsScore,chvScore,umlsSugg,chvSugg), stys)
   }
@@ -854,21 +858,21 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   private var isInitJdbc = false
   private var jdbcConnect: Connection = null
   private var sqlStatement: Statement = null
-  def initJdbc() = {
-    if (isInitJdbc == false) {
-      isInitJdbc = true
-      // Database Config
-      val conn_str = Conf.jdbcDriver
-      println("jdbcDrive is: " + conn_str)
-      // Load the driver
-      val dirver = classOf[com.mysql.jdbc.Driver]
-      // Setup the connection
-      jdbcConnect = DriverManager.getConnection(conn_str)
-      // Configure to be Read Only
-      sqlStatement = jdbcConnect.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    }
-  }
-  val sqlUtil = new SqlUtils(Conf.dbUrl.toString)
+//  def initJdbc() = {
+//    if (isInitJdbc == false) {
+//      isInitJdbc = true
+//      // Database Config
+//      val conn_str = Conf.jdbcDriver
+//      println("jdbcDrive is: " + conn_str)
+//      // Load the driver
+//      val dirver = classOf[com.mysql.jdbc.Driver]
+//      // Setup the connection
+//      jdbcConnect = DriverManager.getConnection(conn_str)
+//      // Configure to be Read Only
+//      sqlStatement = jdbcConnect.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
+//    }
+//  }
+  val sqlUtil = new SqlUtils(Conf.jdbcDriver.toString)
   def jdbcClose() = sqlUtil.jdbcClose()
   def execQuery (sql: String):ResultSet = sqlUtil.execQuery(sql)
   def execUpdate (sql: String):Int = sqlUtil.execUpdate(sql)
