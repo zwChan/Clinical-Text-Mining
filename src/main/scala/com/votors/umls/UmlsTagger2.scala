@@ -57,8 +57,9 @@ import org.apache.commons.csv._
  */
 case class Suggestion(val score: Float,
                       val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="") {
-  override
-  def toString(): String = {
+  val stys = new mutable.HashSet[String]()  // semantic type for this cui
+
+  override  def toString(): String = {
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
   }
 }
@@ -366,13 +367,25 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param phrase the words to be search in solr
    * @return all the suggestion result in an array, sorted by score.
    */
-  def select(phrase: String): Array[Suggestion] = {
-    val ret = if (Conf.targetTermUsingSolr)
+  def select(phrase: String, isGetSty:Boolean=false, firstCuiOnly:Boolean=true): Array[Suggestion] = {
+    var ret = if (Conf.targetTermUsingSolr)
       select_solr(phrase.replaceAll("\'","\\\\'"))
     else
       select_db(phrase.replaceAll("\'","\\\\'"))
     //println(s"select: ${phrase}, number ${ret.size}")
-    ret.filter(_.sab.matches(Conf.sabFilter))
+    ret = ret.filter(_.sab.matches(Conf.sabFilter))   //filter by sab
+    if (firstCuiOnly) ret = ret.groupBy(_.cui).map(kv=>kv._2(0)).toArray  //for each cui, return ther first entry only
+
+    if (isGetSty) ret.foreach(suggestion => {
+      //get all tui from mrsty table.
+      val mrsty = getMrsty(suggestion.cui)
+      while (mrsty.next) {
+        //for each TUI, get their semantic type
+        val tui = mrsty.getString("TUI")
+        suggestion.stys.add(tui)
+      }
+    })
+    ret.sortBy(_.score)
   }
   def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
@@ -392,7 +405,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     params.add(CommonParams.FL, "*,score")
     val rsp = solrServer.query(params)
     val results = rsp.getResults()
-    if (results.getNumFound() > 0L) {
+    if (results.getNumFound() > 0L && phraseStemmed.length > 1) { // the final string that is looked up should not be too short.
       //trace(INFO,s"select get ${results.getNumFound()} result for [${phrase}].")
       val ret = results.iterator().map(sdoc =>{
         val descr = sdoc.getFieldValue("descr").asInstanceOf[String]
@@ -679,7 +692,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    *Get the UMLS term with the best score.
    * @param currTag
    * @param getStysOp
-   *                  1. "fetch": get if contains configured semantic type
+   *                  1. "fetch": get all the semantic type of a cui (in the set of the  configured semantic type)
    *                  2. "filter": removes if it is not contained by configured semantic type
    * @return ((umlsScore,chvScore,umlsCui,chvCui), semanticTypeArray)
    */

@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.votors.common.{TimeX, Conf}
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
-import com.votors.ml.StanfordNLP
+import com.votors.ml.{Nlp, StanfordNLP}
 import edu.stanford.nlp.ie.machinereading.structure.MachineReadingAnnotations.RelationMentionsAnnotation
 import edu.stanford.nlp.ling.CoreAnnotations._
 import edu.stanford.nlp.ling.{IndexedWord, Label}
@@ -110,7 +110,7 @@ class RegexGroup(var name:String) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})]=(${cuis.map(c=>s"${c.cui}:${c.descr}").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${c.stys.mkString(",")}>").mkString(";")});"
       }else{
         s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})"
       }
@@ -200,9 +200,12 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     /**
      * General get cui by a string and filter.
      */
-  def getCui(str: String): Suggestion = {
-      val ((umlsScore, chvScore, umlsCui, chvCui),stys) = UmlsTagger2.tagger.getUmlsScore(str,"filter")
-      umlsCui
+  def getCui(str: String): Array[Suggestion] = {
+      val suggustions = UmlsTagger2.tagger.select(str,true,true)
+        .filter(s=>{
+        s.score > Conf.stag2UmlsScoreFilter  && !Nlp.checkStopword(s.orgStr,true)
+      })
+      suggustions
     }
 
   /* Get cui if the group have not found cui by dependency.*/
@@ -226,10 +229,11 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         && !g.isHitCuiRange(span1based(tree.getSpan))
         && tree.getLeaves.size <= n) {
         // if cui is found, return, else continue to search in the subtree.
-        val cuis = getCui(tree.getLeaves.iterator().mkString(" "))
-        if (cuis != null) {
-          g.cuis.append(cuis)
-          g.cuiSource += "tree,"
+        val str = tree.getLeaves.iterator().mkString(" ")
+        val cuis = getCui(str)
+        if (cuis.size>0) {
+          g.cuis.appendAll(cuis)
+          g.cuiSource += s"tree(${str}),"
           //println(s"get cuis ${cuis.mkString("\t")}")
           return true
         }
@@ -253,20 +257,20 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         words.append(term.head)
         val str = words.sortBy(_.index).map(_.value()).mkString(" ")
         val cuis = getCui(str)
-        if (cuis != null) {
-          term.cuis.append(cuis)
-          g.cuis.append(cuis)
-          g.cuiSource += "fullDep,"
+        if (cuis.size>0) {
+          term.cuis.appendAll(cuis)
+          g.cuis.appendAll(cuis)
+          g.cuiSource += s"fullDep(${str}),"
           //println(s"get cuis ${cuis.mkString("\t")}")
         } else if (term.getModifiers.size > 1) {
           // if we can't get any cui using all the modifiers, we try to use each modifier to fetch cui.
           term.getModifiers.foreach(m=>{
             val str2 = s"${m.value} ${term.head.value}"
-            val cuis2 = UmlsTagger2.tagger.select(str2)
+            val cuis2 = getCui(str2)
             if (cuis2.size>0) {
-              term.cuis.append(cuis2(0))
-              g.cuis.append(cuis2(0))
-              g.cuiSource += "partDep,"
+              term.cuis.appendAll(cuis)
+              g.cuis.appendAll(cuis)
+              g.cuiSource += s"partDep(${str}),"
             }
           })
         }
@@ -340,7 +344,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   }
 
   /**
-   * should be call after ner2groups initialed.
+   * should be called after ner2groups initialed.
    */
   def getSpan() = {
     if (true/*ner2groups.size>0*/){
@@ -395,7 +399,9 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       }else{-1}
       pattern.ner2groups.foreach(g => {
         g.cuis.foreach(cui => {
-          writer.println(s"${AnalyzeCT.taskName}\t${tid.trim}\t${criteriaType}\t${criteriaId}\t${pattern.name}\t${g.name}\t${cui.cui}\t${cui.descr}\t${dur}\t${pattern.getSentence()}")
+          cui.stys.foreach(sty=> {
+            writer.println(s"${AnalyzeCT.taskName}\t${tid.trim}\t${criteriaType}\t${criteriaId}\t${pattern.name}\t${g.name}\t${cui.cui}\t${sty}\t${cui.orgStr}\t${cui.descr}\t${dur}\t${pattern.getSentence()}")
+          })
         })
       })
     }
@@ -412,7 +418,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\tcriteriaId\tpattern\tgroup\tcui\tcui_str\tduration\tsentence"
+      s"task\ttid\ttype\tcriteriaId\tpattern\tgroup\tcui\tsty\torg_str\tcui_str\tduration\tsentence"
     else
       ""
   }

@@ -119,7 +119,7 @@ object StanfordNLP {
     val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     // create an empty Annotation just with the given text
 
-    findPattern(text).foreach(println(_))
+    findPattern(text).foreach(_ => println(""))
     return
 
   }
