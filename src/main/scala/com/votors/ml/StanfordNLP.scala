@@ -116,7 +116,10 @@ object StanfordNLP {
       //"""History of diabetes within 3 days 5 days""" // Add your text here!
     //val text: String = "History of abdominal fistula, gastrointestinal perforation, or intra-abdominal abscess, within 6 months prior to start of study drug. No prior diabetes for 4 days."
     //val text = "History of red, black or white coffee."
-    val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
+    //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
+    //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
+    //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
+    val text = "History of serious heart disease within six months prior to study entry."
     // create an empty Annotation just with the given text
 
     findPattern(text).foreach(_ => println(""))

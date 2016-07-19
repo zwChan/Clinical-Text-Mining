@@ -104,7 +104,7 @@ ENV.defaults["ruleType"] = "tokens"
 {
   ruleType: "tokens",  
   pattern: ( "history" "of" ( []{1,20} ) "within" ( []{0,5} [ { ner:DURATION } ]+  []{0,5}) "prior" "to" ( []{1,20} ) ),
-  action: (Annotate($1, ner, "CUI_DISEASE_5"),Annotate($3, ner, "CUI_DISEASE_PT")),
+  action: (Annotate($1, ner, "CUI_DISEASE_5")),
   priority:100,
   stage:10,
   result: "HISTORY_WITHIN_PT"
@@ -375,7 +375,7 @@ ENV.defaults["ruleType"] = "tokens"
 {
   ruleType: "tokens",  
   pattern: ( ( []{1,20} ) "required" []* "for" "period" ( []{0,5} [ { ner:DURATION } ]+ []{0,5} ) "prior" "to" ( []{1,20} ) ),
-  action: (Annotate($1, ner, "CUI_DISEASE_41"),Annotate($3, ner, "CUI_DISEASE_42")),
+  action: (Annotate($1, ner, "CUI_DISEASE_41")),
   priority:100,
   stage:20,
   result: "REQUIRED_FOR_PERIOD"
