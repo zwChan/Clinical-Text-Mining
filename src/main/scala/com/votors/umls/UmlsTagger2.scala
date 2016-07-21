@@ -62,6 +62,8 @@ case class Suggestion(val score: Float,
   override  def toString(): String = {
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
   }
+  // !! do not copy the stys for the new instance.
+  def copy = new Suggestion(score,descr,cui,aui,sab,NormDescr,orgStr)
 }
 
 case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val sab: String,
@@ -373,8 +375,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     else
       select_db(phrase.replaceAll("\'","\\\\'"))
     //println(s"select: ${phrase}, number ${ret.size}")
-    ret = ret.filter(_.sab.matches(Conf.sabFilter))   //filter by sab
-    if (firstCuiOnly) ret = ret.groupBy(_.cui).map(kv=>kv._2(0)).toArray  //for each cui, return ther first entry only
+    ret = ret.filter(s=>s.sab.matches(Conf.sabFilter) && !s.NormDescr.matches(Conf.cuiStringFilterRegex))   //filter by sab and regex
+    // for the same cui, we only return the highest score record. (there may be several records (e.g.diferent aui))
+    if (firstCuiOnly) ret = ret.groupBy(_.cui).map(kv=>{
+      val cuis=kv._2.sortBy(_.score*(-1.0));
+      cuis(0)
+    }).toArray  //for each cui, return ther first entry only
 
     if (isGetSty) ret.foreach(suggestion => {
       //get all tui from mrsty table.
@@ -385,7 +391,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         suggestion.stys.add(tui)
       }
     })
-    ret.sortBy(_.score)
+    ret.sortBy(_.score*(-1.0))  //desc
   }
   def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)

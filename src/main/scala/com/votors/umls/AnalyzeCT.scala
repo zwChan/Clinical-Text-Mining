@@ -35,6 +35,7 @@ case class Term(name:String, head:IndexedWord) {
   private val modifiers = ListBuffer[IndexedWord]()
   val span = new IntPair(head.index,head.index)
   val cuis = new ListBuffer[Suggestion]
+  var isInConj = false
 
   def addModifier(m:IndexedWord, rel:String) = {
     modifiers.append(m)
@@ -42,10 +43,10 @@ case class Term(name:String, head:IndexedWord) {
   }
   def getModifiers = modifiers
   def hashcode():Int = {
-    return name.hashCode + head.hashCode()
+    return head.hashCode()
   }
   def equals(t:Term): Boolean = {
-    return name.equals(t.name) && head.equals(t.head)
+    return head.equals(t.head)
   }
   def isOverlap(spanOther: IntPair) = {
     !(spanOther.get(1)<span.get(0) || spanOther.get(0)>span.get(1))
@@ -65,6 +66,8 @@ class RegexGroup(var name:String) {
   var duration: Duration = null //the string after within or without, describe how long of the history
   val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
   var logic = "None"  // logic in the group, for now, 'or' / 'and',
+  // keep all the words in conj reletion, so that we can combine them. A, B or J C => AC BC JC
+  val conjWords = new mutable.HashSet[IndexedWord]()
 
   def addToken(t:CoreMap) = {
     tokens.append(t)
@@ -163,28 +166,28 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   val ner2groups = new ListBuffer[RegexGroup]()
   var lastNer = ""
   // aggregate the congruous tokens with the same ner
+  val rgAll = new RegexGroup("CUI_ALL")
   tokens.iterator().foreach(t=>{
-    if (name != "None") {
-      val ner = t.get(classOf[NamedEntityTagAnnotation])
-      //println(s"ner ${t} -> ${ner}")
-      if (ner != null && !ner.equals("O")) {
-        //println(s"found group: ${t}->${ner}")
-        if (ner != lastNer) {
-          val rg = new RegexGroup(ner)
-          rg.addToken(t)
-          ner2groups.append(rg)
-        } else {
-          ner2groups.last.addToken(t)
-        }
-        lastNer = ner
+    if (name == "None") {
+      if (rgAll.getTokens.size == 0) {
+        ner2groups.append(rgAll)
       }
-    }else{
-      if (ner2groups.size == 0) {
-        val rg = new RegexGroup("CUI_ALL")
-        ner2groups.append(rg)
-      }
-      ner2groups.last.addToken(t)
+      rgAll.addToken(t)
     }
+    val ner = t.get(classOf[NamedEntityTagAnnotation])
+    //println(s"ner ${t} -> ${ner}")
+    if (ner != null && !ner.equals("O")) {
+      //println(s"found group: ${t}->${ner}")
+      if (ner != lastNer) {
+        val rg = new RegexGroup(ner)
+        rg.addToken(t)
+        ner2groups.append(rg)
+      } else {
+        ner2groups.last.addToken(t)
+      }
+      lastNer = ner
+    }
+
   })
   // update information of regular groups
   ner2groups.foreach(_.update)
@@ -200,11 +203,28 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     /**
      * General get cui by a string and filter.
      */
-  def getCui(str: String): Array[Suggestion] = {
-      val suggustions = UmlsTagger2.tagger.select(str,true,true)
+  def getCui(str: String, reduceBySty:Boolean=true): Array[Suggestion] = {
+      var suggustions = UmlsTagger2.tagger.select(str,true,true)
         .filter(s=>{
-        s.score > Conf.stag2UmlsScoreFilter  && !Nlp.checkStopword(s.orgStr,true)
+        var flag = s.score > Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
+        var flag_sty = false
+        s.stys.foreach(tui=>{
+          flag_sty |= (Conf.semanticType.indexOf(tui) >=0)
+        })
+        flag && flag_sty
       })
+      if (reduceBySty) suggustions = suggustions.flatMap(s=>{
+        // map to (tui,suggestion)
+        s.stys.map((_,s.copy))
+      }).groupBy(_._1).map(kv=>{
+        // choose the smallest cui for key (cui,tui)
+        val tmp = kv._2.sortBy(_._2.cui)
+        val firstKv = tmp(0)
+        val sugg = firstKv._2
+        sugg.stys.add(firstKv._1)
+        sugg
+      }).toArray
+
       suggustions
     }
 
@@ -264,16 +284,47 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           //println(s"get cuis ${cuis.mkString("\t")}")
         } else if (term.getModifiers.size > 1) {
           // if we can't get any cui using all the modifiers, we try to use each modifier to fetch cui.
-          term.getModifiers.foreach(m=>{
-            val str2 = s"${m.value} ${term.head.value}"
-            val cuis2 = getCui(str2)
-            if (cuis2.size>0) {
-              term.cuis.appendAll(cuis)
-              g.cuis.appendAll(cuis)
-              g.cuiSource += s"partDep(${str}),"
+          val modNum = term.getModifiers.size
+          //first try the (longest suffix modifiers + head), if there is more than 2 modifiers
+          var foundCui = false
+          if (modNum>=3) Range(1,modNum).foreach(idx=>if(!foundCui){
+            val str_longest = term.getModifiers.slice(idx,modNum).map(_.value).mkString(" ") + s" ${term.head.value}"
+            val cuis_longest = getCui(str_longest)
+            if (cuis_longest.size>0) {
+              foundCui = true
+              term.cuis.appendAll(cuis_longest)
+              g.cuis.appendAll(cuis_longest)
+              g.cuiSource += s"partDep*(${str_longest}),"
+            }
+          })
+          // try (every modifier + head) to find cui
+          if (!foundCui) term.getModifiers.foreach(m=>{
+            val str_part = s"${m.value} ${term.head.value}"
+            val cuis_part = getCui(str_part)
+            if (cuis_part.size>0) {
+              term.cuis.appendAll(cuis_part)
+              g.cuis.appendAll(cuis_part)
+              g.cuiSource += s"partDep(${str_part}),"
             }
           })
         }
+        // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
+        if (term.isInConj) {
+          g.conjWords.foreach(m=>if(!m.equals(term.head)){
+            val str_conj = s"${m.value} ${term.head.value}"
+            val cuis_conj = getCui(str_conj)
+            if (cuis_conj.size>0) {
+              term.cuis.appendAll(cuis_conj)
+              g.cuis.appendAll(cuis_conj)
+              g.cuiSource += s"conjDep(${str_conj}),"
+              // ! we only add the word in 'conj' relation as modifier when we can find a cui.
+              // because it is not sure if the word is supposed to be a modifier or not.
+              term.addModifier(m,"conj")
+            }
+          })
+
+        }
+
       })
     })
   }
@@ -300,20 +351,24 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       val rel = s.getRelation.toString
       // first check if the relation in any group
       var hitGroup = false
+
       ner2groups.filter(g=>g.isContains(new IntPair(math.min(s.getSource.index,s.getTarget.index), math.max(s.getSource.index,s.getTarget.index()))))
         .foreach(g=>{
-          hitGroup = true
+          if(name != "CUI_ALL")hitGroup = true  // 'CUI_ALL is the default pattern. excluding.
           if (rel.equals("conj:or") || rel.equals("conj:and")) {
             val start = s.getSource.index()
             val end = s.getTarget.index()
             println(s"${rel}: ${start}, ${end}")
             g.logic = rel
+            g.conjWords += s.getSource
+            g.conjWords += s.getTarget
           }else if (rel.equals("neg")){
 
-          }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn")){
+          }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn") || rel.equals("compound") || rel.equals("nmod")){
             val tmp = Term(rel,s.getSource)
             val t = g.terms.getOrElseUpdate(tmp.hashcode(),tmp)
             t.addModifier(s.getTarget,rel)
+            if (g.conjWords.contains(s.getSource)) t.isInConj = true   // this term is associated with conj relation
           }
       })
       if (hitGroup == false) {
@@ -400,7 +455,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       pattern.ner2groups.foreach(g => {
         g.cuis.foreach(cui => {
           cui.stys.foreach(sty=> {
-            writer.println(s"${AnalyzeCT.taskName}\t${tid.trim}\t${criteriaType}\t${criteriaId}\t${pattern.name}\t${g.name}\t${cui.cui}\t${sty}\t${cui.orgStr}\t${cui.descr}\t${dur}\t${pattern.getSentence()}")
+            writer.println(s"${AnalyzeCT.taskName}\t${tid.trim}\t${criteriaType}\t${criteriaId}\t${pattern.name}\t${g.name}\t${cui.cui}\t${sty}\t${cui.orgStr}\t${cui.descr}\t${dur}\t${pattern.negation}\t${pattern.getSentence()}")
           })
         })
       })
@@ -418,7 +473,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\tcriteriaId\tpattern\tgroup\tcui\tsty\torg_str\tcui_str\tduration\tsentence"
+      s"task\ttid\ttype\tcriteriaId\tpattern\tgroup\tcui\tsty\torg_str\tcui_str\tduration\tneg\tsentence"
     else
       ""
   }
@@ -799,20 +854,6 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 }
 
 
-case class ParseText(val text: String) {
-  // create an empty Annotation just with the given text
-  val document: Annotation = new Annotation(text);
-
-  // run all Annotators on this text
-  StanfordNLP.pipeline.annotate(document)
-  val sentences = document.get(classOf[SentencesAnnotation])
-  for( sentence <- sentences.iterator()) {
-    println("### sentence\n" + sentence)
-    val sent = ParseSentence(sentence)
-    sent.getPattern()
-  }
-}
-
 /**
  *  Parse a sentence.
  *  */
@@ -835,12 +876,12 @@ case class ParseSentence(val sentence: CoreMap) {
     //val dependencies3: SemanticGraph = sentence.get(classOf[edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation])
     //println("### ++ dependencies 3\n" + dependencies3)
 
-//    val tokens = sentence.get(classOf[TokensAnnotation])
-//    //println("### tokens\n" + tokens)
-//    for (t <- tokens.iterator()) {
-//      val ner = t.get(classOf[NamedEntityTagAnnotation])
-//      //print(s"${t}:${ner}\n")
-//    }
+    val tokens = sentence.get(classOf[TokensAnnotation])
+    println("### tokens\n" + tokens)
+    for (t <- tokens.iterator()) {
+      val ner = t.get(classOf[NamedEntityTagAnnotation])
+      print(s"${t}:${ner}\n")
+    }
 
     val retList = new ArrayBuffer[CTPattern]()
     /* for every mached expressed, we collect the result information. */

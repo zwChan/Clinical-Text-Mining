@@ -170,6 +170,7 @@ object Conf extends java.io.Serializable{
   val delimiter = prop.get("delimiter").toString.trim
   val stopwordMatchType = prop.get("stopwordMatchType").toString.toInt
   val stopwordRegex = prop.get("stopwordRegex").toString.trim
+  val cuiStringFilterRegex = prop.get("cuiStringFilterRegex").toString.trim
   val posFilterRegex = prop.get("posFilterRegex").toString.split(" ").filter(_.trim.length>0)
   val debugFilterNgram = prop.get("debugFilterNgram").toString
   val saveNgram2file = prop.getProperty("saveNgram2file","").trim
