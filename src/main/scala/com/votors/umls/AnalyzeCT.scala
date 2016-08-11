@@ -62,7 +62,7 @@ class RegexGroup(var name:String) {
   private val tokens = new ListBuffer[CoreMap]
   val span = new IntPair(-1,-1)   // start from 1. Be care the span from tree.getSpan() is start from 0;
   val cuis = new ListBuffer[Suggestion]
-  var cuiSource = ""  // "fullDep" / "partDep" / "tree".
+  var cuiSource = new ListBuffer[String] // "fullDep" / "partDep" / "tree".
   var duration: Duration = null //the string after within or without, describe how long of the history
   val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
   var logic = "None"  // logic in the group, for now, 'or' / 'and',
@@ -113,9 +113,9 @@ class RegexGroup(var name:String) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${c.stys.mkString(",")}>").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${c.stys.mkString(",")}><${c.method}>").mkString(";")});"
       }else{
-        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic}|${cuiSource})"
+        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})"
       }
       s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {
@@ -128,13 +128,16 @@ class RegexGroup(var name:String) {
 }
 
 
+
 /**
  * The basic pattern result for each pattern that is mathched.
  * name: if it is 'None', there is no pattern found. but we need to process the sentence.
  * */
-class CTPattern (val name:String, val matched: MatchedExpression, val sentence:CoreMap){
-  var negation = 0 // if it is negation (
+class CTPattern (val name:String, val matched: MatchedExpression, val sentence:CoreMap, val sentId: Int=1){
+  var negation = 0 // if it is negation
+  var negAheadKey = 0 // if it is negation
   val span = new IntPair(-1,-1)
+  var keyPos = -1
   /* *******************************************************
    * Init the information that is used in all Pattern
    ********************************************************/
@@ -178,6 +181,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     //println(s"ner ${t} -> ${ner}")
     if (ner != null && !ner.equals("O")) {
       //println(s"found group: ${t}->${ner}")
+      if (ner.equals("KEY")) {
+        keyPos = t.get(classOf[IndexAnnotation])
+      }
       if (ner != lastNer) {
         val rg = new RegexGroup(ner)
         rg.addToken(t)
@@ -186,6 +192,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         ner2groups.last.addToken(t)
       }
       lastNer = ner
+    }else{
+      // no ner found. consider the previous ner ended, and should start a new group for next ner
+      lastNer = ""
     }
 
   })
@@ -225,6 +234,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         sugg
       }).toArray
 
+      if (Conf.analyzNonUmlsTerm && suggustions.size <= 0 && !Nlp.checkStopword(str,true) && !str.matches(Conf.cuiStringFilterRegex)) {
+        val term = AnalyzeCT.termFreqency.getOrElseUpdate(str.toLowerCase(),AnalyzeCT.NonUmlsTerm(str,0))
+        term.freq += 1L
+      }
       suggustions
     }
 
@@ -240,6 +253,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
 
     // filter out these already found cui by dependency.
+    var termId = 0
     ner2groups.filter(g=>g.name.startsWith("CUI_")/* && g.cuis.size == 0*/).foreach(g=>{
       //println(s"[${tree.getLeaves.size}]${span1based(tree.getSpan))},${ner2groups.map(_.isOverlap(span1based(tree.getSpan))).reduce(_ || _)}, ${StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan)},${tree.value()}\t${tree.getLeaves.iterator().mkString(" ")}")
       // 1. the leave have no POS info; 2. is must be noun; 3. it must be in the group; 4. it should not be found CUI by dependency; 5. its length should less than N
@@ -252,8 +266,12 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         val str = tree.getLeaves.iterator().mkString(" ")
         val cuis = getCui(str)
         if (cuis.size>0) {
+          termId += 1
+          cuis.foreach(c=>{
+            c.termId = termId
+            c.method = "tree"
+          })
           g.cuis.appendAll(cuis)
-          g.cuiSource += s"tree(${str}),"
           //println(s"get cuis ${cuis.mkString("\t")}")
           return true
         }
@@ -269,6 +287,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   }
 
   def getCuiByDep() = {
+    var termId = 0
     ner2groups.filter(g=>g.name.startsWith("CUI_") && g.cuis.size == 0).foreach(g=>{
       g.terms.foreach(kv=>{
         val term = kv._2
@@ -278,9 +297,14 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         val str = words.sortBy(_.index).map(_.value()).mkString(" ")
         val cuis = getCui(str)
         if (cuis.size>0) {
+          termId += 1
+          cuis.foreach(c=>{
+            c.termId = termId
+            c.method = "fullDep"
+            c.skipNum = getDepSkip(words)
+          })
           term.cuis.appendAll(cuis)
           g.cuis.appendAll(cuis)
-          g.cuiSource += s"fullDep(${str}),"
           //println(s"get cuis ${cuis.mkString("\t")}")
         } else if (term.getModifiers.size > 1) {
           // if we can't get any cui using all the modifiers, we try to use each modifier to fetch cui.
@@ -291,32 +315,51 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
             val str_longest = term.getModifiers.slice(idx,modNum).map(_.value).mkString(" ") + s" ${term.head.value}"
             val cuis_longest = getCui(str_longest)
             if (cuis_longest.size>0) {
+              termId += 1
+              cuis_longest.foreach(c=>{
+                c.termId = termId
+                c.method = "partDep2"
+                c.skipNum = getDepSkip(term.getModifiers.slice(idx,modNum).toSeq ++ (term.head::Nil))
+              })
               foundCui = true
               term.cuis.appendAll(cuis_longest)
               g.cuis.appendAll(cuis_longest)
-              g.cuiSource += s"partDep*(${str_longest}),"
             }
           })
           // try (every modifier + head) to find cui
+          /*
           if (!foundCui) term.getModifiers.foreach(m=>{
             val str_part = s"${m.value} ${term.head.value}"
             val cuis_part = getCui(str_part)
             if (cuis_part.size>0) {
+              termId += 1
+              cuis_part.foreach(c=> {
+                c.termId = termId
+                c.method = "partDep1"
+                c.skipNum = getDepSkip(m::term.head::Nil)
+              })
               term.cuis.appendAll(cuis_part)
               g.cuis.appendAll(cuis_part)
-              g.cuiSource += s"partDep(${str_part}),"
             }
           })
+          */
         }
         // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
-        if (term.isInConj) {
+        // the word connect by 'or' can only modify the last word in 'or' list.  A, B, CD or E X => AX/BX, no AD and BD
+        if (term.isInConj && (term.head.index == g.conjWords.map(_.index).max)) {
           g.conjWords.foreach(m=>if(!m.equals(term.head)){
             val str_conj = s"${m.value} ${term.head.value}"
             val cuis_conj = getCui(str_conj)
-            if (cuis_conj.size>0) {
+            val skipNum = getDepSkip(m::term.head::Nil)
+            if (skipNum <= 5 && cuis_conj.size>0) {
+              termId += 1
+              cuis_conj.foreach(c=>{
+                c.termId = termId
+                c.method = "conjDep"
+                c.skipNum = skipNum
+              })
               term.cuis.appendAll(cuis_conj)
               g.cuis.appendAll(cuis_conj)
-              g.cuiSource += s"conjDep(${str_conj}),"
               // ! we only add the word in 'conj' relation as modifier when we can find a cui.
               // because it is not sure if the word is supposed to be a modifier or not.
               term.addModifier(m,"conj")
@@ -329,6 +372,15 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     })
   }
 
+  /*We concern the ability that dependency tree can identify the modifiers that is not adjacent its noun
+   * e.g. A B N, A is adj, B is another modifier word we don't care, N is the head noun. we want to identify
+    * A+N is a term; This function is to calculate whether this case happens.
+    * It calculate the word between A and N. Although it is not exact.
+    * */
+  def getDepSkip(words:Seq[IndexedWord]): Int = {
+    val total_span = words.map(_.index())
+    return (total_span.max - total_span.min + 1 - words.size)
+  }
   /**
    * 
    * @param dep the dependency tree
@@ -371,12 +423,14 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
             if (g.conjWords.contains(s.getSource)) t.isInConj = true   // this term is associated with conj relation
           }
       })
-      if (hitGroup == false) {
+      // calculate all negation relationship
+      if (true /*hitGroup == false*/) {
         if (rel.equals("neg")){
-          // only the negation before the pattern is counter for negation.
-          if (s.getSource.index() < span.getSource) {
-            println("negation detect!")
-            negation += 1
+          println("negation detect!")
+          negation += 1
+          // only the negation before the pattern is counter for negation. !! don't do this.
+          if (Math.min(s.getSource.index, s.getTarget.index) < keyPos) {
+            negAheadKey += 1
           }
         }
       }
@@ -388,6 +442,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   }
 
   /* Get the negation status of the sentence. */
+  // no use for now
   def getNegation() = {
     //dep.typedDependencies.iterator.map(_.toString()).foreach(println)
     negation = dep.typedDependencies.iterator.map(_.toString()).filter(_.startsWith("neg")).size
@@ -413,29 +468,33 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   def update() = {
     getSpan()
     //getNegation()
-    walkDep(dep,dep.getFirstRoot,new mutable.HashSet[IndexedWord]())
-    getCuiByDep()
+    if (Conf.useDependencyTree) {
+      walkDep(dep, dep.getFirstRoot, new mutable.HashSet[IndexedWord]())
+      getCuiByDep()
+    }
     // if there is no cui found by dependency, use syntactic to find cui again
     getCuiByTree()
   }
   private def value = {
     ner2groups.map(g=>s"${g.toString}").mkString("\t")
   }
-  override def toString = s"${name}\t${negation}\t${value}"
+  override def toString = s"${name}\t${negation}\t${negAheadKey}\t${value}"
 }
 object CTPattern {
-  def getTitle = "PatternName\tNegation\tGroup1Name\tGroup1VAlue\tGroup2Name\tGroup2VAlue\tGroup3Name\tGroup3VAlue..."
+  def getTitle = "PatternName\tNegation\tnegAheadKey\tGroup1Name\tGroup1VAlue\tGroup2Name\tGroup2VAlue\tGroup3Name\tGroup3VAlue..."
 }
 
 case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var markedType:String="", var depth:String="-1", var cui:String="None", var cuiStr:String="None"){
   var hitNumType = false
-  val criteriaId = AnalyzeCT.criteriaIdIncr.getAndIncrement()
+  var criteriaId = 0
   val patternList = new ArrayBuffer[(CoreMap, CTPattern)]()
   var subTitle = "None"
+  var splitType = "#"
+
   override def toString(): String = {
     val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${criteriaId}","${sentence.trim.replaceAll("\\\"","'")}""""
     if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
-    str
+    str.replace("\"","\\\"")
   }
   def patternOutput(pattern: CTPattern, sent:String=null) = {
       val paternStr = if (pattern == null)
@@ -443,19 +502,25 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       else
         pattern.getSentence() + "\t" + pattern.toString
 
-    s"${tid.trim}\t${criteriaType}\t${criteriaId}\t${subTitle}\t" + paternStr
-
+    val str = s"${tid.trim}\t${criteriaType}\t${criteriaId}\t${subTitle}\t" + paternStr
+    str.replace("\"","\\\"")
   }
   def patternCuiDurOutput(writer:PrintWriter,pattern: CTPattern, filter:String) = {
     if (pattern != null ) {
       val durGroup = pattern.ner2groups.find(_.name == "DURATION").getOrElse(null)
       val dur = if (durGroup!=null) {
         durGroup.duration.getStandardDays
-      }else{-1}
+      }else{
+        -1
+      }
       pattern.ner2groups.foreach(g => {
-        g.cuis.foreach(cui => {
+        g.cuis.zipWithIndex.foreach(vi => {
+          val cui = vi._1
+          val index = vi._2
           cui.stys.foreach(sty=> {
-            writer.println(s"${AnalyzeCT.taskName}\t${tid.trim}\t${criteriaType}\t${criteriaId}\t${pattern.name}\t${g.name}\t${cui.cui}\t${sty}\t${cui.orgStr}\t${cui.descr}\t${dur}\t${pattern.negation}\t${pattern.getSentence()}")
+            val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
+            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.0)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${cui.orgStr}\t${cui.descr}\t${cui.method}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
+            writer.println( str.replace("\"","\\\""))
           })
         })
       })
@@ -473,7 +538,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\tcriteriaId\tpattern\tgroup\tcui\tsty\torg_str\tcui_str\tduration\tneg\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tsentLen\tsentence"
     else
       ""
   }
@@ -493,15 +558,15 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
   val STAG_PATIENT_CH=5
   val STAG_PRIOR_CH  =6
 
-  val TYPE_INCLUDE = "Include"
-  val TYPE_EXCLUDE = "Exclude"
+  val TYPE_INCLUDE = "Inclusion"
+  val TYPE_EXCLUDE = "Exclusion"
   val TYPE_BOTH = "Both"
   val TYPE_HEAD = "Head"
   val TYPE_DISEASE_CH = "DISEASE CHARACTERISTICS"
   val TYPE_PATIENT_CH = "PATIENT CHARACTERISTICS"
   val TYPE_PRIOR_CH = "PRIOR CONCURRENT THERAPY"
-  val TYPE_INCLUDE_HEAD = "Include head"
-  val TYPE_EXCLUDE_HEAD = "Exclude head"
+  val TYPE_INCLUDE_HEAD = "Inclusion head"
+  val TYPE_EXCLUDE_HEAD = "Exclusion head"
   val TYPE_BOTH_HEAD = "Both head"
 
   val numericReg = new ArrayBuffer[(String,String)]()
@@ -587,6 +652,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       .iterator()
 
     // for each row of csv file
+    var criteriaId = 0
     records.drop(1).foreach(row => {
       //println(row)
       val tid = row.get(0)
@@ -594,26 +660,61 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 
       var stagFlag = STAG_HEAD
       var subTitle = ""
-      criteria.split("#|\\n").foreach(sent_org =>{
-        val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*","")
+      var splitType = "#"
+      criteria.split("#|\\n").flatMap(s=> {
+        // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
+        if (s.count(_ == ':') >= 3) {
+          splitType = ":"
+          s.split(":")
+        } else if (s.count(_ == '-') >= 3) {
+          splitType = "-"
+          s.split(" - ")
+    /*    } else if (s.split("\\s").count(_=="No") >= 3) {
+          // some sentences without any punctuation to separate
+          splitType = "No"
+          s.split("(?=\\sNo\\s)")
+    */
+        }  else if (s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3) {
+            // some sentences without any punctuation to separate
+          splitType = "or"
+          s.split("Or|OR")
+        } else {
+          s :: Nil
+        }
+      }).filter(_.trim.size > 2).foreach(sent_org =>{
+        val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*","") // the punctuation at the beginning of a sentence
 
+          /**
+           *  a inner function to identify the head of the criteria
+           *  1. start with the head
+           *  2. include with 'head' and following by ':'
+           *  2. include the head as a whole word and end with ':'
+           *  @param sent
+           *  @param head head to match, need to upcase
+           */
+        // start with the head;
+        def head_match(sent: String, head: String): Boolean = {
+          return (sent.toUpperCase.startsWith(s"${head}")
+            || sent.toUpperCase.matches(s".*\\b${head}\\b:.*")
+            || sent.toUpperCase.matches(s".*\\b${head}\\b.*:"))
+        }
         val ctRow =
-          if (stagFlag != STAG_INCLUDE && sent.toUpperCase.startsWith("INCLUSION CRITERIA")){
+          if (stagFlag != STAG_INCLUDE && head_match(sent,"INCLUSION CRITERIA")){
             stagFlag = STAG_INCLUDE
             CTRow(tid,TYPE_INCLUDE_HEAD,sent)
-          }else if (stagFlag != STAG_EXCLUDE && sent.toUpperCase.startsWith("EXCLUSION CRITERIA")) {
+          }else if (stagFlag != STAG_EXCLUDE && (head_match(sent,"EXCLUSION CRITERIA") || head_match(sent,"NON-INCLUSION CRITERIA"))) {
             stagFlag = STAG_EXCLUDE
             CTRow(tid,TYPE_EXCLUDE_HEAD,sent)
-          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_DISEASE_CH && sent.toUpperCase.startsWith("DISEASE CHARACTERISTICS")) {
+          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_DISEASE_CH && head_match(sent, "DISEASE CHARACTERISTICS")) {
             stagFlag = STAG_DISEASE_CH
             CTRow(tid,TYPE_DISEASE_CH,sent)
-          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE  && stagFlag != STAG_PATIENT_CH && sent.toUpperCase.startsWith("PATIENT CHARACTERISTICS")) {
+          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE  && stagFlag != STAG_PATIENT_CH && head_match(sent, "PATIENT CHARACTERISTICS")) {
             stagFlag = STAG_PATIENT_CH
             CTRow(tid,TYPE_PATIENT_CH,sent)
-          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_PRIOR_CH && sent.toUpperCase.startsWith("PRIOR CONCURRENT THERAPY")) {
+          }else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_PRIOR_CH && head_match(sent,"PRIOR CONCURRENT THERAPY")) {
             stagFlag = STAG_PRIOR_CH
             CTRow(tid,TYPE_PRIOR_CH,sent)
-          }else if (stagFlag == STAG_HEAD && sent.toUpperCase.startsWith("INCLUSION AND EXCLUSION CRITERIA")) {
+          }else if (stagFlag == STAG_HEAD && head_match(sent,"INCLUSION AND EXCLUSION CRITERIA")) {
             stagFlag = STAG_BOTH
             CTRow(tid,TYPE_BOTH_HEAD,sent)
           }else {
@@ -644,6 +745,10 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
             }
           }
 
+        //criteria id is the index in a clinical trial
+        criteriaId += 1
+        ctRow.splitType = splitType
+        ctRow.criteriaId = criteriaId
         // cache the sentence, it will be use as the sub-title of the next sentence
         if (hasSubTitle(sent_org)){
           ctRow.subTitle = subTitle
@@ -659,10 +764,23 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           detectPattern(ctRow,writer,writer_cui)
       })
       writer.flush()
+      writer_cui.flush()
 
     })
 
     writer.close()
+    writer_cui.close()
+
+    if (Conf.analyzNonUmlsTerm) {
+      var writer_non_cui = new PrintWriter(new FileWriter(outputFile + ".noncui"))
+      writer_non_cui.println("task\tstring\tfreq\tngram")
+      AnalyzeCT.termFreqency.foreach(kv=>{
+        val term = kv._2
+        writer_non_cui.println(s"${AnalyzeCT.taskName}\t${term.str}\t${term.freq}\t${term.str.count(_==' ')+1}")
+      })
+      writer_non_cui.flush()
+      writer_non_cui.close()
+    }
     in.close()
 
   }
@@ -857,7 +975,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 /**
  *  Parse a sentence.
  *  */
-case class ParseSentence(val sentence: CoreMap) {
+case class ParseSentence(val sentence: CoreMap, sentId:Int) {
   /**
    * The sentence is annotated before this method is call.
    * @return
@@ -889,7 +1007,7 @@ case class ParseSentence(val sentence: CoreMap) {
       //println(s"keys of annotation: ${m.getValue}")
       val pattern = m.getValue.toString match {
       case _ => {
-          new CTPattern(m.getValue.get.toString, m, sentence)
+          new CTPattern(m.getValue.get.toString, m, sentence,sentId)
         }
       }
       if (pattern != null) {
@@ -906,7 +1024,7 @@ case class ParseSentence(val sentence: CoreMap) {
 
     // if there is no pattern matched, add a 'None' pattern.
     if (matched.size == 0) {
-      val pattern = new CTPattern("None", null, sentence)
+      val pattern = new CTPattern("None", null, sentence,1)
       if (pattern != null) {
         pattern.update()
         retList.append(pattern)
@@ -928,6 +1046,11 @@ object AnalyzeCT {
   val criteriaIdIncr = new AtomicInteger()
   var jobType = "parse"
   var taskName = ""
+  // record the term that doesn't match any UMLS words, aggregrating the frequency.
+  // key is original string + pos tag.
+  val termFreqency = new mutable.HashMap[String,NonUmlsTerm]()
+
+  case class NonUmlsTerm(str:String,var freq:Long)
   
   def doGetKeywords(dir:String, f: String, externFile:String) = {
     val ct = new AnalyzeCT(s"${dir}${f}.csv",

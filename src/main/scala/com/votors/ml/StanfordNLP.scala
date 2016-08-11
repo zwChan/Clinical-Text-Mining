@@ -78,6 +78,7 @@ object StanfordNLP {
     props.setProperty("ner.applyNumericClassifiers","true")
     props.setProperty("ner.sutime.includeRange","true")
     props.setProperty("ner.sutime.markTimeRanges","true")
+    props.setProperty("sutime.binders", "0");
 //    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
 //    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
 
@@ -93,8 +94,10 @@ object StanfordNLP {
       val document: Annotation = new Annotation(sent)
       pipeline.annotate(document)
       val sentences = document.get(classOf[SentencesAnnotation])
+      var sentId = 0
       for( sentence <- sentences.iterator()) {
-        val retPatterns = ParseSentence(sentence).getPattern()
+        sentId += 1  // sentence id is a index in the criteria
+        val retPatterns = ParseSentence(sentence,sentId).getPattern()
         if (retPatterns.size > 0) {
           retList ++= retPatterns.map((sentence, _))
         } else {
@@ -119,7 +122,7 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "at least 4 weeks since prior to for major surgery."
+    val text = "Recovered from all toxic effects due to prior treatment for prostate cancer."
     // create an empty Annotation just with the given text
 
     findPattern(text).foreach(_ => println(""))

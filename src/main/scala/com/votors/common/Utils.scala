@@ -239,6 +239,8 @@ object Conf extends java.io.Serializable{
   val stanfordTokenizerOption=prop.get("stanfordTokenizerOption").toString
   val stanfordTaggerOption=prop.get("stanfordTaggerOption").toString
   val stanfordPatternFile=prop.get("stanfordPatternFile").toString
+  val useDependencyTree=prop.get("useDependencyTree").toString.toBoolean
+  val analyzNonUmlsTerm=prop.get("analyzNonUmlsTerm").toString.toBoolean
 
 }
 

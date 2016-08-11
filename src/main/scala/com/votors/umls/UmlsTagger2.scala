@@ -56,8 +56,10 @@ import org.apache.commons.csv._
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="") {
+                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="",var termId:Long=0) {
   val stys = new mutable.HashSet[String]()  // semantic type for this cui
+  var method = ""  // the method to find this cui
+  var skipNum = 0  // if the words in the term is not adjacent in original sentence, it is the number of  non-useful words
 
   override  def toString(): String = {
       "[%2.2f%%] (%s) (%s) (%s) %s".format(score, cui, aui, sab, descr)
@@ -676,7 +678,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         for (idx <- 0 to (tokens.length - n)) {
           val gram = tokens.slice(idx,idx+n)
           val pos = getPos(gram)
-          if (Conf.posInclusive.length == 0 || posContains(gram,Conf.posInclusive)) {
+          if (Conf.posInclusive.length == 0 || posContains(gram,Conf.posInclusive,pos)) {
             select(gram.mkString(" ")) match {
               case suggestions: Array[Suggestion] => {
                 retList :+= (gram.mkString(" "), suggestions)
@@ -861,8 +863,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param filter the pos as a eligible criteria
    * @return true if eligible, else false
    */
-  def posContains(phraseNorm: Array[String], filter:String="NN"):Boolean = {
-    val retPos = Nlp.getPos(phraseNorm)
+  def posContains(phraseNorm: Array[String], filter:String="NN",pos: Array[String]=null):Boolean = {
+    val retPos = if (pos!=null)Nlp.getPos(phraseNorm) else pos
     trace(DEBUG, phraseNorm.mkString(",") + " pos is: " + retPos.mkString(","))
 
     var hit = false
