@@ -184,6 +184,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       if (ner.equals("KEY")) {
         keyPos = t.get(classOf[IndexAnnotation])
       }
+      if (ner.equals("NEG")) {
+        negation += 1
+        negAheadKey += 1
+      }
       if (ner != lastNer) {
         val rg = new RegexGroup(ner)
         rg.addToken(t)
@@ -519,7 +523,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           val index = vi._2
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.0)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${cui.orgStr}\t${cui.descr}\t${cui.method}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
+            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${cui.orgStr}\t${cui.descr}\t${cui.method}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })

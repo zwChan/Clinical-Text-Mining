@@ -1,0 +1,670 @@
+{%extends "layout.html"%}
+
+{%block header%}
+	<div id="logotext">Visual Analysis Tool of Study Populations of Clinical Trials</div>
+{% endblock %}
+
+{%block body%}
+
+
+
+<style>
+	
+	/* Website template by freewebsitetemplates.com */
+	html {
+		font-family: Arial, Helvetica, sans-serif, Century Gothic;
+	}
+body {
+	background-color: #03354e;
+	font-family: Century Gothic;
+	font-size: 14px;
+	margin: 0;
+}
+img {
+	border: 0;
+}
+div#loading {
+    color: red;
+	display: none;
+}
+
+/*------------------------------ HEADER ------------------------------*/
+#header {
+	width: 960px;
+	margin: 0 auto;
+	padding: 30px 0 0 0;
+	position: relative;
+}
+
+#logotext {
+	font-size: 34px;
+	font-family: Century Gothic;
+	color: #CFCFCF;
+	padding: 0 0 24px 0px;
+}
+
+/** Logo **/
+#logo {
+	display: block;
+	padding: 0 0 20px 20px;
+}
+
+/** Navigation **/
+#navigation {
+	
+	height: 47px;
+	padding: 0 0 20px 4px;
+	left: 0;
+}
+#navigation ul {
+	background-image: url('./bg-menu.gif');
+	background-repeat:  repeat-x;
+	display: inline-block;
+	height: 40px;
+	width: 910px;
+	list-style: none;
+	margin: 0;
+}
+#navigation li {
+	float: left;
+	font-size: 16px;
+	line-height: 40px;
+	margin: 0 5px;
+	text-align: center;
+}
+#navigation li.first {
+	margin-left: 0;
+	
+}
+#navigation li.selected {
+	background-color: #b7c2c8;
+}
+#navigation a {
+	color: #092f44;
+	font-weight: bold;
+	padding: 0 10px;
+	text-decoration: none;
+	text-shadow: 1px 1px 0 #eaeaea;
+}
+#navigation a:hover {
+	color: #0a2d43;
+}
+
+
+/*------------------------------ CONTENTS ------------------------------*/
+
+.boxarea {
+	padding: 2px 8px 2px 8px;
+	border: 1px solid #778;
+	background: #CFF;
+}
+
+#contents {
+	padding: 0 0 20px;
+}
+#contents div.body {
+	color: #fdfffa;
+	width: 960px;
+	margin: 0 auto 20px;
+}
+
+/** MAIN **/
+#main {
+	background-color: #03354e;
+	width: 630px;
+	margin: 60px 10px 0 300px;
+	padding: 20px 0 20px 20px;
+}
+#main span, #main p {
+	color: #aeb4b4;
+	font-size: 14px;
+	line-height: 20px;
+	margin: 0;
+	padding-right: 20px;
+	text-align: justify;
+}
+#main span {
+	color: #fdfffa;
+	font-size: 16px;
+}
+#main p a {
+	color: #aeb4b4;
+	font-weight: bold;
+	text-decoration: none;
+}
+#main span a {
+	color: #fdfffa;
+	font-weight: bold;
+	text-decoration: none;
+}
+#main ul {
+	display: inline-block;
+	list-style: none;
+	height: 355px;
+	margin: 0;
+	padding: 0;
+}
+#main ul li {
+	float: left;
+	width: 315px;
+}
+#main ul li a {
+	color: #fdfffa;
+	display: block;
+	height: 114px;
+	margin: 0 40px 0 0;
+	text-decoration: none;
+}
+#main ul li img {
+	float: left;
+}
+#main ul li h3 {
+	margin: 0;
+	line-height: 25px;
+	padding-top: 35px;
+}
+#main ul li p {
+	clear: both;
+	padding: 6px 40px 20px 0;
+}
+
+/** SIDEBAR **/
+#sidebar {
+	float: left;
+	width: 270px;
+	margin: 0;
+	padding: 20px 20px 0 10px;
+}
+#sidebar h3 {
+	font-size: 16px;
+	font-weight: bold;
+	margin: 0 0 20px;
+}
+#sidebar ul {
+	list-style: none;
+	height: 420px;
+	margin: 0;
+	padding: 0;
+}
+#sidebar ul li {
+	font-size: 14px;
+	line-height: 20px;
+	padding-bottom: 10px;
+}
+#sidebar ul li span {
+	color: #456d87;
+	display: block;
+	font-size: 12px;
+	line-height: 20px;
+	margin-bottom: 10px;
+}
+#sidebar ul li span a {
+	background-image: url('./bg-comment.gif');
+	background-repeat:  no-repeat 7px 3px;
+	color: #fffffb;
+	display: inline-block;
+	height: 20px;
+	width: 20px;
+	padding-bottom: 1px;
+	padding-left: 12px;
+	text-decoration: none;
+}
+
+/*------------------------------ CONTENTS TEXT ------------------------------*/
+#contents .background {
+	background-color: #ffffff;
+	min-height: 300px;
+	width: 1200px;
+	border-radius: 3px;
+	margin: 0 auto;
+	padding: 30px;
+}
+#contents div.background h3 {
+	color: #0e2934;
+	margin: 0px 0 20px 0;
+	text-transform: uppercase;
+}
+
+
+
+/*------------------------------ FOOTER ------------------------------*/
+#footer {
+	color: #456f7f;
+	line-height: 20px;
+	width: 940px;
+	margin: 0 auto;
+	padding: 10px 10px;
+}
+
+#footer ul.contacts {
+	float: left;
+	font-size: 12px;
+	list-style: none;
+	width: 300px;
+	margin: 0;
+	padding: 0 0 10px;
+}
+#footer ul.contacts h3 {
+	font-size: 14px;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#footer ul.contacts li span {
+	float: left;
+	width: 50px;
+}
+#footer ul.contacts li p {
+	margin: 0 0 0 50px;
+}
+
+#connect {
+	float: left;
+	list-style: none;
+	width: 140px;
+	margin: 0;
+	padding: 0;
+}
+#connect h3 {
+	font-size: 14px;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#connect li {
+	padding: 0 0 5px;
+}
+#connect li a {
+	color: #456f7f;
+	font-size: 15px;
+	text-decoration: none;
+}
+
+#newsletter {
+	float: left;
+	width: 500px;
+	padding: 0 0 20px;
+}
+#newsletter p {
+	font-size: 12px;
+	margin: 0;
+}
+#newsletter p b {
+	display: block;
+	font-weight: 800;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#newsletter form {
+	margin: 4px 0 16px;
+}
+#newsletter .txtfield {
+	background-image: url('./input.gif');
+	background-repeat: no-repeat;
+	color: #9c9c9c;
+	height: 25px;
+	line-height: 25px;
+	width: 200px;
+	border: 0;
+	margin: 0 6px 0 0;
+	padding: 0 10px;
+}
+#newsletter .button {
+	background-image: url('./button-check.gif');
+	background-repeat: no-repeat;
+	cursor: pointer;
+	height: 25px;
+	width: 25px;
+	border: 0;
+	padding: 0;
+}
+
+#footer span.footnote {
+	clear: both;
+	display: block;
+	font-size: 12px;
+	margin: 40px 0 0;
+	text-align: center;
+}
+
+	
+	
+	
+	
+.fig {
+		font-family:Arial;
+		font-size:10pt;
+		color:darkgray;
+	}
+
+#loadingmsg {
+	color: black;
+	background: #fff;
+	padding: 10px;
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	z-index: 100;
+	margin-right: -25%;
+	margin-bottom: -25%;
+}
+#loadingover {
+	background: black;
+	z-index: 99;
+	width: 100%;
+	height: 100%;
+	position: fixed;
+	top: 0;
+	left: 0;
+	-ms-filter: "progid:DXImageTransform.Microsoft.Alpha(Opacity=80)";
+	filter: alpha(opacity=80);
+	-moz-opacity: 0.8;
+	-khtml-opacity: 0.8;
+	opacity: 0.8;
+}
+.CSSTableGenerator {
+	margin:0px;padding:0px;
+	width:60%;
+	border:1px solid #0057af;
+	
+	-moz-border-radius-bottomleft:0px;
+	-webkit-border-bottom-left-radius:0px;
+	border-bottom-left-radius:0px;
+	
+	-moz-border-radius-bottomright:0px;
+	-webkit-border-bottom-right-radius:0px;
+	border-bottom-right-radius:0px;
+	
+	-moz-border-radius-topright:0px;
+	-webkit-border-top-right-radius:0px;
+	border-top-right-radius:0px;
+	
+	-moz-border-radius-topleft:0px;
+	-webkit-border-top-left-radius:0px;
+	border-top-left-radius:0px;
+}.CSSTableGenerator table{
+	border-collapse: collapse;
+	border-spacing: 0;
+	width:100%;
+	height:100%;
+	margin:0px;padding:0px;
+}.CSSTableGenerator tr:last-child td:last-child {
+	-moz-border-radius-bottomright:0px;
+	-webkit-border-bottom-right-radius:0px;
+	border-bottom-right-radius:0px;
+}
+.CSSTableGenerator table tr:first-child td:first-child {
+	-moz-border-radius-topleft:0px;
+	-webkit-border-top-left-radius:0px;
+	border-top-left-radius:0px;
+}
+.CSSTableGenerator table tr:first-child td:last-child {
+	-moz-border-radius-topright:0px;
+	-webkit-border-top-right-radius:0px;
+	border-top-right-radius:0px;
+}.CSSTableGenerator tr:last-child td:first-child{
+	-moz-border-radius-bottomleft:0px;
+	-webkit-border-bottom-left-radius:0px;
+	border-bottom-left-radius:0px;
+}.CSSTableGenerator tr:hover td{
+	background-color:#d3e9ff;
+	
+	
+}
+.CSSTableGenerator td{
+	vertical-align:middle;
+	
+	background-color:#ffffff;
+	
+	border:1px solid #0057af;
+	border-width:0px 1px 1px 0px;
+	text-align:left;
+	padding:7px;
+	font-size:12px;
+	font-family:Century Gothic;
+	font-weight:normal;
+	color:#000000;
+}.CSSTableGenerator tr:last-child td{
+	border-width:0px 1px 0px 0px;
+}.CSSTableGenerator tr td:last-child{
+	border-width:0px 0px 1px 0px;
+}.CSSTableGenerator tr:last-child td:last-child{
+	border-width:0px 0px 0px 0px;
+}
+.CSSTableGenerator tr:first-child td{
+	background:-o-linear-gradient(bottom, #2f82d6 5%, #2f82d6 100%);	background:-webkit-gradient( linear, left top, left bottom, color-stop(0.05, #2f82d6), color-stop(1, #2f82d6) );
+	background:-moz-linear-gradient( center top, #2f82d6 5%, #2f82d6 100% );
+	filter:progid:DXImageTransform.Microsoft.gradient(startColorstr="#2f82d6", endColorstr="#2f82d6");	background: -o-linear-gradient(top,#2f82d6,2f82d6);
+	
+	background-color:#2f82d6;
+	border:0px solid #0057af;
+	text-align:center;
+	border-width:0px 0px 1px 1px;
+	font-size:12px;
+	font-family:Century Gothic;
+	font-weight:bold;
+	color:#ffffff;
+}
+.CSSTableGenerator tr:first-child:hover td{
+	background:-o-linear-gradient(bottom, #2f82d6 5%, #2f82d6 100%);	background:-webkit-gradient( linear, left top, left bottom, color-stop(0.05, #2f82d6), color-stop(1, #2f82d6) );
+	background:-moz-linear-gradient( center top, #2f82d6 5%, #2f82d6 100% );
+	filter:progid:DXImageTransform.Microsoft.gradient(startColorstr="#2f82d6", endColorstr="#2f82d6");	background: -o-linear-gradient(top,#2f82d6,2f82d6);
+	
+	background-color:#2f82d6;
+}
+.CSSTableGenerator tr:first-child td:first-child{
+	border-width:0px 0px 1px 0px;
+}
+.CSSTableGenerator tr:first-child td:last-child{
+	border-width:0px 0px 1px 1px;
+}
+
+</style>
+
+<script type="text/javascript">
+	// show or hide loading annimation
+	function show_loading(){
+		document.getElementById("result").style.display = "none";
+		document.getElementById("loading").style.display = "block";
+	}
+	function showLoading() {
+		document.getElementById("loadingmsg").style.display = "block";
+		document.getElementById("loadingover").style.display = "block";
+	}
+	function showDiv() {
+		document.getElementById('diseaseDiv').style.display = "block";
+	}
+</script>
+
+<script type="text/javascript">
+	// judge if there is input text
+	function check_input(){
+		if (!document.getElementById("variable").value || document.getElementById("variable").value == "None")
+		{
+			alert("Please select a variable for processing");
+			return false;
+		}
+		else
+		{
+			document.getElementById("hidden_options").value = document.getElementById("auto_options").innerHTML;
+			return true;
+		}};
+		
+	function check_condition(){
+		if (document.getElementById("disease").value == "")
+		{
+			alert("Please specify a condition");
+			return false;
+		}
+		else
+		{
+			document.getElementById("hidden_options").value = document.getElementById("auto_options").innerHTML;
+			return true;
+		}};
+</script>
+
+<script type="text/javascript">
+	function check_range(){
+		if (!document.getElementById("lower").value || !document.getElementById("upper").value || isNaN(document.getElementById("lower").value) || isNaN(document.getElementById("upper").value))
+		{
+			alert("Please input a valid number for processing");
+			return false;
+		}
+		else
+		{
+			document.getElementById("hidden_options").value = document.getElementById("auto_options").innerHTML;
+			return true;
+		}
+	}
+</script>
+
+
+
+<script type="text/javascript">
+	function TextChange1(){
+		change_option();
+	}
+function TextChange2(){
+	if (!document.getElementById("variable").value)
+	{
+		change_option();
+	}
+}
+function change_option(){
+	if (document.getElementById("auto_options").innerText != '')
+	{
+	 	document.getElementById("all_var").checked = true;
+ 		document.getElementById("auto_options").innerHTML = "<span style=color:red>Detecting variable change. Click Process button to regenerate value range.</span>";
+		document.getElementById("button_csv").style.display = 'none';
+	}
+}
+</script>
+
+<script>
+	(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  
+  ga('create', 'UA-57355594-1', 'auto');
+  ga('send', 'pageview');
+  
+</script>
+
+<!-- test the auto complete function for disease selection -->
+
+<link rel="stylesheet" href="//code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
+<script src="//code.jquery.com/jquery-1.10.2.js"></script>
+<script src="//code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+<link rel="stylesheet" href="/resources/demos/style.css">
+<script>
+  $(function() {
+	var availableTags = [
+						 {% for dis in diseases_list %}
+						 "{{dis}}",
+						 {% endfor %}
+						 ""
+						 ];
+	$( "#tags" ).autocomplete({
+							  source: availableTags,
+							  select: function (event, ui) {
+							  return false;
+							  },
+							  
+							  select: function (event, ui) {
+							  $(this).val(ui.item ? ui.item : " ");},
+							  
+							  change: function (event, ui) {
+							  if (!ui.item) {
+							  this.value = '';}}
+							  });
+	});
+</script>
+
+	<div id='loadingmsg' style='display: none;'>Analyzing, please wait (normally within 30 seconds)... </div>
+	<div id='loadingover' style='display: none;'></div>
+
+	{% if distribution_numeric_features %}
+	<FORM action="{{ url_for('vitta_main') }}" method="post">
+		<button type="submit" name="button2" value=" Click here to start " style="height: 80px; width: 150px;"><font size = 3>Choose another condition</font></button>
+	</FORM>
+	{% endif %}
+
+	{% if diseases_list %}
+	<FORM action="{{ url_for('show_frequent_features') }}" method="post" onsubmit='showLoading();'>
+		
+		Condition: <SELECT id="disease" name="disease">
+					<optgroup label="Please choose a disease to start">
+					<!-- <option value = ''>Please choose a condition</option> -->
+					{% for dis in diseases_list %}
+						<option value = '{{dis}}' {% if cur_var == '{{dis}}': %}selected{% endif %}> {{dis}} </option>
+					{% endfor %}
+				</SELECT>
+		
+		<br>
+		
+		OR <BR>
+		
+		<input type="button" name="answer" value="Type a condition" onclick="showDiv()" style="height: 120px; width: 300px; font-size:20px" />
+		<br>
+		<br>
+		<div id="diseaseDiv"  style="display:none;" class="answer_list" >
+			<!-- auto complete the condition field -->
+			<div class="ui-widget">
+				<label for="tags">Type a condition: </label>
+				<input id="tags" name="typed_disease">
+					</div>
+			<span style=color:grey>Note: it is mandatory that you click on one suggested condition in the list.</span>
+			<br><br>
+			
+		</div>
+		
+		
+		Top <SELECT id="topk" name="topk">
+			<option value = 10 selected="selected"> 10 </option>
+			<option value = 20> 20 </option>
+			<option value = 30> 30 </option>
+			<option value = 40> 40 </option>
+			<option value = 50> 50 </option>
+			<option value = 'all'> All </option>
+			</SELECT> Features
+		<br>
+	
+	<INPUT type="submit" name="button2" width='200px' value=" Process " onclick="if (check_condition()){show_loading();}else return false;">&nbsp;&nbsp;&nbsp;
+	<input type="text" id="hidden_options" name="hidden_options" style="display:none;">
+	{% endif %}
+	
+	<br>
+
+	{% if distribution_numeric_features %}
+		<b>Condition</b>: {{disease}} <br>
+		<b>Number of UMLS terms</b>: {{num_trials_with_disease}} <br><br>
+
+		<table border = 1 class="CSSTableGenerator">
+			<tr><td><b>UMLS term (TUI)</b></td><td><b>CUI</b></td><td><b>Frequency</b></td></tr>
+			{% for name, sty, cui, freq in distribution_numeric_features %}
+			<tr><td>{{name}}({{sty}})</td><td>{{cui}}</td><td>{{freq}}</td></tr>
+			{% endfor %}
+		</table>
+
+		<br>
+		{% if distribution_numeric_features %}
+			<FORM action="{{ url_for('build_query') }}" method="post" onsubmit='showLoading();'>
+				<input type="hidden" name="disease" value="{{ disease }}">
+				<b>Quantitative Eligibility Features</b>:
+				<SELECT id="featureInfo" name="featureInfo">
+					<optgroup label="Please choose a variable to start">
+						{% for name, sty,cui, freq in distribution_numeric_features %}
+							<option value = "{{cui}} {{sty}} {{name}}"> {{name}}({{sty}}) {{freq}}</option>
+						{% endfor %}
+					</optgroup>
+				</SELECT>
+				<br>
+				<br>
+				<INPUT type="submit" name="button2" width='200px' value=" Process " onclick="if (check_input()){show_loading();}else return false;">&nbsp;&nbsp;&nbsp;
+				<input type="text" id="hidden_options" name="hidden_options" style="display:none;">
+			</FORM>
+		{% endif %}
+	{% endif %}
+	
+
+
+{%endblock%}

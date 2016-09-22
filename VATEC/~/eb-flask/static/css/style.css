@@ -1,0 +1,310 @@
+/* Website template by freewebsitetemplates.com */
+html {
+	font-family: Arial, Helvetica, sans-serif, Century Gothic;
+}
+body {
+	background: url(../images/bg-content.gif) repeat;
+	font-family: Century Gothic;
+	font-size: 14px;
+	margin: 0;
+}
+img {
+	border: 0;
+}
+div#loading {
+    color: red;
+	display: none;	
+}
+
+/*------------------------------ HEADER ------------------------------*/
+#header {
+	width: 960px;
+	margin: 0 auto;
+	padding: 30px 0 0 0;
+	position: relative;
+}
+
+#logotext {
+	font-size: 34px;
+	font-family: Century Gothic;
+	color: #CFCFCF;
+	padding: 0 0 24px 0px;
+}
+
+/** Logo **/
+#logo {
+	display: block;
+	padding: 0 0 20px 20px;
+}
+
+/** Navigation **/
+#navigation {
+	
+	height: 47px;
+	padding: 0 0 20px 4px;
+	left: 0;
+}
+#navigation ul {
+	background: url(../images/bg-menu.gif) repeat-x;
+	display: inline-block;
+	height: 40px;
+	width: 910px;
+	list-style: none;
+	margin: 0;
+}
+#navigation li {
+	float: left;
+	font-size: 16px;
+	line-height: 40px;
+	margin: 0 5px;
+	text-align: center;
+}
+#navigation li.first {
+	margin-left: 0;
+	
+}
+#navigation li.selected {
+	background-color: #b7c2c8;
+}
+#navigation a {
+	color: #092f44;
+	font-weight: bold;
+	padding: 0 10px;
+	text-decoration: none;
+	text-shadow: 1px 1px 0 #eaeaea;
+}
+#navigation a:hover {
+	color: #0a2d43;
+}
+
+
+/*------------------------------ CONTENTS ------------------------------*/
+
+.boxarea {
+	padding: 2px 8px 2px 8px;
+	border: 1px solid #778;
+	background: #CFF;
+}	
+	
+#contents {
+	padding: 0 0 20px;
+}
+#contents div.body {
+	color: #fdfffa;
+	width: 960px;
+	margin: 0 auto 20px;
+}
+
+/** MAIN **/
+#main {
+	background-color: #03354e;
+	width: 630px;
+	margin: 60px 10px 0 300px;
+	padding: 20px 0 20px 20px;
+}
+#main span, #main p {
+	color: #aeb4b4;
+	font-size: 14px;
+	line-height: 20px;
+	margin: 0;
+	padding-right: 20px;
+	text-align: justify;
+}
+#main span {
+	color: #fdfffa;
+	font-size: 16px;
+}
+#main p a {
+	color: #aeb4b4;
+	font-weight: bold;
+	text-decoration: none;
+}
+#main span a {
+	color: #fdfffa;
+	font-weight: bold;
+	text-decoration: none;
+}
+#main ul {
+	display: inline-block;
+	list-style: none;
+	height: 355px;
+	margin: 0;
+	padding: 0;
+}
+#main ul li {
+	float: left;
+	width: 315px;
+}
+#main ul li a {
+	color: #fdfffa;
+	display: block;
+	height: 114px;
+	margin: 0 40px 0 0;
+	text-decoration: none;
+}
+#main ul li img {
+	float: left;
+}
+#main ul li h3 {
+	margin: 0;
+	line-height: 25px;
+	padding-top: 35px;
+}
+#main ul li p {
+	clear: both;
+	padding: 6px 40px 20px 0;
+}
+
+/** SIDEBAR **/
+#sidebar {
+	float: left;
+	width: 270px;
+	margin: 0;
+	padding: 20px 20px 0 10px;
+}
+#sidebar h3 {
+	font-size: 16px;
+	font-weight: bold;
+	margin: 0 0 20px;
+}
+#sidebar ul {
+	list-style: none;
+	height: 420px;
+	margin: 0;
+	padding: 0;
+}
+#sidebar ul li {
+	font-size: 14px;
+	line-height: 20px;
+	padding-bottom: 10px;
+}
+#sidebar ul li span {
+	color: #456d87;
+	display: block;
+	font-size: 12px;
+	line-height: 20px;
+	margin-bottom: 10px;
+}
+#sidebar ul li span a {
+	background: url(../images/bg-comment.gif) no-repeat 7px 3px;
+	color: #fffffb;
+	display: inline-block;
+	height: 20px;
+	width: 20px;
+	padding-bottom: 1px;
+	padding-left: 12px;
+	text-decoration: none;
+}
+
+/*------------------------------ CONTENTS TEXT ------------------------------*/
+#contents .background {
+	background-color: #ffffff;
+	min-height: 300px;
+	width: 1200px;
+	border-radius: 3px;
+	margin: 0 auto;
+	padding: 30px;
+}
+#contents div.background h3 {
+	color: #0e2934;
+	margin: 0px 0 20px 0;
+	text-transform: uppercase;
+}
+
+
+
+/*------------------------------ FOOTER ------------------------------*/
+#footer {
+	color: #456f7f;
+	line-height: 20px;
+	width: 940px;
+	margin: 0 auto;
+	padding: 10px 10px;
+}
+
+#footer ul.contacts {
+	float: left;
+	font-size: 12px;
+	list-style: none;
+	width: 300px;
+	margin: 0;
+	padding: 0 0 10px;
+}
+#footer ul.contacts h3 {
+	font-size: 14px;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#footer ul.contacts li span {
+	float: left;
+	width: 50px;
+}
+#footer ul.contacts li p {
+	margin: 0 0 0 50px;
+}
+
+#connect {
+	float: left;
+	list-style: none;
+	width: 140px;
+	margin: 0;
+	padding: 0;
+}
+#connect h3 {
+	font-size: 14px;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#connect li {
+	padding: 0 0 5px;
+}
+#connect li a {
+	color: #456f7f;
+	font-size: 15px;
+	text-decoration: none;
+}
+
+#newsletter {
+	float: left;
+	width: 500px;
+	padding: 0 0 20px;
+}
+#newsletter p {
+	font-size: 12px;
+	margin: 0;
+}
+#newsletter p b {
+	display: block;
+	font-weight: 800;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+#newsletter form {
+	margin: 4px 0 16px;
+}
+#newsletter .txtfield {
+	background: url(../images/input.gif) no-repeat;
+	color: #9c9c9c;
+	height: 25px;
+	line-height: 25px;
+	width: 200px;
+	border: 0;
+	margin: 0 6px 0 0;
+	padding: 0 10px;
+}
+#newsletter .button {
+	background: url(../images/button-check.gif) no-repeat;
+	cursor: pointer;
+	height: 25px;
+	width: 25px;
+	border: 0;
+	padding: 0;
+}
+
+#footer span.footnote {
+	clear: both;
+	display: block;
+	font-size: 12px;
+	margin: 40px 0 0;
+	text-align: center;
+}

@@ -19,7 +19,7 @@ ENV.defaults["ruleType"] = "tokens"
 #### variable (they are defined as Non-capturing group##
 #!!! $WITHIN and $MORETHAN are not groups!
 $WITHIN   = ("within" | "in" | "less" "than" | "equals" "to" | "<" | "<" "=" | "<" "/" "="| "<" "or" "=")
-$MORETHAN = (/greater|more/ "than" | ">" | ">" "=" | ">" "/" "=" | ">" "or" "=")
+$MORETHAN = (/greater|more/ "than" | "at" "least" | ">" | ">" "=" | ">" "/" "=" | ">" "or" "=")
 $PRIOR    = ("since"? /since|prior/ "to"? "for"?)
 $EXCEPT   = ("except" "for"?)
 $PADDING  = ([]{0,5})
@@ -29,7 +29,7 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
 #() within/in/less than/equal to ()
 {
   ruleType: "tokens",  
-  pattern: ( ( []{1,20} ) ($WITHIN $DUR) ),
+  pattern: ( ( []{1,20} ) ($WITHIN) $DUR ),
   action: (Annotate($1, ner, "CUI_DISEASE_2"),Annotate($2, ner, "KEY")),
   priority:100.0,
   stage:45,
@@ -98,16 +98,24 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
   stage:10,
   result: "HISTORY_MORETHAN_PT"
 }
+#within () prior ()
+{
+  ruleType: "tokens",  
+  pattern: ( ($WITHIN) $DUR2 $PRIOR ( []{1,20} ) ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_6")),
+  priority:100,
+  stage:40,
+  result: "WITHIN_PT"
+}
 #more than () prior ()
 {
   ruleType: "tokens",  
-  pattern: ( ("more") "than" $DUR2 $PRIOR ( []{1,20} ) ),
+  pattern: ( ($MORETHAN) $DUR2 $PRIOR ( []{1,20} ) ),
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_6")),
   priority:100,
-  stage:10,
-  result: "MORETHAN_P"
+  stage:40,
+  result: "MORETHAN_PT"
 }
-
 # prior () for ()
 {
   ruleType: "tokens",  
@@ -175,7 +183,7 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
   pattern: ( ( []{1,20} ) $DUR2 ($PRIOR) ),
   action: (Annotate($1, ner, "CUI_DISEASE_29"),Annotate($2, ner, "KEY")),
   priority:100,
-  stage:40,
+  stage:50,
   result: "PRIOR_TO"
 }
 
@@ -218,36 +226,36 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
 #negative () within () prior to ()
 {
   ruleType: "tokens",  
-  pattern: ( ("negative") ( []{1,20} ) $WITHIN $DUR ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_33")),
+  pattern: ( ("negative") ( []{1,20} ) ($WITHIN) $DUR ),
+  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_33"),Annotate($3, ner, "KEY")),
   priority:100.0,
   stage:20,
-  result: "NEGATIVE_WITHIN"
+  result: "WITHIN"
 }
 {
   ruleType: "tokens",  
-  pattern: ( ("negative") ( []{1,20} ) $MORETHAN $DUR ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_33")),
+  pattern: ( ("negative") ( []{1,20} ) ($MORETHAN) $DUR ),
+  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_33"),Annotate($3, ner, "KEY")),
   priority:100.0,
   stage:20,
-  result: "NEGATIVE_MORETHAN"
+  result: "MORETHAN"
 }
 
 {
   ruleType: "tokens",  
-  pattern: ( ("negative") ( []{1,20} ) $WITHIN $DUR2 $PRIOR  ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_34")),
+  pattern: ( ("negative") ( []{1,20} ) ($WITHIN) $DUR2 $PRIOR  ),
+  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_34"),Annotate($3, ner, "KEY")),
   priority:100.0,
   stage:10,
-  result: "NEGATIVE_WITHIN_PT"
+  result: "WITHIN_PT"
 }
 {
   ruleType: "tokens",  
-  pattern: ( ("negative") ( []{1,20} ) $MORETHAN $DUR2 $PRIOR  ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_34")),
+  pattern: ( ("negative") ( []{1,20} ) ($MORETHAN) $DUR2 $PRIOR  ),
+  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_34"),Annotate($3, ner, "KEY")),
   priority:100.0,
   stage:10,
-  result: "NEGATIVE_MORETHAN_PT"
+  result: "MORETHAN_PT"
 }
 
 {
