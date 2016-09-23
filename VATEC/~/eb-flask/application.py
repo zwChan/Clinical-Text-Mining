@@ -41,7 +41,7 @@ application.debug=True
 csv_result = []
 
 @application.route('/', methods=['POST','GET'])
-def vitta_main():
+def vatec_main():
     db = mysql.connect()
     cur = db.cursor()
 
@@ -861,7 +861,7 @@ def download():
             #for index in xrange(len(row)):
             #	yield row[index]
 
-    return flask.Response(generate(), mimetype='text/csv',headers={"Content-Disposition": "attachment;filename=VITTA_output.csv"})
+    return flask.Response(generate(), mimetype='text/csv',headers={"Content-Disposition": "attachment;filename=VATEC_output.csv"})
 
 
 def generate_initial_value_spectrum(cur, cui,sty, disease):

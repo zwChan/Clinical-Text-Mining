@@ -1,7 +1,7 @@
 {%extends "layout.html"%}
 
 {%block header%}
-	<div id="logotext">Visual Analysis Tool of Study Populations of Clinical Trials</div>
+	<div id="logotext"><b>V</b>isual <b>A</b>nalysis <b>T</b>ool of Qualitative <b>E</b>ligibility <b>C</b>riteria of Clinical Studies (VATEC)</div>
 {% endblock %}
 
 {%block body%}
@@ -583,7 +583,7 @@ function change_option(){
 	<div id='loadingover' style='display: none;'></div>
 
 	{% if distribution_numeric_features %}
-	<FORM action="{{ url_for('vitta_main') }}" method="post">
+	<FORM action="{{ url_for('vatec_main') }}" method="post">
 		<button type="submit" name="button2" value=" Click here to start " style="height: 80px; width: 150px;"><font size = 3>Choose another condition</font></button>
 	</FORM>
 	{% endif %}
