@@ -304,6 +304,11 @@ object Nlp {
   }
 
   /**
+   * Recover the word
+   */
+
+
+  /**
    *
    * @param blogId blogId
    * @param text the content of the blog

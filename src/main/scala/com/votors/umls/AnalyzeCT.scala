@@ -12,6 +12,7 @@ import edu.stanford.nlp.ling.{IndexedWord, Label}
 import edu.stanford.nlp.ling.tokensregex.{NodePattern, MatchedExpression, CoreMapExpressionExtractor, TokenSequencePattern}
 import edu.stanford.nlp.parser.lexparser.BinaryHeadFinder
 import edu.stanford.nlp.pipeline.Annotation
+import edu.stanford.nlp.process.PTBTokenizer
 import edu.stanford.nlp.semgraph.SemanticGraph
 import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations._
 import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
@@ -25,7 +26,7 @@ import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
 import scala.io.Source
-import scala.io.Codec
+import util.control.Breaks._
 
 /**
  * Created by Jason on 2016/1/13 0013.
@@ -51,6 +52,10 @@ case class Term(name:String, head:IndexedWord) {
   def isOverlap(spanOther: IntPair) = {
     !(spanOther.get(1)<span.get(0) || spanOther.get(0)>span.get(1))
   }
+  def isContainedBy(spanOther: IntPair) = {
+      (spanOther.get(0)<=span.get(0) && spanOther.get(1)>=span.get(1))
+  }
+
   override def toString() = {
     s"Term: ${name}, ${head}, [${modifiers}]"
   }
@@ -87,6 +92,10 @@ class RegexGroup(var name:String) {
   def isContains(spantarget: IntPair) = {
     (spantarget.get(0)>=span.get(0) && spantarget.get(1)<=span.get(1))
   }
+  def isContainedBy(spantarget: IntPair) = {
+    (spantarget.get(0)<=span.get(0) && spantarget.get(1)>=span.get(1))
+  }
+
   def isHitCuiRange(span: IntPair):Boolean = {
     terms.values.foreach(t=>{
       if (t.cuis.size>0 && t.isOverlap(span))
@@ -94,9 +103,23 @@ class RegexGroup(var name:String) {
     })
     false
   }
-
+  def isAnyCuiContainedBy(span: IntPair):Boolean = {
+    terms.values.foreach(t=>{
+      if (t.cuis.size>0 && t.isContainedBy(span))
+        return true
+    })
+    false
+  }
   def update() = {
     getDuration()
+  }
+
+  def getCuiBySpan(otherSpan:IntPair): ArrayBuffer[Suggestion] = {
+    val suggs = new ArrayBuffer[Suggestion]()
+    cuis.foreach(c=>{
+      if (c.isContainedBy(otherSpan)) suggs.append(c)
+    })
+    suggs
   }
 
   def getDuration() {
@@ -113,7 +136,7 @@ class RegexGroup(var name:String) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${c.stys.mkString(",")}><${c.method}>").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}><${c.method}><${c.tags}>").mkString(";")});"
       }else{
         s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})"
       }
@@ -228,7 +251,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       })
       if (reduceBySty) suggustions = suggustions.flatMap(s=>{
         // map to (tui,suggestion)
-        s.stys.map((_,s.copy))
+        val cuiCopy = s.copy()
+        cuiCopy.stys.clear()
+        s.stys.map((_,cuiCopy))
       }).groupBy(_._1).map(kv=>{
         // choose the smallest cui for key (cui,tui)
         val tmp = kv._2.sortBy(_._2.cui)
@@ -274,6 +299,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           cuis.foreach(c=>{
             c.termId = termId
             c.method = "tree"
+            c.tags = getTreePosTags(tree)
+            c.span.set(0,span1based(tree.getSpan).get(0))
+            c.span.set(1,span1based(tree.getSpan).get(1))
           })
           g.cuis.appendAll(cuis)
           //println(s"get cuis ${cuis.mkString("\t")}")
@@ -282,12 +310,85 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       }
     })
 
+    var result = false
     val kids = tree.children
     for (kid <- kids) {
-      getCuiByTree(n,kid)
+      result ||= getCuiByTree(n,kid)
     }
+
+    // if there is cui found in its child node, we consider it as possible cui term.
+    if (!tree.isLeaf
+      && StanfordNLP.isNoun(tree.value())
+      && tree.getLeaves.size <= n) {
+      ner2groups.filter(g=>g.name.startsWith("CUI_")/* && g.cuis.size == 0*/).foreach(g=> {
+        if (g.isContains(span1based(tree.getSpan))
+          && (result == true || g.isAnyCuiContainedBy(span1based(tree.getSpan)))) {
+          val treeSpan = span1based(tree.getSpan)
+          val suggs = g.getCuiBySpan(treeSpan)
+          val cui = suggs(0)
+          val (included, treeStr,pos) = partCuiFilter(cui,tree)
+          // the nestd 'string' should be shorter than the new 'string'
+          if (included) {
+            val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, treeStr, cui.termId)
+            newCui.stys ++= cui.stys
+            newCui.method = "partCui"
+            newCui.nested = "nesting"
+            newCui.span.set(0, treeSpan.get(0))
+            newCui.span.set(1, treeSpan.get(1))
+            newCui.tags = pos
+            g.cuis.append(newCui)
+            suggs.foreach(_.nested = "nested")
+          }
+        }
+      })
+
+    }
+
     // should not reach here
-    return false
+    return result
+  }
+
+  /* Check if the string should be a new cui term*/
+  def partCuiFilter(cui:Suggestion, tree:Tree):(Boolean, String, String) = {
+    // cui string has to be less than the string of the tree
+    var ngramOld = cui.orgStr.count(_ == ' ')+1
+    var ngramNew = tree.getLeaves().size()
+    if (ngramOld >= ngramNew) return (false,"","")
+
+    var treeStr = tree.getLeaves.iterator().mkString(" ").trim
+    val inputTreeStr = treeStr
+    var pos = getTreePosTags(tree)
+    val inputPos = pos
+    Range(0, ngramOld).foreach(i => {
+      // started with a DT or CD or punct
+      if (pos.startsWith("DT") || pos.startsWith("CD") || pos.startsWith("FW") || pos.matches("^\\p{Punct}.*")) {
+        treeStr = treeStr.replaceFirst("^\\S*\\s", "")
+        pos = pos.replaceFirst("^[^_]*_", "")
+        ngramNew -= 1
+      }
+      //  (*)
+      if (pos.matches(".*_-.?.?.?-_.*_-.?.?.?-$")) {
+        treeStr = treeStr.replaceFirst("\\s-.?.?.?-.*-.?.?.?-$", "")
+        pos = pos.replaceFirst("_-.?.?.?-_.*_-.?.?.?-$", "")
+        ngramNew -= 3
+      }
+      // not end with a noun,
+      if (!pos.matches(".*_N[^_]*$") || pos.matches(".*\\p{Punct}$")) {
+        treeStr = treeStr.replaceFirst("\\s\\S*$", "")
+        pos = pos.replaceFirst("_[^_]*$", "")
+        ngramNew -= 1
+      }
+
+    })
+    if (ngramOld >= ngramNew) return (false,"","")
+    println(s"partCuiFilter: (${inputTreeStr},${inputPos}) => (${treeStr},${pos}})")
+    return (true, treeStr,pos)
+  }
+
+  def getTreePosTags(tree:Tree) = {
+    val tags = tree.taggedLabeledYield().iterator().map(_.value()).mkString("_").trim
+    //println(s"partCui pos tags: ${tags}")
+    tags
   }
 
   def getCuiByDep() = {
@@ -305,7 +406,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           cuis.foreach(c=>{
             c.termId = termId
             c.method = "fullDep"
+            c.tags = term.name
             c.skipNum = getDepSkip(words)
+            c.span.set(0,term.span.get(0))
+            c.span.set(1,term.span.get(1))
           })
           term.cuis.appendAll(cuis)
           g.cuis.appendAll(cuis)
@@ -323,7 +427,11 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
               cuis_longest.foreach(c=>{
                 c.termId = termId
                 c.method = "partDep2"
+                c.tags = term.name
                 c.skipNum = getDepSkip(term.getModifiers.slice(idx,modNum).toSeq ++ (term.head::Nil))
+                c.span.set(0,term.span.get(0))
+                c.span.set(1,term.span.get(1))
+                // FIXME maybe not so good to use the whole term as span
               })
               foundCui = true
               term.cuis.appendAll(cuis_longest)
@@ -361,6 +469,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
                 c.termId = termId
                 c.method = "conjDep"
                 c.skipNum = skipNum
+                c.tags = term.name
+                c.span.set(0,term.span.get(0))
+                c.span.set(1,term.span.get(1))
+                // FIXME maybe not so good to use the whole term as span
               })
               term.cuis.appendAll(cuis_conj)
               g.cuis.appendAll(cuis_conj)
@@ -523,7 +635,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           val index = vi._2
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${cui.orgStr}\t${cui.descr}\t${cui.method}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
+            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
@@ -542,7 +654,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tsentLen\tsentence"
     else
       ""
   }
