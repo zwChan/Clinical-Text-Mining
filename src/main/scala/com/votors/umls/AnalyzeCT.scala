@@ -359,6 +359,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     val inputTreeStr = treeStr
     var pos = getTreePosTags(tree)
     val inputPos = pos
+    // the conjuction will be process separately
+    if (pos.split("_").contains("CC")) return (false,"","")
+
     Range(0, ngramOld).foreach(i => {
       // started with a DT or CD or punct
       if (pos.startsWith("DT") || pos.startsWith("CD") || pos.startsWith("FW") || pos.matches("^\\p{Punct}.*")) {
@@ -458,7 +461,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         }
         // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
         // the word connect by 'or' can only modify the last word in 'or' list.  A, B, CD or E X => AX/BX, no AD and BD
-        if (term.isInConj && (term.head.index == g.conjWords.map(_.index).max)) {
+        if (term.isInConj && (term.head.index >= g.conjWords.map(_.index).max)) {
           g.conjWords.foreach(m=>if(!m.equals(term.head)){
             val str_conj = s"${m.value} ${term.head.value}"
             val cuis_conj = getCui(str_conj)
@@ -484,6 +487,53 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
 
         }
 
+      })
+    })
+  }
+
+  def partCuiConjunction() = {
+    def addCui(str_conj:String, span_start:Int, span_end:Int, tags:String, cui:Suggestion, g:RegexGroup): Unit ={
+      val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, str_conj, cui.termId)
+      newCui.stys ++= cui.stys
+      newCui.method = "partCui"
+      newCui.nested = "nesting"
+      newCui.span.set(0, span_start)
+      newCui.span.set(1, span_end)
+      newCui.tags = tags
+      g.cuis.append(newCui)
+      cui.nested = "nested"
+    }
+
+    ner2groups.filter(g => g.name.startsWith("CUI_") && g.cuis.size > 0).foreach(g => {
+      g.terms.foreach(kv => {
+        val term = kv._2
+        val suggs = g.getCuiBySpan(term.span)
+        // a term has part of words found to be a CUI, than the whole term is consider as a part-matching-cui
+        if (!term.isInConj && suggs.size > 0 && suggs.map(_.orgStr.count(_ == ' ') + 1).max < term.getModifiers.size + 1) {
+          val words = term.getModifiers.clone
+          words.append(term.head)
+          val sortedWords = words.sortBy(_.index)
+          val str = sortedWords.map(_.value()).mkString(" ")
+          val cui = suggs(0)
+          addCui(str, sortedWords(0).index(), sortedWords.last.index, term.name, suggs(0), g)
+          suggs.foreach(_.nested = "nested")
+        }
+
+        // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
+        // the word connect by 'or' can only modify the last word in 'or' list.  A, B, C, D or E X => AX/BX, no AD and BD
+        // for the conjuction word, if there is not existing cui, consider to be a part-matching-cui
+        if (suggs.size > 0 && term.isInConj && (term.head.index >= g.conjWords.map(_.index).max)) {
+          g.conjWords.foreach(m => if (!m.equals(term.head)) {
+            val str_conj = s"${m.value} ${term.head.value}"
+            val cuis_conj = g.cuis.find(_.orgStr == str_conj)
+            val skipNum = getDepSkip(m :: term.head :: Nil)
+            if (skipNum <= 5 && cuis_conj.isEmpty) {
+              // if there is not a cui existing
+              val cui = suggs(0)
+              addCui(str_conj, m.index, term.head.index, "conj", cui, g)
+            }
+          })
+        }
       })
     })
   }
@@ -530,13 +580,18 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
             g.logic = rel
             g.conjWords += s.getSource
             g.conjWords += s.getTarget
+            g.terms.values.foreach(t=>{
+              if (t.head == s.getTarget || t.getModifiers.find(_ == s.getTarget).isDefined) {
+                t.isInConj = true
+              }
+            })
           }else if (rel.equals("neg")){
 
           }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn") || rel.equals("compound") || rel.equals("nmod")){
             val tmp = Term(rel,s.getSource)
             val t = g.terms.getOrElseUpdate(tmp.hashcode(),tmp)
             t.addModifier(s.getTarget,rel)
-            if (g.conjWords.contains(s.getSource)) t.isInConj = true   // this term is associated with conj relation
+            if (g.conjWords.contains(s.getSource) || g.conjWords.contains(s.getTarget)) t.isInConj = true   // this term is associated with conj relation
           }
       })
       // calculate all negation relationship
@@ -590,6 +645,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
     // if there is no cui found by dependency, use syntactic to find cui again
     getCuiByTree()
+    partCuiConjunction()
   }
   private def value = {
     ner2groups.map(g=>s"${g.toString}").mkString("\t")

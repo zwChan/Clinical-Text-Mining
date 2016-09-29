@@ -243,6 +243,7 @@ object Conf extends java.io.Serializable{
   val stanfordPatternFile=prop.getOrDefault("stanfordPatternFile", propDef.get("stanfordPatternFile")).toString
   val useDependencyTree=prop.getOrDefault("useDependencyTree", propDef.get("useDependencyTree")).toString.toBoolean
   val analyzNonUmlsTerm=prop.getOrDefault("analyzNonUmlsTerm", propDef.get("analyzNonUmlsTerm")).toString.toBoolean
+  var sentenceLenMax=prop.getOrDefault("sentenceLenMax", propDef.get("sentenceLenMax")).toString.toInt
 
   println("\n\ndefault properties:")
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))
