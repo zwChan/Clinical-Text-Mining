@@ -19,6 +19,7 @@ import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
 import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
 import edu.stanford.nlp.util.{IntPair, CoreMap}
 import org.apache.commons.csv._
+import org.apache.commons.lang3.StringUtils
 import org.joda.time.Duration
 import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
@@ -321,20 +322,21 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       && StanfordNLP.isNoun(tree.value())
       && tree.getLeaves.size <= n) {
       ner2groups.filter(g=>g.name.startsWith("CUI_")/* && g.cuis.size == 0*/).foreach(g=> {
-        if (g.isContains(span1based(tree.getSpan))
-          && (result == true || g.isAnyCuiContainedBy(span1based(tree.getSpan)))) {
-          val treeSpan = span1based(tree.getSpan)
-          val suggs = g.getCuiBySpan(treeSpan)
-          val cui = suggs(0)
-          val (included, treeStr,pos) = partCuiFilter(cui,tree)
+        val treeSpan = span1based(tree.getSpan)
+        val suggs = g.getCuiBySpan(treeSpan)
+        if (suggs.size > 0) {
+          var str = tree.getLeaves.iterator().mkString(" ").trim
+          val cui_tmp = suggs.sortBy(c=>StringUtils.getLevenshteinDistance(str.toLowerCase, c.orgStr.toLowerCase).toFloat).head
+          val (included, treeStr,pos, leftRv, rightRv) = partCuiFilter(cui_tmp,tree)
           // the nestd 'string' should be shorter than the new 'string'
-          if (included) {
+          val cui = suggs.sortBy(c=>StringUtils.getLevenshteinDistance(treeStr.toLowerCase, c.orgStr.toLowerCase).toFloat).head
+          if (included && cui.orgStr != treeStr) {
             val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, treeStr, cui.termId)
             newCui.stys ++= cui.stys
             newCui.method = "partCui"
             newCui.nested = "nesting"
-            newCui.span.set(0, treeSpan.get(0))
-            newCui.span.set(1, treeSpan.get(1))
+            newCui.span.set(0, treeSpan.get(0) + leftRv)
+            newCui.span.set(1, treeSpan.get(1) - rightRv)
             newCui.tags = pos
             g.cuis.append(newCui)
             suggs.foreach(_.nested = "nested")
@@ -349,18 +351,20 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   }
 
   /* Check if the string should be a new cui term*/
-  def partCuiFilter(cui:Suggestion, tree:Tree):(Boolean, String, String) = {
+  def partCuiFilter(cui:Suggestion, tree:Tree):(Boolean, String, String, Int, Int) = {
     // cui string has to be less than the string of the tree
     var ngramOld = cui.orgStr.count(_ == ' ')+1
     var ngramNew = tree.getLeaves().size()
-    if (ngramOld >= ngramNew) return (false,"","")
+    var leftRv = 0
+    var rightRv = 0
+    if (ngramOld >= ngramNew) return (false,"","",0,0)
 
     var treeStr = tree.getLeaves.iterator().mkString(" ").trim
     val inputTreeStr = treeStr
     var pos = getTreePosTags(tree)
     val inputPos = pos
     // the conjuction will be process separately
-    if (pos.split("_").contains("CC")) return (false,"","")
+    if (pos.split("_").contains("CC")) return (false,"","",0,0)
 
     Range(0, ngramOld).foreach(i => {
       // started with a DT or CD or punct
@@ -368,24 +372,27 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         treeStr = treeStr.replaceFirst("^\\S*\\s", "")
         pos = pos.replaceFirst("^[^_]*_", "")
         ngramNew -= 1
+        leftRv += 1
       }
       //  (*)
       if (pos.matches(".*_-.?.?.?-_.*_-.?.?.?-$")) {
         treeStr = treeStr.replaceFirst("\\s-.?.?.?-.*-.?.?.?-$", "")
         pos = pos.replaceFirst("_-.?.?.?-_.*_-.?.?.?-$", "")
         ngramNew -= 3
+        rightRv += 3
       }
       // not end with a noun,
       if (!pos.matches(".*_N[^_]*$") || pos.matches(".*\\p{Punct}$")) {
         treeStr = treeStr.replaceFirst("\\s\\S*$", "")
         pos = pos.replaceFirst("_[^_]*$", "")
         ngramNew -= 1
+        rightRv += 1
       }
 
     })
-    if (ngramOld >= ngramNew) return (false,"","")
+    if (ngramOld >= ngramNew) return (false,"","",0,0)
     println(s"partCuiFilter: (${inputTreeStr},${inputPos}) => (${treeStr},${pos}})")
-    return (true, treeStr,pos)
+    return (true, treeStr,pos,leftRv,rightRv)
   }
 
   def getTreePosTags(tree:Tree) = {
@@ -491,8 +498,11 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     })
   }
 
+  /**
+   *  Extract part matching UMLS term from dependency relation
+   */
   def partCuiConjunction() = {
-    def addCui(str_conj:String, span_start:Int, span_end:Int, tags:String, cui:Suggestion, g:RegexGroup): Unit ={
+    def addCui(str_conj:String, span_start:Int, span_end:Int, tags:String, cui:Suggestion, g:RegexGroup, term:Term=null): Unit ={
       val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, str_conj, cui.termId)
       newCui.stys ++= cui.stys
       newCui.method = "partCui"
@@ -501,6 +511,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       newCui.span.set(1, span_end)
       newCui.tags = tags
       g.cuis.append(newCui)
+      if (term != null)term.cuis.append(newCui)
       cui.nested = "nested"
     }
 
@@ -514,9 +525,11 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           words.append(term.head)
           val sortedWords = words.sortBy(_.index)
           val str = sortedWords.map(_.value()).mkString(" ")
-          val cui = suggs(0)
-          addCui(str, sortedWords(0).index(), sortedWords.last.index, term.name, suggs(0), g)
-          suggs.foreach(_.nested = "nested")
+          val cui = suggs.sortBy(c=>StringUtils.getLevenshteinDistance(str.toLowerCase, c.orgStr.toLowerCase).toFloat).head
+          if (cui.orgStr != str) {
+            addCui(str, sortedWords(0).index(), sortedWords.last.index, term.name, suggs(0), g, term)
+            suggs.foreach(_.nested = "nested")
+          }
         }
 
         // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
@@ -524,13 +537,19 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         // for the conjuction word, if there is not existing cui, consider to be a part-matching-cui
         if (suggs.size > 0 && term.isInConj && (term.head.index >= g.conjWords.map(_.index).max)) {
           g.conjWords.foreach(m => if (!m.equals(term.head)) {
-            val str_conj = s"${m.value} ${term.head.value}"
+            // A or B C X => A C X and B C X
+            val maxIndexConjunt = g.conjWords.map(_.index()).max
+            val termModfiers = term.getModifiers.clone()
+            val termWords = termModfiers.filter(t=>t.index > maxIndexConjunt)
+            termWords.append(term.head)
+            val termStringWithoutConjunct = termWords.sortBy(_.index).map(_.value).mkString(" ")
+            val str_conj = s"${m.value} ${termStringWithoutConjunct}"
             val cuis_conj = g.cuis.find(_.orgStr == str_conj)
             val skipNum = getDepSkip(m :: term.head :: Nil)
             if (skipNum <= 5 && cuis_conj.isEmpty) {
               // if there is not a cui existing
-              val cui = suggs(0)
-              addCui(str_conj, m.index, term.head.index, "conj", cui, g)
+              val cui = suggs.sortBy(c=>StringUtils.getLevenshteinDistance(str_conj.toLowerCase, c.orgStr.toLowerCase).toFloat).head
+              addCui(str_conj, m.index, term.head.index, "conj", cui, g, term)
             }
           })
         }

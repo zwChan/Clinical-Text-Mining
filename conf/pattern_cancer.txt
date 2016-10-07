@@ -130,7 +130,7 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
 {
   ruleType: "tokens",
   pattern: ( ("prior") ( []{1,20} ) "for" $DUR2 $EXCEPT ( []{1,20} ) ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_11")),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_1"),Annotate($3, ner, "CUI_DISEASE_EF")),
   priority:100,
   stage:10,
   result: "PRIOR_FEF"
@@ -140,7 +140,7 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
 {
   ruleType: "tokens",  
   pattern: ( ("prior") ( []{1,20} ) "for" $DUR2 "including"  ( []{1,20} ) ),
-  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_14"),Annotate($3, ner, "CUI_DISEASE_16")),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_14"),Annotate($3, ner, "CUI_DISEASE_IN")),
   priority:100,
   stage:10,
   result: "PRIOR_FI"
@@ -202,6 +202,15 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
   priority:100,
   stage:20,
   result: "CONFIRMED_MORETHAN"
+}
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("cytologically" "or"? "histologically"? | "histologically" "or"? "cytologically"? | "pathologically" ) ("confirmed") ( []{1,20}) ),
+  action: (Annotate($2, ner, "KEY"),Annotate($3, ner, "CUI_DISEASE_1")),
+  priority:100,
+  stage:40,
+  result: "CONFIRMED"
 }
 
 # at least () since prior ()
@@ -267,4 +276,88 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
   result: "REQUIRED_FOR_PERIOD"
 }
 
+{
+  ruleType: "tokens",  
+  pattern: ( ("history") "of" ( []{1,20} )),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_2")),
+  priority:100.0,
+  stage:50,
+  result: "HISTORY"
+}
+
+{
+  ruleType: "tokens",  
+  pattern: ( "prior"? "or"? ("concurrent") ( []{1,20} )  ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_24")),
+  priority:100,
+  stage:50,
+  result: "CONCURRENT"
+}
+
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("concurrent") ( []{1,20} ) $EXCEPT ( []{1,20} ) ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_2"),Annotate($3, ner, "CUI_DISEASE_EF")),
+  priority:100,
+  stage:45,
+  result: "CONCURRENT_EF"
+}
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("concurrent") ( []{1,20} ) "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_2"),Annotate($3, ner, "CUI_DISEASE_IN")),
+  priority:100,
+  stage:45,
+  result: "CONCURRENT_IN"
+}
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("concurrent") "therapy" ( []{1,20} )  ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_2")),
+  priority:100,
+  stage:45,
+  result: "CONCURRENT_TH"
+}
+
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("positive") ( []{1,20} ) $WITHIN $DUR ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_2")),
+  priority:100,
+  stage:20,
+  result: "POSITIVE_WITHIN"
+}
+
+
+{
+  ruleType: "tokens",  
+  pattern: ( "prior" ( []{1,20} ) ("allown") ),
+  action: (Annotate($2, ner, "KEY"),Annotate($1, ner, "CUI_DISEASE_1")),
+  priority:100,
+  stage:20,
+  result: "P_ALLOWN"
+}
+
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("history") "of" ( []{1,20} ) "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_1"),Annotate($3, ner, "CUI_DISEASE_IN")),
+  priority:100,
+  stage:40,
+  result: "HISTORY_IN"
+}
+
+
+{
+  ruleType: "tokens",  
+  pattern: ( ("history") "of" ( []{1,20} ) $WITHIN $DUR "including" ( []{1,20} ) ),
+  action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_1"),Annotate($3, ner, "CUI_DISEASE_IN")),
+  priority:100,
+  stage:10,
+  result: "HISTORY_IN"
 }
