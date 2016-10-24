@@ -71,7 +71,7 @@ col_breaks = c(seq(0,0.1,length=1),   # for grey
                seq(150.1,max(mat)+1,length=30))              # for red
 
 # creates a 5 x 5 inch image
-png("C:\\Users\\Jason\\Dropbox\\clinicalTrialPattern\\BIBM 2016 paper\\materials\\cui_duration_heatmap.png",
+png("C:\\Users\\Jason\\Desktop\\cui_duration_heatmap.png",
     width = 5*400,        # 5 x 300 pixels
     height = 5*400,
     res = 400,            # 300 pixels per inch

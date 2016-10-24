@@ -2,6 +2,7 @@
 create database cancer char set utf8;
 use cancer;
 
+
 create table meta (
 tid varchar(20),
 agency varchar(2000),
@@ -23,6 +24,15 @@ masking varchar(200),
 primary_purpose varchar(200)
 );
 select * from meta;
+create index idx_tid on meta (str(32)) using hash;
+create index idx_status on meta (overall_status);
+create index idx_min_age on meta (minimum_age);
+create index idx_max_age on meta (maximum_age);
+create index idx_phase on meta (phase);
+create index idx_int on meta (intervention_type);
+create index idx_std on meta (study_type);
+alter table meta add column conditions varchar(50);
+alter table meta add primary key (tid);
 
 create table noncui (
 `task` varchar(30),
@@ -70,6 +80,11 @@ create index idx_tid on cancer_cui (tid);
 create index idx_sid on cancer_cui (sentId);
 create index idx_cid on cancer_cui (criteriaId);
 create index idx_termid on cancer_cui (termId);
+
+
+create index idx_sty2 on cancer_cui(sty) using hash;
+create index idx_nested2 on cancer_cui(nested) using hash;
+
 
 delete from cancer_cui where sty = 'T033'; -- 99002,104777,103562,103383,102505,104535
 delete from cancer_cui where sentLen>500; -- 2027,1974,1940,1876,944
@@ -215,3 +230,10 @@ select can.cui, can.cui_str, can.month, freq.cui_freq, count(*) as num,can.sty f
   
   -- -------------------------
  select pattern, sentence from cancer_cui where pattern = 'CONFIRMED_MORETHAN' group by sentence; 
+ 
+ select * from cancer_cui where pattern = 'CONCURRENT_EF';
+ 
+ 
+ select V.cui,V.sty,V.cui_str,count(*) as freq from cancer_cui V, meta T where task = 'Prostate' and  T.tid = V.tid and  (T.phase LIKE '%%') and  (T.overall_status LIKE '%%') and  (T.study_type LIKE '%%') and  (T.intervention_type LIKE '%%') and  (T.agency_type LIKE '%%') and  (T.gender LIKE '%%') and  (T.start_date LIKE '%%') and 1=1 and  (T.intervention_model LIKE '%%') and  (T.allocation LIKE '%%') and  (1=1) and  (V.task='Prostate')  group by V.cui,V.sty order by freq desc limit 10 ;
+ 
+ SELECT T.gender, count(*) FROM meta T WHERE T.tid in (SELECT distinct tid from cancer_cui where task = 'Lung') GROUP BY T.gender;

@@ -122,7 +122,7 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "Patients must have histologically confirmed advanced prostate cancer"
+    val text = "Evidence of progressive metastatic disease (e.g., bone, pelvic mass, lymph node, liver or lung metastases)"
     // create an empty Annotation just with the given text
 
     findPattern(text).foreach(_ => println(""))
