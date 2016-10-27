@@ -89,6 +89,7 @@ create index idx_nested2 on cancer_cui(nested) using hash;
 delete from cancer_cui where sty = 'T033'; -- 99002,104777,103562,103383,102505,104535
 delete from cancer_cui where sentLen>500; -- 2027,1974,1940,1876,944
 delete from cancer_cui where duration<-1; -- 11,10,10,11,11
+delete from cancer_cui where nested='nesting';
 -- update cancer_cui set month = -1 where duration = -1; -- 456818,329828
 
 select cui,count(*) as cui_freq from cancer_cui group by cui;
@@ -233,7 +234,23 @@ select can.cui, can.cui_str, can.month, freq.cui_freq, count(*) as num,can.sty f
  
  select * from cancer_cui where pattern = 'CONCURRENT_EF';
  
- 
  select V.cui,V.sty,V.cui_str,count(*) as freq from cancer_cui V, meta T where task = 'Prostate' and  T.tid = V.tid and  (T.phase LIKE '%%') and  (T.overall_status LIKE '%%') and  (T.study_type LIKE '%%') and  (T.intervention_type LIKE '%%') and  (T.agency_type LIKE '%%') and  (T.gender LIKE '%%') and  (T.start_date LIKE '%%') and 1=1 and  (T.intervention_model LIKE '%%') and  (T.allocation LIKE '%%') and  (1=1) and  (V.task='Prostate')  group by V.cui,V.sty order by freq desc limit 10 ;
  
  SELECT T.gender, count(*) FROM meta T WHERE T.tid in (SELECT distinct tid from cancer_cui where task = 'Lung') GROUP BY T.gender;
+ 
+ 
+ select nested ,count(*) from cancer_cui group by nested;
+
+
+drop table sarah_sample;
+create table sarah_sample (
+tid varchar(20),
+Majorcriteria varchar(100),
+Othercriteria varchar(100),
+Temporalconstraints varchar(100),
+sentence text
+);
+
+load data local infile '/tmp/random_200_sentences_cancer_studies_sm.csv' into table sarah_sample fields terminated by '\t' enclosed by '"' lines terminated by '\n' ignore 1 lines;
+
+
