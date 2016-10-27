@@ -318,7 +318,8 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
 
     // if there is cui found in its child node, we consider it as possible cui term.
-    if (!tree.isLeaf
+    if (Conf.partUmlsTermMatch
+      && !tree.isLeaf
       && StanfordNLP.isNoun(tree.value())
       && tree.getLeaves.size <= n) {
       ner2groups.filter(g=>g.name.startsWith("CUI_")/* && g.cuis.size == 0*/).foreach(g=> {
@@ -501,7 +502,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   /**
    *  Extract part matching UMLS term from dependency relation
    */
-  def partCuiConjunction() = {
+  def partCuiConjunction():Unit = {
     def addCui(str_conj:String, span_start:Int, span_end:Int, tags:String, cui:Suggestion, g:RegexGroup, term:Term=null): Unit ={
       val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, str_conj, cui.termId)
       newCui.stys ++= cui.stys
@@ -514,6 +515,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       if (term != null)term.cuis.append(newCui)
       cui.nested = "nested"
     }
+
+    if (!Conf.partUmlsTermMatch)
+      return;
 
     ner2groups.filter(g => g.name.startsWith("CUI_") && g.cuis.size > 0).foreach(g => {
       g.terms.foreach(kv => {
