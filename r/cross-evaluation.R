@@ -3,21 +3,21 @@ library('base')
 # tf > 100, filter cluster < 3
 #data = read.table("C:\\fsu\\ra\\data\\cross-evaluation-tf100.txt",sep='\t')
 #rd_pc=25.5
-#cnt=c(3541,1895)
+#cnt=c(3541,1895) #(#_ngram_in_test, #_chv_in_test)
 #tf=100
 
 # tf > 100, filter cluster < 3   -- cancer data
 data = read.table("C:\\fsu\\ra\\data\\cross-evaluation-tf100-cancer.txt",sep='\t')
 rd_pc=25.5
-cnt=c(2835,2276)
+cnt=c(4344,2280)
 tf=100
 
 
 #tf > 5
-#data = read.table("C:\\fsu\\ra\\data\\cross-evaluation-tf5.txt",sep='\t')
-#rd_pc=9.96
-#cnt=c(7285,2185)
-#tf=5
+# data = read.table("C:\\fsu\\ra\\data\\cross-evaluation-tf5.txt",sep='\t')
+# rd_pc=9.78
+# cnt=c(7374,2212)
+# tf=5
 
 data.avg=aggregate(data[,1:ncol(data)], list(data[,1]),mean)
 
@@ -56,8 +56,6 @@ matplot(x,y2,type=c('o'),
         lend=3,
         add=TRUE,
         col=rainbow(3,start=1))
-
-
 
 legend("topright",legend = c("tf", "c-value", "random", "k=5", "k=300"), 
        col=c(rainbow(3,start=1),
