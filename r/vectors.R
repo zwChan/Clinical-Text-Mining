@@ -1,4 +1,4 @@
-org =read.table("C:\\Users\\Jason\\Desktop\\vectors.csv",header=TRUE,sep=',')
+org =read.table("C:\\fsu\\ra\\data\\ngram_yahoo_tf5.txt",header=TRUE,sep='\t')
 x=seq(1,nrow(org))
 gram1=subset(org,org['n']==1)
 gram2=subset(org,org['n']==2)
@@ -7,7 +7,7 @@ gram4=subset(org,org['n']==4)
 gram5=subset(org,org['n']==5)
 gram6=subset(org,org['type']=="chv")
 gram7=subset(org,org['type']=="umls")
-gram8=subset(org,org['type']=="other")
+gram8=subset(org,org['type']=="others")
 
 n=1
 matplot(seq(1,nrow(gram1)),log(gram1[,'tf']),type='l',pch=n,col=n, xlab="Index of ranked n-grams", ylab="log(term frequency)")
@@ -45,5 +45,5 @@ n=8
 matplot(seq(1,nrow(gram8)),log(gram8[,'tf']),type='l',pch=n,col=rainbow(n,start=0.1*n), add=TRUE)
 matpoints(seq(1,nrow(gram8))[seq(1,nrow(gram8),500)],log(gram8[,'tf'])[seq(1,nrow(gram8),500)],pch=n,col=n)
 
-legend("topright",legend = c("CHV terms","UMLS-CHV trems","other terms"), col=6:n, pch=6:n) # optiona
+legend("topright",legend = c("CHV terms","UMLS w/o CHV terms","other terms"), col=6:n, pch=6:n) # optiona
 

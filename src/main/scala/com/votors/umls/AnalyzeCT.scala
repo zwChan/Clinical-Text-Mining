@@ -951,12 +951,16 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           subTitle = sent
         }
 
-        if (jobType == "parse")
-          detectKeyword(ctRow,writer)
-        else if (jobType == "quantity")
-          detectQuantity(ctRow,writer)
-        else if (jobType == "pattern")
-          detectPattern(ctRow,writer,writer_cui)
+        try {
+          if (jobType == "parse")
+            detectKeyword(ctRow, writer)
+          else if (jobType == "quantity")
+            detectQuantity(ctRow, writer)
+          else if (jobType == "pattern")
+            detectPattern(ctRow, writer, writer_cui)
+        } catch {
+          case e: Exception => System.err.println(e.toString + "\n" + e.getStackTraceString)
+        }
       })
       writer.flush()
       writer_cui.flush()
