@@ -86,13 +86,13 @@ class Clustering (sc: SparkContext) {
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
       val gramId = new AtomicInteger()
-      val hPreNgram =  firstStageNgram.value
+//      val hPreNgram =  firstStageNgram.value
       itr.foreach(sents => {
         gramId.set(0)
         if (firstStageNgram == null) {
           Nlp.generateNgram(sents, gramId, hNgrams)
         }else{
-          Nlp.generateNgramStage2(sents,gramId,hNgrams,hPreNgram)
+          Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram.value)
         }
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
@@ -741,21 +741,23 @@ object Clustering {
 
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
     val ngramShown = if (Conf.showOrgNgramNum>0){
-      rddVector.filter(kv => {
+      clustering.getVectorRdd(rddNgram4Train, Conf.useFeatures4Train).filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
       }).takeSample(false,Conf.showOrgNgramNum,Seed)
     } else null
-    println("original ngram:")
+    println(s"original ngram: ngramShown count is ${ngramShown.size}")
     val fw = if (Conf.saveNgram2file.length > 0) new FileWriter(Conf.saveNgram2file,false) else null
     if (fw != null) fw.write(f"${Ngram.getVectorHead()}\n")
-    ngramShown.foreach(v => {
+    if (ngramShown!=null) ngramShown.foreach(v => {
+      if (fw != null)
+        fw.write(f"${v._1.toStringVector()}\n")
+      else
       println(f"${v._1.toStringVector()}")
-      if (fw != null) fw.write(f"${v._1.toStringVector()}\n")
     })
-    fw.close()
+    if (fw != null)fw.close()
     println("ngram vector:")
-    ngramShown.foreach(v => {
-      println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}")
+    if (ngramShown!=null)ngramShown.foreach(v => {
+      //println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}")
     })
 
     val rddVectorDbl = rddVector.map(_._2).persist()
@@ -778,9 +780,9 @@ object Clustering {
     }
 
     if (Conf.runKmeans) {
-      val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
         val startTimeTmp = new Date()
+        val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
         val costOrg = modelOrg.computeCost(rddVectorDbl)
         val model = clustering.reviseMode(k,modelOrg,rddVectorDbl)
         val cost = model.computeCost(rddVectorDbl)

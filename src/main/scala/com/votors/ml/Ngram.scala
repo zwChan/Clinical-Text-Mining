@@ -507,7 +507,7 @@ object Ngram {
       // the following not run at stage 2
       if (!isStage2) {
         val (umlsscore, stysTmp) = tagger.getUmlsScore(gram.text)
-        gram.umlsScore = (umlsscore._1,umlsscore._2,umlsscore._3.cui,umlsscore._4.cui)
+        gram.umlsScore = (umlsscore._1,umlsscore._2,if(umlsscore._3!=null)umlsscore._3.cui else "",if (umlsscore._4!=null)umlsscore._4.cui else "")
         if (stysTmp == null)
           gram.stys = Ngram.stysEmpty
         else

@@ -847,7 +847,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
                 suggestions.foreach(suggestion => {
                   //get all tui from mrsty table.
                   println(suggestion)
-                  val ret = execQuery(s"select code from umls.mrconso where CUI='${suggestion.cui}' and AUI='${suggestion.aui}';")
+                  val ret = execQuery(s"select code from mrconso where CUI='${suggestion.cui}' and AUI='${suggestion.aui}';")
                   while (ret.next) {
                     //for each TUI, get their semantic type from SemGroups.txt
                     code += ret.getString("code") + ','

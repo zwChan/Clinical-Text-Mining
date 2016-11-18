@@ -116,7 +116,7 @@ class UmlsTagger2Test   {
     @Test
     def testSql():Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
-      val rs = tagger.execQuery("select count(*) as cnt from mrsty")
+      val rs = tagger.execQuery("select count(*) as cnt from umls.mrsty")
 
       while (rs.next) {
         println(rs.getString("cnt"))
