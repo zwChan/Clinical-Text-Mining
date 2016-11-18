@@ -778,9 +778,9 @@ object Clustering {
     }
 
     if (Conf.runKmeans) {
+      val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
         val startTimeTmp = new Date()
-        val modelOrg = KMeans.train(rddVectorDbl, k, Conf.maxIterations, Conf.runs)
         val costOrg = modelOrg.computeCost(rddVectorDbl)
         val model = clustering.reviseMode(k,modelOrg,rddVectorDbl)
         val cost = model.computeCost(rddVectorDbl)
@@ -790,6 +790,8 @@ object Clustering {
 
         val avgCost = clustering.sampleAvgCost(model,rddVectorDbl)
         println(f"final: sample average cost of model for k=${model.k} is ${avgCost}")
+
+
 
         val tfStatMap = if(Conf.showTfAvgSdInCluster){
           println("tf average and standard deviation in new clusters:")
@@ -814,8 +816,6 @@ object Clustering {
 
           avgSd.map(kv=>(kv._1,(kv))).toMap
         } else {null}
-
-
         println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
         val clusterScore = if (Conf.clusterScore) {
           clustering.getSilhouetteScore(model,rddVectorDbl)

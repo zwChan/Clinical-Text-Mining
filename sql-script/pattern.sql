@@ -253,4 +253,13 @@ sentence text
 
 load data local infile '/tmp/random_200_sentences_cancer_studies_sm.csv' into table sarah_sample fields terminated by '\t' enclosed by '"' lines terminated by '\n' ignore 1 lines;
 
+select C.cui, C.sty, C.cui_str, count(*) as cnt from cancer_cui C join (select distinct D.tid from cancer_cui D where D.cui='C1522449' and D.sty = 'T061') E on C.tid=E.tid group by C.cui, C.sty order by cnt desc;
 
+
+
+
+SELECT V.month,SUM(V.type='INCLUSION'), SUM(V.type='EXCLUSION') FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and  (V.nested = 'None' or V.nested = 'nesting')  group by V.month order by month;
+SELECT count(*) FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and  (V.nested = 'None' or V.nested = 'nesting')  group by V.month order by month;
+
+
+select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DISTINCT V.tid as tid FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and (V.nested = 'None' or V.nested = 'nesting') ) D on C.tid=D.tid and (C.nested = 'None' or C.nested = 'nesting') and C.task = 'Prostate' group by C.cui,C.sty order by cnt desc limit 100

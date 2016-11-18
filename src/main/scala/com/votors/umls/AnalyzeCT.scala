@@ -35,7 +35,7 @@ import util.control.Breaks._
 
 case class Term(name:String, head:IndexedWord) {
   private val modifiers = ListBuffer[IndexedWord]()
-  val span = new IntPair(head.index,head.index)
+  val span = new IntPair(head.index,head.index)  // index start from 1
   val cuis = new ListBuffer[Suggestion]
   var isInConj = false
 
@@ -835,6 +835,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
   def analyzeFile(jobType:String="parse"): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
     var writer_cui = new PrintWriter(new FileWriter(outputFile+".cui"))
+    var writer_norm = new PrintWriter(new FileWriter(outputFile+".norm"))
     writer.println(CTRow("","","").getTitle(jobType))
     writer_cui.println(CTRow("","","").getTitle("cui"))
     val in = new FileReader(csvFile)
@@ -957,18 +958,20 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           else if (jobType == "quantity")
             detectQuantity(ctRow, writer)
           else if (jobType == "pattern")
-            detectPattern(ctRow, writer, writer_cui)
+            detectPattern(ctRow,writer,writer_cui,writer_norm)
         } catch {
           case e: Exception => System.err.println(e.toString + "\n" + e.getStackTraceString)
         }
       })
       writer.flush()
       writer_cui.flush()
+      writer_norm.flush()
 
     })
 
     writer.close()
     writer_cui.close()
+    writer_norm.close()
 
     if (Conf.analyzNonUmlsTerm) {
       var writer_non_cui = new PrintWriter(new FileWriter(outputFile + ".noncui"))
@@ -1151,7 +1154,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     writer.close()
   }
 
-  def detectPattern (ctRow: CTRow, writer:PrintWriter, writer_cui:PrintWriter) = {
+  def detectPattern (ctRow: CTRow, writer:PrintWriter, writer_cui:PrintWriter, writer_norm: PrintWriter) = {
     //writer.println(s"Tid\tType\tsentenId}")
     ctRow.patternList ++= StanfordNLP.findPattern(ctRow.sentence)
     if (ctRow.patternList.size>0) {
@@ -1165,6 +1168,88 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       })
     }else{
       writer.println(s"${ctRow.patternOutput(null,ctRow.sentence)}")
+    }
+    if (Conf.outputNormalizedText)getNormalizedSentence(ctRow,writer_norm)
+  }
+
+  /**
+    * Word2vec preprocess:
+      - Sentence without punctuation
+      - Lemma for noun
+      - Convert to word if it is a UMLS term
+      - Output sentence even there is no UMLS term
+      - Add suffix of syntax
+    * @param ctRow
+    */
+  def getNormalizedSentence(ctRow: CTRow, writer_norm: PrintWriter) = {
+    val sent2patt = ctRow.patternList.groupBy(kv=>kv._1)
+    sent2patt.foreach(kv=>{
+      val sentence = kv._1
+      val patterns = kv._2
+      val tokens = sentence.get(classOf[TokensAnnotation])
+      val orgText = tokens.iterator().map(_.get(classOf[TextAnnotation])).toArray
+      println("### orgText\n" + orgText.mkString(" "))
+      // get pos tag
+      val pos = tokens.iterator().map(t=>{
+        val p = t.get(classOf[PartOfSpeechAnnotation])
+        Nlp.posTransform(p)
+      }).toArray
+      // get the lemma for noun
+      val lemmas = tokens.iterator().zipWithIndex.map(t=>{
+        if (pos(t._2) == "N")
+          t._1.get(classOf[LemmaAnnotation])
+        else
+          t._1.get(classOf[TextAnnotation])
+      }).toArray
+      println("+++ lemmas\n" + lemmas.mkString(" "))
+
+      // combine token and pos
+      val newSent = orgText.zip(pos).zipWithIndex.map(kv => {
+        var lemma = ""
+        val ((t, p),index) = kv
+        // if it is not a word (punctuations)
+        if (t.matches("\\W+")) {
+          lemma = ""
+        } else {
+          // for each cui, combine all token
+          patterns.foreach(sp => {
+            sp._2.ner2groups.foreach(p => {
+              p.cuis.foreach(c => {
+                if (c.span.get(1) == index+1) { // usually the last word is a noun,
+                  lemma = getLemmaTerm(orgText,lemmas,pos,c.orgStr)
+                }
+              })
+            })
+          })
+          if (lemma == "") lemma = s"${t}_${p}"
+        }
+        lemma
+      })
+      println("=== \n" + newSent.mkString(" "))
+      writer_norm.println(newSent.mkString(" "))
+    })
+    /**
+      * given a cui string, return the lemma format of the cui string. e.g. red
+      * @param orgText
+      * @param lemmas
+      * @param orgStr
+      * @return
+      */
+    def getLemmaTerm(orgText:Array[String], lemmas:Array[String], pos:Array[String], orgStr:String) = {
+      var posStr = ""
+      var text = ""
+      val str = orgStr.split(" ").foreach(s=>{
+        val idx = orgText.indexOf(s)
+        if(idx>=0) {
+          text += lemmas(idx)
+          posStr += pos(idx)
+        } else {
+          text += s
+          println("!!can't find a term in itself,!!!!!!! some thing error !!!!!!!!!!!!")
+        }
+        text += "_"
+      })
+      text+posStr
     }
   }
 

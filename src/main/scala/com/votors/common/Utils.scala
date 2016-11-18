@@ -245,6 +245,7 @@ object Conf extends java.io.Serializable{
   val analyzNonUmlsTerm=prop.getOrDefault("analyzNonUmlsTerm", propDef.get("analyzNonUmlsTerm")).toString.toBoolean
   var sentenceLenMax=prop.getOrDefault("sentenceLenMax", propDef.get("sentenceLenMax")).toString.toInt
   val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
+  val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
 
   println("\n\ndefault properties:")
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))
