@@ -246,6 +246,7 @@ object Conf extends java.io.Serializable{
   var sentenceLenMax=prop.getOrDefault("sentenceLenMax", propDef.get("sentenceLenMax")).toString.toInt
   val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
   val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
+  val outputNoCuiSentence=prop.getOrDefault("outputNoCuiSentence", propDef.get("outputNoCuiSentence")).toString.toBoolean
 
   println("\n\ndefault properties:")
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))

@@ -75,6 +75,7 @@ class RegexGroup(var name:String) {
   // keep all the words in conj reletion, so that we can combine them. A, B or J C => AC BC JC
   val conjWords = new mutable.HashSet[IndexedWord]()
 
+
   def addToken(t:CoreMap) = {
     tokens.append(t)
     // set the span of this group. Using index start of 0, caz the span of tree is start with 0
@@ -158,8 +159,8 @@ class RegexGroup(var name:String) {
  * name: if it is 'None', there is no pattern found. but we need to process the sentence.
  * */
 class CTPattern (val name:String, val matched: MatchedExpression, val sentence:CoreMap, val sentId: Int=1){
-  var negation = 0 // if it is negation
-  var negAheadKey = 0 // if it is negation
+  var negation = 0 // negation count
+  var negAheadKey = 0 // negation count before the KEY
   val span = new IntPair(-1,-1)
   var keyPos = -1
   /* *******************************************************
@@ -210,7 +211,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       }
       if (ner.equals("NEG")) {
         negation += 1
-        negAheadKey += 1
+        if (keyPos >= 0) negAheadKey += 1
       }
       if (ner != lastNer) {
         val rg = new RegexGroup(ner)
@@ -708,17 +709,25 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       }else{
         -1
       }
+      var hasCui = false
       pattern.ner2groups.foreach(g => {
         g.cuis.zipWithIndex.foreach(vi => {
           val cui = vi._1
           val index = vi._2
+          hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${pattern.getSentence().size}\t${pattern.getSentence()}"
+            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
       })
+      // there is no cui found in this sentence
+      if (!hasCui && Conf.outputNoCuiSentence) {
+        val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        writer.println( str.replace("\"","\\\""))
+      }
     }
   }
 
@@ -1177,7 +1186,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       - Sentence without punctuation
       - Lemma for noun
       - Convert to word if it is a UMLS term
-      - Output sentence even there is no UMLS term
+  - Output sentence even there is no UMLS term
       - Add suffix of syntax
     * @param ctRow
     */
@@ -1196,10 +1205,12 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       }).toArray
       // get the lemma for noun
       val lemmas = tokens.iterator().zipWithIndex.map(t=>{
-        if (pos(t._2) == "N")
+        if (pos(t._2) == "N") {
+          //println(s"*** lemma of ${t._1.get(classOf[TextAnnotation])} to ${t._1.get(classOf[LemmaAnnotation])}")
           t._1.get(classOf[LemmaAnnotation])
-        else
+        } else {
           t._1.get(classOf[TextAnnotation])
+        }
       }).toArray
       println("+++ lemmas\n" + lemmas.mkString(" "))
 
@@ -1308,7 +1319,7 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
 
     // if there is no pattern matched, add a 'None' pattern.
     if (matched.size == 0) {
-      val pattern = new CTPattern("None", null, sentence,1)
+      val pattern = new CTPattern("None", null, sentence,sentId)
       if (pattern != null) {
         pattern.update()
         retList.append(pattern)
