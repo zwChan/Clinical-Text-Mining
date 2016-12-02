@@ -247,6 +247,9 @@ object Conf extends java.io.Serializable{
   val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
   val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
   val outputNoCuiSentence=prop.getOrDefault("outputNoCuiSentence", propDef.get("outputNoCuiSentence")).toString.toBoolean
+  val MMoptions = prop.getOrDefault("MMoptions", propDef.get("MMoptions")).toString.trim
+  val MMhost = prop.getOrDefault("MMhost", propDef.get("MMhost")).toString.trim
+  val MMport = prop.getOrDefault("MMport", propDef.get("MMport")).toString.trim
 
   println("\n\ndefault properties:")
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))
