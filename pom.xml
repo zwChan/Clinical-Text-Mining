@@ -7,7 +7,10 @@
   <groupId>com.votors</groupId>
   <artifactId>Clinical-Text-Mining</artifactId>
   <version>0.0.1-SNAPSHOT</version>
-    <packaging>pom</packaging>
+  <!--<modules>-->
+    <!--<module>../../../e/05.code/java/ra/coc</module>-->
+  <!--</modules>-->
+  <!--<packaging>pom</packaging>-->
   <name>"Clinical-Text-Mining"</name>
   
   <repositories>
@@ -16,16 +19,16 @@
       <name>Scala-tools Maven2 Repository</name>
       <url>http://scala-tools.org/repo-releases</url>
     </repository>
-    <repository>
-      <id>maven-hadoop</id>
-      <name>Hadoop Releases</name>
-      <url>https://repository.cloudera.com/content/repositories/releases/</url>
-    </repository>
-    <repository>
-      <id>cloudera-repos</id>
-      <name>Cloudera Repos</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-    </repository>
+    <!--<repository>-->
+      <!--<id>maven-hadoop</id>-->
+      <!--<name>Hadoop Releases</name>-->
+      <!--<url>https://repository.cloudera.com/content/repositories/releases/</url>-->
+    <!--</repository>-->
+    <!--<repository>-->
+      <!--<id>cloudera-repos</id>-->
+      <!--<name>Cloudera Repos</name>-->
+      <!--<url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>-->
+    <!--</repository>-->
   </repositories>
 
   <pluginRepositories>
@@ -71,10 +74,11 @@
       </plugin>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.1</version>
+        <!--<version>3.1</version>-->
+        <version>3.3</version>
         <configuration>
-          <source>1.6</source>
-          <target>1.6</target>
+          <source>1.8</source>
+          <target>1.8</target>
         </configuration>
       </plugin>
       <plugin>
@@ -124,19 +128,19 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-mllib_2.10</artifactId>
       <version>${spark.version}</version>
-      <scope>provided</scope>
+      <!--<scope>provided</scope>-->
     </dependency>
 
     <dependency>
@@ -223,6 +227,33 @@
       <artifactId>scala-pickling_2.10</artifactId>
       <version>0.10.1</version>
     </dependency>
+
+    <dependency>
+      <groupId>org.apache.httpcomponents</groupId>
+      <artifactId>httpcore</artifactId>
+      <version>4.4.4</version>
+    </dependency>
+
+    <dependency>
+      <groupId>edu.stanford.nlp</groupId>
+      <artifactId>stanford-corenlp</artifactId>
+      <version>3.6.0</version>
+      <!--<scope>system</scope>-->
+      <!--<systemPath>C:/fsu/ra/stanfordnlp/CoreNLP/javanlp-core.jar</systemPath>-->
+    </dependency>
+    <!--<dependency>-->
+      <!--<groupId>edu.stanford.nlp</groupId>-->
+      <!--<artifactId>stanford-corenlp</artifactId>-->
+      <!--<version>3.3.1</version>-->
+      <!--<classifier>models</classifier>-->
+    <!--</dependency>-->
+
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+      <version>2.9.4</version>
+    </dependency>
+
 
 
   </dependencies>

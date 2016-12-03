@@ -44,7 +44,7 @@ class UmlsTagger2Test   {
     @Test
     def testGetFull(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
-      val phrases = List("Sepsis", "sEPSIS", "Progressive systemic sclerosis")
+      val phrases = List("age")
       phrases.foreach(phrase => {
         Console.println()
         Console.println("Query: %s".format(phrase))
@@ -65,24 +65,36 @@ class UmlsTagger2Test   {
     def testStermWord(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl,rootDir)
 
-      val phrases = List("the pets", "the men", "two dishes", "three Babies", "holidays"  ,"the datum",
-        "politics", "news ")
+      val phrases = List("green tea")
       phrases.foreach(phrase => {
-        Console.println(s"$phrase,${tagger.stemWords(phrase)}")
+        Console.println(s"$phrase,${tagger.normalizeAll(phrase)}")
        // Console.println(s"$phrase,${tagger.normalizeCasePunct(phrase)}")
 
       })
 
     }
 
+  @Test
+  def testAnnotateSentence() = {
+    val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
+    val sent = "I lost a tone of weight i was alway 130 or above , i eat fine but i cant have really big meals ."
+    val sugg=tagger.annotateSentence(sent,5)
+    sugg.filter(_._2.size>0).foreach(s=>{
+      println(s"${s._1}\t${s._2.mkString(",")}")
+    })
+  }
+
+
     @Test
     def testAnnotateFile(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
-      tagger.annotateFile(s"${rootDir}/data/raw_data_CHV_study2_format.csv",
-        s"${rootDir}/data/raw_data_CHV_study2_format_ret.csv",
-        4,
+//      tagger.annotateFile(s"C:/fsu/ra/data/201603/nsrr-canonical-data-dictionary.txt",
+//        s"C:/fsu/ra/data/201603/ret-nsrr-canonical-data-dictionary.txt",
+        tagger.annotateFile(s"C:/fsu/ra/data/201603/nsrr-canonical-data-dictionary.txt",
+          s"C:/fsu/ra/data/201603/ret-nsrr-canonical-data-dictionary.txt",
+        2,
         5,
-        ',','\n')
+        '\t','\n')
     }
 
     // find terms from dictionary for a string
@@ -90,8 +102,8 @@ class UmlsTagger2Test   {
     def testAnnotateTag(): Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
       //tagger.annotateTag(s"${rootDir}/data/taglist-zhiwei.txt",s"${rootDir}/data/taglist-zhiwei.csv")
-      tagger.annotateTag(s"${rootDir}/data/tags_0920_final_ST.csv",
-        s"${rootDir}/data/tags_0920_final_ST_ret.csv")
+      tagger.annotateTagAppend(s"C:/fsu/ra/data/201603/nsrr-canonical-data-dictionary.txt",
+        s"C:/fsu/ra/data/201603/ret-nsrr-canonical-data-dictionary.txt",1)
 
       tagger.jdbcClose()
     }
@@ -104,7 +116,7 @@ class UmlsTagger2Test   {
     @Test
     def testSql():Unit = {
       val tagger = new UmlsTagger2(Conf.solrServerUrl, rootDir)
-      val rs = tagger.execQuery("select count(*) as cnt from mrsty")
+      val rs = tagger.execQuery("select count(*) as cnt from umls.mrsty")
 
       while (rs.next) {
         println(rs.getString("cnt"))

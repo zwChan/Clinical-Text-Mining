@@ -86,12 +86,13 @@ class Clustering (sc: SparkContext) {
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
       val gramId = new AtomicInteger()
+//      val hPreNgram =  firstStageNgram.value
       itr.foreach(sents => {
         gramId.set(0)
         if (firstStageNgram == null) {
           Nlp.generateNgram(sents, gramId, hNgrams)
         }else{
-          Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram)
+          Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram.value)
         }
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
@@ -115,7 +116,7 @@ class Clustering (sc: SparkContext) {
         .map(_._2)
         .filter(_.tfAll > Conf.stag1TfFilter)
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
-        .filter(_.cvalue > Conf.stag1CvalueFilter)
+        .filter(t=>t.cvalue > Conf.stag1CvalueFilter && t.umlsScore._1 > Conf.stag2UmlsScoreFilter && t.umlsScore._2 > Conf.stag2ChvScoreFilter)
       //.persist()
 
       //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
@@ -187,7 +188,8 @@ class Clustering (sc: SparkContext) {
   def trainSampleMark(ngramRdd: RDD[Ngram]):RDD[Ngram] = {
       ngramRdd.map(ngram=>{
         if (Conf.testSample>0) {
-          if (Utils.random.nextInt(100) >= Conf.testSample && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
+          // take a random number for each Ngram, if the random number is not in the 'test' percentage, it is a training percentage.
+          if (Utils.random.nextInt(100000000) >= Conf.testSample*1000000 && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
             ngram.isTrain = true
           else
             ngram.isTrain = false
@@ -361,9 +363,9 @@ class Clustering (sc: SparkContext) {
         })
         f
       })
-      // average
+      // get average
       avg = sum.map(_ / currNgramCnt)
-      // get squard sum
+      // get variance
       val sumSquare = tmp_vecter.map(_._2).map(v => {
         val f = new ArrayBuffer[Double]()
         f.appendAll(Array.fill(v.size)(0.0))
@@ -739,21 +741,23 @@ object Clustering {
 
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
     val ngramShown = if (Conf.showOrgNgramNum>0){
-      rddVector.filter(kv => {
+      clustering.getVectorRdd(rddNgram4Train, Conf.useFeatures4Train).filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
       }).takeSample(false,Conf.showOrgNgramNum,Seed)
     } else null
-    println("original ngram:")
+    println(s"original ngram: ngramShown count is ${ngramShown.size}")
     val fw = if (Conf.saveNgram2file.length > 0) new FileWriter(Conf.saveNgram2file,false) else null
     if (fw != null) fw.write(f"${Ngram.getVectorHead()}\n")
-    ngramShown.foreach(v => {
+    if (ngramShown!=null) ngramShown.foreach(v => {
+      if (fw != null)
+        fw.write(f"${v._1.toStringVector()}\n")
+      else
       println(f"${v._1.toStringVector()}")
-      if (fw != null) fw.write(f"${v._1.toStringVector()}\n")
     })
-    fw.close()
+    if (fw != null)fw.close()
     println("ngram vector:")
-    ngramShown.foreach(v => {
-      println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}")
+    if (ngramShown!=null)ngramShown.foreach(v => {
+      //println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}")
     })
 
     val rddVectorDbl = rddVector.map(_._2).persist()
@@ -789,6 +793,8 @@ object Clustering {
         val avgCost = clustering.sampleAvgCost(model,rddVectorDbl)
         println(f"final: sample average cost of model for k=${model.k} is ${avgCost}")
 
+
+
         val tfStatMap = if(Conf.showTfAvgSdInCluster){
           println("tf average and standard deviation in new clusters:")
           val avgSd = model.predict(rddVectorDbl).zip(rddVector).map(kv=>(kv._1,kv._2._1.tfAll)).groupByKey().map(kv=>(kv._1,kv._2.toArray)).collect().map(kv=>{
@@ -812,8 +818,6 @@ object Clustering {
 
           avgSd.map(kv=>(kv._1,(kv))).toMap
         } else {null}
-
-
         println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
         val clusterScore = if (Conf.clusterScore) {
           clustering.getSilhouetteScore(model,rddVectorDbl)

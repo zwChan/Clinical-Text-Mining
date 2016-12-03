@@ -1,78 +1,42 @@
 package com.votors
 
+import java.time.Duration
+
+import com.votors.common.TimeX
+
 /**
- * Created by Jason on 2015/11/19 0019.
+ * Created by Jason on 2016/6/15 0015.
  */
-
-import java.io.{FileWriter, File}
-import java.util
-import scala.collection.immutable.HashMap
-import scala.io.Source
-
 object Test {
+  def main(args:Array[String]) = {
 
-  def reduceAcc(dir: String, dest: String, n: Int) = {
-    val set = new util.HashSet[Int]()
-    val destFiles = Range(0,n).map(i=>new FileWriter(s"${dest}\\acc-${i}.txt", true)).toArray
-    for (file <- new File(dir).listFiles) {
-      println(s"process file ${file}")
-      for(line <- Source.fromFile(file).getLines()) {
-        val tokens = line.split("\\|",3)
-        if (tokens.size>2) {
-          set.add(tokens(1).toInt)
-          destFiles(tokens(1).toInt % n).write(line.replaceAll(",","#")+"\n")
-        }
+    var splitType = "#"
+    val criteria = "Fertile patients must use effective contraception during and for 3 months after study No other malignancy within the past 3 years No serious concurrent medical illness or active infection that would preclude study chemotherapy No allergy or sensitivity to imidazole antifungal medications (e.g., fluconazole, ketoconazole, miconazole, itraconazole, and clotrimazole)"
+    criteria.split("#|\\n").flatMap(s=> {
+      // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
+      if (s.count(_ == ':') >= 3) {
+        splitType = ":"
+        s.split(":")
+      } else if (s.count(_ == '-') >= 3) {
+        splitType = "-"
+        s.split(" - ")
+      } else if (s.split("\\s").count(_=="No") >= 3) {
+        // some sentences without any punctuation to separate
+        splitType = "No"
+        s.split("(?=\\sNo\\s)")
+      }  else if (s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3) {
+        // some sentences without any punctuation to separate
+        splitType = "or"
+        s.split("Or|OR")
+      } else {
+        s :: Nil
       }
-      println(s"acc num ${set.size}")
-    }
-  }
-
-  def sortAcc(dir: String, dest: String, fraudFile:String): Unit = {
-    val fraud = getFraudAcc(fraudFile)
-    val ff = new FileWriter(dest + "\\" + "fraud_acc.csv", true)
-
-    for (file <- new File(dir).listFiles) {
-      println(s"process file ${file}")
-      val of = new FileWriter(dest + "\\" + file.getName, true)
-      val lines = Source.fromFile(file).getLines().toArray.map(line => {
-        val tokens = line.split("\\|", 3)
-        (if(tokens.size>2)tokens(1).toInt else 0, line)
-      }).sortBy(_._1).foreach(line => {
-        if (fraud.contains(line._1)){
-          ff.write(line._2.replaceAll("\\|", ",") + "\n")
-        }else{
-          of.write(line._2.replaceAll("\\|", ",") + "\n")
-        }
-      })
-      of.close()
-    }
-    ff.close()
-  }
-
-  def getFraudAcc(file:String): util.HashSet[Int] = {
-    val set = new util.HashSet[Int]()
-    for(line <-  Source.fromFile(file).getLines()){
-      val tokens = line.split(",", 3)
-      if (tokens.size>2) set.add(tokens(1).toInt)
-    }
-    println(s"fraud acc num ${set.size}")
-    set
-  }
-
-  def main(argv: Array[String]) = {
-
-    //reduceAcc("C:\\fsu\\class\\captilone\\data\\training","F:\\data\\tmp",250)
-    sortAcc("F:\\data\\tmp", "F:\\data\\ret", "C:\\fsu\\class\\captilone\\data\\fraud.csv")
-
+    }).filter(_.trim.size > 2).foreach(sent_org => {
+      val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*", "") // the punctuation at the beginning of a sentence
+      println(sent)
+    })
 
   }
-
-
-
-
 
 
 }
-
-
-

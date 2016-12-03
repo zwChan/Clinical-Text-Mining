@@ -1,10 +1,23 @@
 package com.votors.common
 
-import java.io.{File, FileOutputStream, ObjectOutputStream, FileInputStream}
-import java.lang.Exception
-import java.sql.{ResultSet, DriverManager, Statement, Connection}
-import java.util.{Random, Properties, Date}
+import java.io._
+import java.sql.{Connection, DriverManager, ResultSet, Statement}
+import java.util.{Date, Properties, Random}
 
+import edu.stanford.nlp.util
+import edu.stanford.nlp.util.IntPair
+import org.apache.commons.csv.{CSVFormat, CSVRecord}
+import org.apache.commons.lang3.StringUtils
+import org.joda.time.{DateTime, Duration, Period}
+
+import scala.collection.mutable.ListBuffer
+import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.immutable.{List, Range}
+import scala.collection.mutable
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.io.Source
+import scala.io.Codec
+import org.joda.time.format.ISOPeriodFormat
 
 /**
  * Created by chenzhiwei on 2/28/2015.
@@ -20,21 +33,7 @@ object Utils extends java.io.Serializable{
       case e: Exception => default
     }
   }
-  /**
-   * if a input item is invalid, return a good enough item instead.
-   * @param factor
-   */
-  def fixInvalid(item:Double, INVALID_NUM: Double, interObj: InterObject, default: Double, factor: Double): Double = {
-    if (item == INVALID_NUM) {
-      if (! interObj.empty)
-        interObj.mean
-      else
-        default
-    } else {
-      interObj add item
-      item
-    }
-  }
+
 
   def str2Date(s: String): java.util.Date = {
     val format = new java.text.SimpleDateFormat("yyyyMMddHHmm")
@@ -90,36 +89,42 @@ object Utils extends java.io.Serializable{
     obj.asInstanceOf[T]
   }
 
+  def readCsvFile(csvFile: String, delimiter:Char=',',separator:Char='\n'):Iterator[CSVRecord] = {
+    //get text content from csv file
+    val in = new FileReader(csvFile)
+    val records = CSVFormat.DEFAULT
+      .withRecordSeparator(separator)
+      .withDelimiter(delimiter)
+      .withSkipHeaderRecord(false)
+      .withEscape('\\')
+      .parse(in)
+      .iterator()
+    records
+//    val tagList = ListBuffer[String]()
+//    // for each row of csv file
+//    records.map(rec => {
+//      // if current record is the last record, we have to process it now.
+//      rec
+//    })
+  }
 
-}
-/**
-  This Class is designed for some "global" variance when we walk items of the RDD. It may not be the best idea for such function.
-  e.g. when we run map on RDD[Row], and we want a value of last Row:
-  {{{
-    var o = new InterObject{value = 1}
-    RDD.map{r =>
-      val result = if (r._1>o.mean) true else false
-      o.add(r._1)
-      result
-  }}}
- */
-class InterObject(factor: Double=0.5, capacity: Int=3) extends java.io.Serializable {
-  val valueList = new Array[Double](capacity)
-  var counter = 0
-  def pos = counter%capacity
-  def empty = counter == 0
-  def mean = {
-    if (empty)
-      0.0
-    else if (counter <= pos)
-      valueList.sum / counter
+  def spanMerge(span:IntPair, v1:Int, v2:Int) = {
+    span.set(0,math.min(span.getSource,math.min(v1,v2)))
+    span.set(1,math.max(span.getTarget,math.max(v1,v2)))
+    span
+  }
+  def span1based(span: IntPair) = {
+    new util.IntPair(span.get(0)+1, span.get(1)+1)
+  }
+
+  def strSimilarity(s1:String,s2:String, caseSensitive:Boolean=false):Float = {
+    val diff = if (caseSensitive)
+      StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
     else
-      valueList.sum / valueList.length
+      StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
+    return diff.toFloat/math.max(s1.size, s2.size)
   }
-  def add(elm: Double) {
-    valueList(pos) = elm
-    counter += 1
-  }
+
 }
 
 object Conf extends java.io.Serializable{
@@ -130,112 +135,144 @@ object Conf extends java.io.Serializable{
     sys.exit(1)
   }
   val prop = new Properties()
+  val propDef = new Properties()
   // read current dir configuration first.
   if (new File("default.properties").exists()) {
     println(s"********* default.propertiest is found in current working directory ************")
-    prop.load(new FileInputStream("default.properties"))
+    prop.load(new FileInputStream("current.properties"))
+    propDef.load(new FileInputStream("default.properties"))
   }else {
     println(s"********* default.propertiest is NOT found in current working directory, try ${rootDir}/conf/default.properties ************")
-    prop.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
+    prop.load(new FileInputStream(s"${rootDir}/conf/current.properties"))
+    propDef.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
   }
-  println("Current properties:\n" + prop.toString)
 
-  val dbUrl = Conf.prop.get("blogDbUrl").toString
-  val blogTbl = Conf.prop.get("blogTbl").toString
-  val blogIdCol = Conf.prop.get("blogIdCol").toString
-  val blogTextCol = Conf.prop.get("blogTextCol").toString
-  val blogLimit = Conf.prop.get("blogLimit").toString.toInt
-  val targetTermTbl = Conf.prop.get("targetTermTbl").toString.toString
-  val targetTermTblDropAndCreate = Conf.prop.get("targetTermTblDropAndCreate").toString.toBoolean
-  val targetTermUsingSolr = Conf.prop.get("targetTermUsingSolr").toString.toBoolean
+  val dbUrl = Conf.prop.getOrDefault("blogDbUrl", propDef.get("blogDbUrl")).toString
+  val blogTbl = Conf.prop.getOrDefault("blogTbl", propDef.get("blogTbl")).toString
+  val blogIdCol = Conf.prop.getOrDefault("blogIdCol", propDef.get("blogIdCol")).toString
+  val blogTextCol = Conf.prop.getOrDefault("blogTextCol", propDef.get("blogTextCol")).toString
+  val blogLimit = Conf.prop.getOrDefault("blogLimit", propDef.get("blogLimit")).toString.toInt
+  val targetTermTbl = Conf.prop.getOrDefault("targetTermTbl", propDef.get("targetTermTbl")).toString.toString
+  val targetTermTblDropAndCreate = Conf.prop.getOrDefault("targetTermTblDropAndCreate", propDef.get("targetTermTblDropAndCreate")).toString.toBoolean
+  val targetTermUsingSolr = Conf.prop.getOrDefault("targetTermUsingSolr", propDef.get("targetTermUsingSolr")).toString.toBoolean
 
-  val caseFactor = prop.get("caseFactor").toString.toFloat
-  val ignoreNewLine = prop.get("ignoreNewLine").toString.toInt
-  val partitionTfFilter = prop.get("partitionTfFilter").toString.toInt
-  val stag1TfFilter = prop.get("stag1TfFilter").toString.toInt
-  val stag1CvalueFilter = prop.get("stag1CvalueFilter").toString.toDouble
-  val stag2TfFilter = prop.get("stag2TfFilter").toString.toInt
-  val stag2CvalueFilter = prop.get("stag2CvalueFilter").toString.toDouble
+  val caseFactor = prop.getOrDefault("caseFactor", propDef.get("caseFactor")).toString.toFloat
+  val ignoreNewLine = prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
+  val partitionTfFilter = prop.getOrDefault("partitionTfFilter", propDef.get("partitionTfFilter")).toString.toInt
+  val stag1TfFilter = prop.getOrDefault("stag1TfFilter", propDef.get("stag1TfFilter")).toString.toInt
+  val stag1CvalueFilter = prop.getOrDefault("stag1CvalueFilter", propDef.get("stag1CvalueFilter")).toString.toDouble
+  val stag2TfFilter = prop.getOrDefault("stag2TfFilter", propDef.get("stag2TfFilter")).toString.toInt
+  val stag2CvalueFilter = prop.getOrDefault("stag2CvalueFilter", propDef.get("stag2CvalueFilter")).toString.toDouble
+  val stag2UmlsScoreFilter = prop.getOrDefault("stag2UmlsScoreFilter", propDef.get("stag2UmlsScoreFilter")).toString.toDouble
+  val stag2ChvScoreFilter = prop.getOrDefault("stag2ChvScoreFilter", propDef.get("stag2ChvScoreFilter")).toString.toDouble
 
-  val topTfNgram = prop.get("topTfNgram").toString.toInt
-  val topCvalueNgram = prop.get("topCvalueNgram").toString.toInt
-  val topTfdfNgram = prop.get("topTfdfNgram").toString.toInt
+  val topTfNgram = prop.getOrDefault("topTfNgram", propDef.get("topTfNgram")).toString.toInt
+  val topCvalueNgram = prop.getOrDefault("topCvalueNgram", propDef.get("topCvalueNgram")).toString.toInt
+  val topTfdfNgram = prop.getOrDefault("topTfdfNgram", propDef.get("topTfdfNgram")).toString.toInt
 
-  val sparkMaster = prop.get("sparkMaster").toString.trim
-  val partitionNumber = prop.get("partitionNumber").toString.toInt
+  val sparkMaster = prop.getOrDefault("sparkMaster", propDef.get("sparkMaster")).toString.trim
+  val partitionNumber = prop.getOrDefault("partitionNumber", propDef.get("partitionNumber")).toString.toInt
 
-  val solrServerUrl = prop.get("solrServerUrl").toString
-  val lvgdir = prop.get("lvgdir").toString
-  val posInclusive = prop.get("posInclusive").toString.split(" ").filter(_.trim.length>0).mkString(" ")
-  val jdbcDriver = prop.get("jdbcDriver").toString
-  val umlsLikehoodLimit = prop.get("umlsLikehoodLimit").toString.toDouble
-  val WinLen = prop.get("WinLen").toString.toInt
-  val delimiter = prop.get("delimiter").toString.trim
-  val stopwordMatchType = prop.get("stopwordMatchType").toString.toInt
-  val stopwordRegex = prop.get("stopwordRegex").toString.trim
-  val posFilterRegex = prop.get("posFilterRegex").toString.split(" ").filter(_.trim.length>0)
-  val debugFilterNgram = prop.get("debugFilterNgram").toString
-  val saveNgram2file = prop.getProperty("saveNgram2file","").trim
+  val solrServerUrl = prop.getOrDefault("solrServerUrl", propDef.get("solrServerUrl")).toString
+  val lvgdir = prop.getOrDefault("lvgdir", propDef.get("lvgdir")).toString
+  val posInclusive = prop.getOrDefault("posInclusive", propDef.get("posInclusive")).toString.split(" ").filter(_.trim.length>0).mkString(" ")
+  val jdbcDriver = prop.getOrDefault("jdbcDriver", propDef.get("jdbcDriver")).toString
+  val umlsLikehoodLimit = prop.getOrDefault("umlsLikehoodLimit", propDef.get("umlsLikehoodLimit")).toString.toDouble
+  val WinLen = prop.getOrDefault("WinLen", propDef.get("WinLen")).toString.toInt
+  val delimiter = prop.getOrDefault("delimiter", propDef.get("delimiter")).toString.trim
+  val stopwordMatchType = prop.getOrDefault("stopwordMatchType", propDef.get("stopwordMatchType")).toString.toInt
+  val stopwordRegex = prop.getOrDefault("stopwordRegex", propDef.get("stopwordRegex")).toString.trim
+  val cuiStringFilterRegex = prop.getOrDefault("cuiStringFilterRegex", propDef.get("cuiStringFilterRegex")).toString.trim
+  val posFilterRegex = prop.getOrDefault("posFilterRegex", propDef.get("posFilterRegex")).toString.split(" ").filter(_.trim.length>0)
+  val debugFilterNgram = prop.getOrDefault("debugFilterNgram", propDef.get("debugFilterNgram")).toString
+  val saveNgram2file = prop.getOrDefault("saveNgram2file", propDef.get("saveNgram2file")).toString.trim
 
-  val ngramSaveFile = prop.get("ngramSaveFile").toString.trim
-  val clusteringFromFile = prop.get("clusteringFromFile").toString.toBoolean
+  val ngramSaveFile = prop.getOrDefault("ngramSaveFile", propDef.get("ngramSaveFile")).toString.trim
+  val clusteringFromFile = prop.getOrDefault("clusteringFromFile", propDef.get("clusteringFromFile")).toString.toBoolean
 
-  val runKmeans=prop.get("runKmeans").toString.toBoolean
-  val k_start=prop.get("k_start").toString.toInt
-  val k_end=prop.get("k_end").toString.toInt
-  val k_step=prop.get("k_step").toString.toInt
-  val maxIterations=prop.get("maxIterations").toString.toInt
-  val runs=prop.get("runs").toString.toInt
-  val clusterThresholdPt=prop.get("clusterThresholdPt").toString.toInt
-  val clusterThresholSample=prop.get("clusterThresholSample").toString.toInt
-  val clusterThresholFactor=prop.get("clusterThresholFactor").toString.toDouble
-  val clusterThresholdLimit=prop.get("clusterThresholdLimit").toString.toInt
-  val trainNgramCnt=prop.get("trainNgramCnt").toString.toInt
-  val testSample=prop.get("testSample").toString.toInt
-  val useFeatures4Train=prop.get("useFeatures4Train").toString.trim.split(",").map(fw=>{
+  val runKmeans=prop.getOrDefault("runKmeans", propDef.get("runKmeans")).toString.toBoolean
+  val k_start=prop.getOrDefault("k_start", propDef.get("k_start")).toString.toInt
+  val k_end=prop.getOrDefault("k_end", propDef.get("k_end")).toString.toInt
+  val k_step=prop.getOrDefault("k_step", propDef.get("k_step")).toString.toInt
+  val maxIterations=prop.getOrDefault("maxIterations", propDef.get("maxIterations")).toString.toInt
+  val runs=prop.getOrDefault("runs", propDef.get("runs")).toString.toInt
+  val clusterThresholdPt=prop.getOrDefault("clusterThresholdPt", propDef.get("clusterThresholdPt")).toString.toInt
+  val clusterThresholSample=prop.getOrDefault("clusterThresholSample", propDef.get("clusterThresholSample")).toString.toInt
+  val clusterThresholFactor=prop.getOrDefault("clusterThresholFactor", propDef.get("clusterThresholFactor")).toString.toDouble
+  val clusterThresholdLimit=prop.getOrDefault("clusterThresholdLimit", propDef.get("clusterThresholdLimit")).toString.toInt
+  val trainNgramCnt=prop.getOrDefault("trainNgramCnt", propDef.get("trainNgramCnt")).toString.toInt
+  val testSample=prop.getOrDefault("testSample", propDef.get("testSample")).toString.toInt
+  val useFeatures4Train=prop.getOrDefault("useFeatures4Train", propDef.get("useFeatures4Train")).toString.trim.split(",").map(fw=>{
     val afw = fw.split(":").filter(_.trim.length>0)
     (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
   })
-  val useFeatures4Test=prop.get("useFeatures4Test").toString.trim.split(",").map(fw=>{
+  val useFeatures4Test=prop.getOrDefault("useFeatures4Test", propDef.get("useFeatures4Test")).toString.trim.split(",").map(fw=>{
     val afw = fw.split(":").filter(_.trim.length>0)
     (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
   })
-//  val useUmlsContextFeature=prop.get("useUmlsContextFeature").toString.toBoolean
-  val semanticType=prop.get("semanticType").toString.trim.split(",")
-  val posInWindown=prop.get("posInWindown").toString.trim
-  val normalizeFeature=prop.get("normalizeFeature").toString.toBoolean
-  val normalize_rescale=prop.get("normalize_rescale").toString.toBoolean
-  val normalize_standardize=prop.get("normalize_standardize").toString.toBoolean
-  val normalize_outlier_factor=prop.get("normalize_outlier_factor").toString.toDouble
-  val outputVectorOnly=prop.get("outputVectorOnly").toString.toBoolean
+  //  val useUmlsContextFeature=prop.getOrDefault("useUmlsContextFeature", propDef.get("useUmlsContextFeature")).toString.toBoolean
+  val semanticType=prop.getOrDefault("semanticType", propDef.get("semanticType")).toString.trim.split(",")
+  val sabFilter=prop.getOrDefault("sabFilter", propDef.get("sabFilter")).toString.trim
+  val posInWindown=prop.getOrDefault("posInWindown", propDef.get("posInWindown")).toString.trim
+  val normalizeFeature=prop.getOrDefault("normalizeFeature", propDef.get("normalizeFeature")).toString.toBoolean
+  val normalize_rescale=prop.getOrDefault("normalize_rescale", propDef.get("normalize_rescale")).toString.toBoolean
+  val normalize_standardize=prop.getOrDefault("normalize_standardize", propDef.get("normalize_standardize")).toString.toBoolean
+  val normalize_outlier_factor=prop.getOrDefault("normalize_outlier_factor", propDef.get("normalize_outlier_factor")).toString.toDouble
+  val outputVectorOnly=prop.getOrDefault("outputVectorOnly", propDef.get("outputVectorOnly")).toString.toBoolean
 
-  val baseLineRank=prop.get("baseLineRank").toString.toBoolean
-  val trainOnlyChv=prop.get("trainOnlyChv").toString.toBoolean
-  val runRank=prop.get("runRank").toString.toBoolean
-  val rankGranular=prop.get("rankGranular").toString.toInt
-  val rankLevelNumber=prop.get("rankLevelNumber").toString.toInt
-  val rankLevelBase=prop.get("rankLevelBase").toString.toInt
-  val fscoreBeta=prop.get("fscoreBeta").toString.toDouble
-  val showDetailRankPt=prop.get("showDetailRankPt").toString.toInt
-  val rankWithTrainData=prop.get("rankWithTrainData").toString.toBoolean
-  val showOrgNgramNum=prop.get("showOrgNgramNum").toString.toInt
-  val showOrgNgramOfN=prop.get("showOrgNgramOfN").toString.split(",").map(_.toInt)
-  val showOrgNgramOfPosRegex=prop.get("showOrgNgramOfPosRegex").toString.trim
-  val showOrgNgramOfTextRegex=prop.get("showOrgNgramOfTextRegex").toString.trim
-  val trainedNgramFilterPosRegex=prop.get("trainedNgramFilterPosRegex").toString.trim
-  val prefixSuffixUseWindow=prop.get("prefixSuffixUseWindow").toString.toBoolean
-  val bagsOfWord=prop.get("bagsOfWord").toString.toBoolean
-  val bagsOfWordFilter=prop.get("bagsOfWordFilter").toString.toBoolean
-  val tfdfLessLog=prop.get("tfdfLessLog").toString.toBoolean
-  var bowTopNgram=prop.get("bowTopNgram").toString.toInt
-  val reviseModel=prop.get("reviseModel").toString.toBoolean
-  val clusterScore=prop.get("clusterScore").toString.toBoolean
-  var showNgramInCluster=prop.get("showNgramInCluster").toString.toInt
-  var pcaDimension=prop.get("pcaDimension").toString.toInt
-  val sampleRuns=prop.get("sampleRuns").toString.toInt
-  val showSentence=prop.get("showSentence").toString.toBoolean
-  //val showTfAvgSdInCluster=prop.get("showTfAvgSdInCluster").toString.toBoolean
+  val baseLineRank=prop.getOrDefault("baseLineRank", propDef.get("baseLineRank")).toString.toBoolean
+  val trainOnlyChv=prop.getOrDefault("trainOnlyChv", propDef.get("trainOnlyChv")).toString.toBoolean
+  val runRank=prop.getOrDefault("runRank", propDef.get("runRank")).toString.toBoolean
+  val rankGranular=prop.getOrDefault("rankGranular", propDef.get("rankGranular")).toString.toInt
+  val rankLevelNumber=prop.getOrDefault("rankLevelNumber", propDef.get("rankLevelNumber")).toString.toInt
+  val rankLevelBase=prop.getOrDefault("rankLevelBase", propDef.get("rankLevelBase")).toString.toInt
+  val fscoreBeta=prop.getOrDefault("fscoreBeta", propDef.get("fscoreBeta")).toString.toDouble
+  val showDetailRankPt=prop.getOrDefault("showDetailRankPt", propDef.get("showDetailRankPt")).toString.toInt
+  val rankWithTrainData=prop.getOrDefault("rankWithTrainData", propDef.get("rankWithTrainData")).toString.toBoolean
+  val showOrgNgramNum=prop.getOrDefault("showOrgNgramNum", propDef.get("showOrgNgramNum")).toString.toInt
+  val showOrgNgramOfN=prop.getOrDefault("showOrgNgramOfN", propDef.get("showOrgNgramOfN")).toString.split(",").map(_.toInt)
+  val showOrgNgramOfPosRegex=prop.getOrDefault("showOrgNgramOfPosRegex", propDef.get("showOrgNgramOfPosRegex")).toString.trim
+  val showOrgNgramOfTextRegex=prop.getOrDefault("showOrgNgramOfTextRegex", propDef.get("showOrgNgramOfTextRegex")).toString.trim
+  val trainedNgramFilterPosRegex=prop.getOrDefault("trainedNgramFilterPosRegex", propDef.get("trainedNgramFilterPosRegex")).toString.trim
+  val prefixSuffixUseWindow=prop.getOrDefault("prefixSuffixUseWindow", propDef.get("prefixSuffixUseWindow")).toString.toBoolean
+  val bagsOfWord=prop.getOrDefault("bagsOfWord", propDef.get("bagsOfWord")).toString.toBoolean
+  val bagsOfWordFilter=prop.getOrDefault("bagsOfWordFilter", propDef.get("bagsOfWordFilter")).toString.toBoolean
+  val tfdfLessLog=prop.getOrDefault("tfdfLessLog", propDef.get("tfdfLessLog")).toString.toBoolean
+  var bowTopNgram=prop.getOrDefault("bowTopNgram", propDef.get("bowTopNgram")).toString.toInt
+  val reviseModel=prop.getOrDefault("reviseModel", propDef.get("reviseModel")).toString.toBoolean
+  val clusterScore=prop.getOrDefault("clusterScore", propDef.get("clusterScore")).toString.toBoolean
+  var showNgramInCluster=prop.getOrDefault("showNgramInCluster", propDef.get("showNgramInCluster")).toString.toInt
+  var pcaDimension=prop.getOrDefault("pcaDimension", propDef.get("pcaDimension")).toString.toInt
+  val sampleRuns=prop.getOrDefault("sampleRuns", propDef.get("sampleRuns")).toString.toInt
+  val showSentence=prop.getOrDefault("showSentence", propDef.get("showSentence")).toString.toBoolean
+  //val showTfAvgSdInCluster=prop.getOrDefault("showTfAvgSdInCluster", propDef.get("showTfAvgSdInCluster")).toString.toBoolean
   val showTfAvgSdInCluster=true
+  val useStanfordNLP=prop.getOrDefault("useStanfordNLP", propDef.get("useStanfordNLP")).toString.toBoolean
+  val stanfordTokenizerOption=prop.getOrDefault("stanfordTokenizerOption", propDef.get("stanfordTokenizerOption")).toString
+  val stanfordTaggerOption=prop.getOrDefault("stanfordTaggerOption", propDef.get("stanfordTaggerOption")).toString
+  val stanfordPatternFile=prop.getOrDefault("stanfordPatternFile", propDef.get("stanfordPatternFile")).toString
+  val useDependencyTree=prop.getOrDefault("useDependencyTree", propDef.get("useDependencyTree")).toString.toBoolean
+  val analyzNonUmlsTerm=prop.getOrDefault("analyzNonUmlsTerm", propDef.get("analyzNonUmlsTerm")).toString.toBoolean
+  var sentenceLenMax=prop.getOrDefault("sentenceLenMax", propDef.get("sentenceLenMax")).toString.toInt
+  val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
+  val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
+  val outputNoCuiSentence=prop.getOrDefault("outputNoCuiSentence", propDef.get("outputNoCuiSentence")).toString.toBoolean
+  val MMoptions = prop.getOrDefault("MMoptions", propDef.get("MMoptions")).toString.trim
+  val MMhost = prop.getOrDefault("MMhost", propDef.get("MMhost")).toString.trim
+  val MMport = prop.getOrDefault("MMport", propDef.get("MMport")).toString.trim
+  val MMenable=prop.getOrDefault("MMenable", propDef.get("MMenable")).toString.toBoolean
+  val MMscoreThreshold=prop.getOrDefault("MMscoreThreshold", propDef.get("MMscoreThreshold")).toString.toInt
+
+  println("\n\ndefault properties:")
+  propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))
+  println("\n\nCurrent properties:")
+  prop.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${prop.get(key).toString}"))
+  propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>{
+    if (prop.get(key) != null && !propDef.get(key).equals(prop.get(key))) {
+      println(s"!!! You change the configuration: key= [${key.toString}], from default value [${propDef.get(key).toString}] to [${prop.get(key).toString}}] !!!")
+    }
+  })
+
 
 }
 
@@ -271,5 +308,40 @@ class SqlUtils(driverUrl: String) extends java.io.Serializable{
     // Execute Query
     val rs = sqlStatement.executeQuery(sql)
     rs
+  }
+  def execUpdate (sql: String):Int = {
+    if (isInitJdbc == false){
+      initJdbc()
+    }
+    // Execute Query
+    val rs = sqlStatement.executeUpdate(sql)
+    rs
+  }
+}
+
+/**
+ * Some methods that wrap the method of joda-time (http://www.joda.org/joda-time/)
+ * For now, it is use to parse the duration string this is output of Stanford NLP.
+ * For duration, we use "2000-01-01T00:00:00" as the start point.
+ */
+object TimeX {
+  val timeParser = ISOPeriodFormat.standard()
+  val periodStart = new DateTime("2000-01-01T00:00:00")
+
+  /**
+   * Parse a 'Duration' string of stanfordNLP to a standard comparable 'Duration' using joda-time.
+   * @param timeStr Duration string from StanfordNLP 'Duration'
+   * @return
+   */
+  def parse(timeStr: String):Duration = {
+    try {
+      val p = timeParser.parsePeriod(timeStr).toDurationFrom(periodStart)
+      p
+    }catch {
+      case e:Exception => {
+        println(s"*** TimeX: parse duration fail. error: ${e}")
+        new Duration(-1)
+      }
+    }
   }
 }
