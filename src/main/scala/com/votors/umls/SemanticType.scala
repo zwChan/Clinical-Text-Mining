@@ -27,7 +27,7 @@ object SemanticType {
   val mapSty = new mutable.HashMap[String, SemanticType]()
   val mapAbbr2sty = new mutable.HashMap[String, String]()
   def init() = {
-    val ftype=Source.fromFile(Conf.rootDir + "\\data\\SemanticTypes_2013AA.txt")
+    val ftype=Source.fromFile(Conf.rootDir + "/data/SemanticTypes_2013AA.txt")
     for (line <- ftype.getLines() if line.trim.size > 5) {
       val tokens = line.split("\\|")
       val sty = mapSty.getOrElseUpdate(tokens(1),SemanticType(tokens(1)))
@@ -35,7 +35,7 @@ object SemanticType {
       sty.abbr = tokens(0)
       sty.fullName = tokens(2)
     }
-    val fgroup=Source.fromFile(Conf.rootDir + "\\data\\SemGroups.txt")
+    val fgroup=Source.fromFile(Conf.rootDir + "/data/SemGroups.txt")
     for (line <- fgroup.getLines() if line.trim.size > 5) {
       val tokens = line.split("\\|")
       val sty = mapSty.getOrElseUpdate(tokens(2),SemanticType(tokens(2)))

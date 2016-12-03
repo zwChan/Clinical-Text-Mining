@@ -268,7 +268,7 @@ $DUR2	  = ([]{0,5} [ { ner:DURATION } ]+ []{0,5})
 {
   ruleType: "tokens",  
   pattern: ( ("negative") ( []{1,20} ) ($MORETHAN) $DUR2 $PRIOR ( []{1,20} )  ),
-  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "KEY"),,Annotate($4, ner, "CUI_DISEASE_PT")),
+  action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "KEY"),Annotate($4, ner, "CUI_DISEASE_PT")),
   priority:100.0,
   stage:10,
   result: "MORETHAN_PT"

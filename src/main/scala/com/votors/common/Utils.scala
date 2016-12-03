@@ -119,10 +119,10 @@ object Utils extends java.io.Serializable{
 
   def strSimilarity(s1:String,s2:String, caseSensitive:Boolean=false):Float = {
     val diff = if (caseSensitive)
-      StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
+      StringUtils.getLevenshteinDistance(s1, s2)
     else
       StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
-    return diff.toFloat/math.max(s1.size, s2.size)
+    return 1 - diff.toFloat/math.max(s1.size, s2.size)
   }
 
 }

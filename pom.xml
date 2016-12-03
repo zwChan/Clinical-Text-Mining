@@ -11,7 +11,7 @@
     <!--<module>../../../e/05.code/java/ra/coc</module>-->
   <!--</modules>-->
   <!--<packaging>pom</packaging>-->
-  <name>"Clinical-Text-Mining"</name>
+  <name>"Clinicastl-Text-Mining"</name>
   
   <repositories>
     <repository>
@@ -254,6 +254,12 @@
       <version>2.9.4</version>
     </dependency>
 
+    <!-- you have to install as describing on: https://metamap.nlm.nih.gov/JavaApi.shtml -->
+    <dependency>
+      <groupId>gov.nih.nlm.nls</groupId>
+      <artifactId>metamap-api</artifactId>
+      <version>2.0</version>
+    </dependency>
 
 
   </dependencies>

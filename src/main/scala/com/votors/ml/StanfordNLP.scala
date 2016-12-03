@@ -95,7 +95,7 @@ object StanfordNLP {
         sentId += 1  // sentence id is a index in the criteria
         val retPatterns = ParseSentence(sentence,sentId).getPattern()
         // get metamap result, associating the result with our result in the same pattern
-        val mmRets = MMApi.process(PTBTokenizer.ptb2Text(sentence.get(classOf[TextAnnotation])))
+        val mmRets = MMApi.process(PTBTokenizer.ptb2Text(sentence.get(classOf[TextAnnotation])),sentId)
         compareCuiResult(mmRets,retPatterns)
         //if (retPatterns.size > 0) {
           //retPatterns.foreach(_.metamapList.appendAll(mmRets.iterator()))
@@ -112,19 +112,33 @@ object StanfordNLP {
   }
 
   def compareCuiResult(metaMap:Seq[MMResult], ours: Seq[CTPattern]) = {
-    for (mm <- metaMap) {
-      for (pt <- ours) {
-        pt.ner2groups.foreach(_.cuis.foreach(s=>{
-          if (mm.cui.equals(s.cui)){
+    for (pt <- ours) {
+      pt.ner2groups.foreach(_.cuis.foreach(s=>{
+        //s.matchDesc.clear()
+        for (mm <- metaMap) {
+          if (mm.cui.equals(s.cui)) {
             mm.matchType |= 1
             s.matchType |= 1
           }
-          if (Utils.strSimilarity(mm.orgStr,s.orgStr) >= Conf.umlsLikehoodLimit/100.0){
+          if (Utils.strSimilarity(mm.orgStr, s.orgStr) >= Conf.umlsLikehoodLimit / 100.0) {
             mm.matchType |= 2
             s.matchType |= 2
           }
-        }))
-      }
+          if (s.matchType == 3) {
+            s.matchDesc.append(s"{${mm.shortDesc}}#")
+            mm.matchDesc.append(s"{${s.shortDesc}}#")
+          } else if (s.matchType == 2) {
+            s.matchDesc.append(s"[${mm.shortDesc}]#")
+            mm.matchDesc.append(s"[${s.shortDesc}]#")
+          } else if (s.matchType >= 1) {
+            s.matchDesc.append(s"(${mm.shortDesc})#")
+            mm.matchDesc.append(s"(${s.shortDesc})#")
+          }else {
+            s.matchDesc.append(s"${mm.shortDesc}#")
+            mm.matchDesc.append(s"${s.shortDesc}#")
+          }
+        }
+      }))
     }
   }
 
