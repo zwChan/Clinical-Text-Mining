@@ -20,11 +20,13 @@ import gov.nih.nlm.nls.metamap.PCM
 import gov.nih.nlm.nls.metamap.Mapping
 import gov.nih.nlm.nls.metamap.Ev
 
-case class MMResult(cui:String, score:Int,orgStr:String,cuiStr:String,pfName:String) {
+case class MMResult(cui:String, score:Int,orgStr:String,cuiStr:String,pfName:String, sent:String) {
   val sourceSet = new util.HashSet[String]
   val stySet = new util.HashSet[String]
   val span = new IntPair(-1,-1)
   var neg = -1
+  var sentId = 0
+  var matchType = 0; //match with our result: 1=same cui; 2= same orgStr; 3=1+2
   val sb: StringBuilder = new StringBuilder
   override def toString = sb.toString()
 }
@@ -38,7 +40,9 @@ object MMApi {
   /**
     * given a string (sentence), return the result from Metamap.
   */
-  def process(terms: String): util.ArrayList[MMResult] = {
+  def process(terms: String): Seq[MMResult] = {
+    if (!Conf.MMenable) return Seq()
+    init()
     val resultList: util.List[Result] = api.processCitationsFromString(terms)
     val mmRets = new util.ArrayList[MMResult]()
     for (result <- resultList) {
@@ -47,39 +51,45 @@ object MMApi {
         for (pcm <- utterance.getPCMList) {
           for (map <- pcm.getMappingList) {
             for (mapEv <- map.getEvList) {
-              val mmRet = MMResult(mapEv.getConceptId, mapEv.getScore,mapEv.getMatchedWords.mkString(" "),mapEv.getConceptName,mapEv.getPreferredName)
-              mmRets.add(mmRet)
+              val mmRet = MMResult(mapEv.getConceptId, math.abs(mapEv.getScore), mapEv.getMatchedWords.mkString(" "), mapEv.getConceptName, mapEv.getPreferredName, terms)
               val sb: StringBuilder = new StringBuilder
-              mmRet.sourceSet.addAll(mapEv.getSources)
-              mmRet.stySet.addAll(mapEv.getSemanticTypes)
-              for (p <- mapEv.getPositionalInfo) {
-                if (mmRet.span.get(0) == -1 || p.getX < mmRet.span.get(0)) mmRet.span.set(0,p.getX)
-                if (mmRet.span.get(1) == -1 || p.getX+p.getY > mmRet.span.get(1)) mmRet.span.set(1,p.getX+p.getY)
+              mmRet.sourceSet.addAll(mapEv.getSources.filter(sab => sab.matches(Conf.sabFilter)))
+              mmRet.stySet.addAll(mapEv.getSemanticTypes.filter(sty => Conf.semanticType.indexOf(SemanticType.mapAbbr2sty(sty)) >= 0))
+              if (mmRet.sourceSet.size > 0 && mmRet.stySet.size > 0 && mmRet.score >= Conf.MMscoreThreshold) {
+                mmRets.add(mmRet)
+                for (p <- mapEv.getPositionalInfo) {
+                  if (mmRet.span.get(0) == -1 || p.getX < mmRet.span.get(0)) mmRet.span.set(0, p.getX)
+                  if (mmRet.span.get(1) == -1 || p.getX + p.getY > mmRet.span.get(1)) mmRet.span.set(1, p.getX + p.getY)
+                }
+                mmRet.neg = mapEv.getNegationStatus
+                mmRet.sb.append(mapEv.getConceptId + "|"
+                  + mmRet.orgStr + "|"
+                  + mmRet.cuiStr + "|"
+                  + mapEv.getPositionalInfo + "|"
+                  + mmRet.stySet.mkString(" ") + "|"
+                  + mmRet.span + "|"
+                  + mmRet.sourceSet.mkString(" ") + "|"
+                  + mmRet.stySet.mkString(" ") + "|"
+                  + utterance.getString)
+                println(mmRet.sb)
+              } else {
+                println(s"filter by sty:${mmRet.stySet.size}, sab:${mmRet.sourceSet.size}, ${mmRet.score}, ${mmRet.cui}, ${mmRet.orgStr}")
               }
-              mmRet.neg = mapEv.getNegationStatus
-              mmRet.sb.append(mapEv.getConceptId + "|"
-                + mmRet.sourceSet.mkString(" ") + "|"
-                + mmRet.orgStr + "|"
-                + mmRet.cuiStr + "|"
-                + mapEv.getPositionalInfo + "|"
-                + mmRet.stySet.mkString(" ") +  "|"
-                + mmRet.span +  "|"
-                + utterance.getString)
-              println(mmRet.sb)
             }
           }
         }
       }
     }
-    return mmRets
+    return mmRets.to[Seq]
   }
 
-  def init():Unit = {
+  private def init():Unit = {
     if (api != null) return
     api = new MetaMapApiImpl
     if (Conf.MMhost.trim.size > 0)api.setHost(Conf.MMhost)
     if (Conf.MMport.trim.size > 0)api.setPort(Conf.MMport.toInt)
     val options: String = Conf.MMoptions
+    api.setOptions(options)
   }
 
   def main(args: Array[String]) {

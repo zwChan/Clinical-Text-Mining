@@ -12,7 +12,7 @@ import edu.stanford.nlp.hcoref.CorefCoreAnnotations.CorefChainAnnotation
 import edu.stanford.nlp.hcoref.data.CorefChain
 import edu.stanford.nlp.ie.machinereading.structure.MachineReadingAnnotations.RelationMentionsAnnotation
 import edu.stanford.nlp.ling.CoreAnnotations._
-import edu.stanford.nlp.ling.tokensregex.{TokenSequenceMatcher, TokenSequencePattern, MatchedExpression}
+import edu.stanford.nlp.ling.tokensregex.{MatchedExpression, TokenSequenceMatcher, TokenSequencePattern}
 import edu.stanford.nlp.parser.lexparser.LexicalizedParser
 import edu.stanford.nlp.pipeline.{Annotation, StanfordCoreNLP}
 import edu.stanford.nlp.process.PTBTokenizer.PTBTokenizerFactory
@@ -23,19 +23,18 @@ import edu.stanford.nlp.time.TimeAnnotations.TimexAnnotation
 import edu.stanford.nlp.trees.Tree
 import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
 import edu.stanford.nlp.util.CoreMap
-import edu.stanford.nlp.time.{TimeExpression, TimeAnnotations, Timex}
+import edu.stanford.nlp.time.{TimeAnnotations, TimeExpression, Timex}
 
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.collection.JavaConverters._
-
 import breeze.numerics.abs
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
 import com.votors.common._
-import com.votors.umls.{CTPattern, ParseSentence, UmlsTagger2}
+import com.votors.umls._
 import edu.stanford.nlp.io.EncodingPrintWriter.out
 import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
 import opennlp.tools.chunker._
@@ -52,11 +51,8 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.io.File
 import scala.util.control.Breaks._
-
-import edu.stanford.nlp.ling.{CoreAnnotations, Word, CoreLabel, HasWord}
-;
-import edu.stanford.nlp.process.{WordTokenFactory, CoreLabelTokenFactory, DocumentPreprocessor, PTBTokenizer}
-;
+import edu.stanford.nlp.ling.{CoreAnnotations, CoreLabel, HasWord, Word}
+import edu.stanford.nlp.process.{CoreLabelTokenFactory, DocumentPreprocessor, PTBTokenizer, WordTokenFactory}
 
 import scala.util.control.Exception
 ;
@@ -88,7 +84,7 @@ object StanfordNLP {
   val pipeline = init()
 
   def findPattern(text: String) = {
-    val retList = new ArrayBuffer[(CoreMap,CTPattern)]()
+    val retList = new ArrayBuffer[(CoreMap,Seq[CTPattern],Seq[MMResult])]()
     // we split using semicolon first, because stanfordNlp doesnot treat semicolon as a delimiter.
     text.split(";").filter(_.trim.length>0).foreach(sent=>{
       val document: Annotation = new Annotation(sent)
@@ -98,17 +94,38 @@ object StanfordNLP {
       for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).size <= Conf.sentenceLenMax) {
         sentId += 1  // sentence id is a index in the criteria
         val retPatterns = ParseSentence(sentence,sentId).getPattern()
-        if (retPatterns.size > 0) {
-          retList ++= retPatterns.map((sentence, _))
-        } else {
-          retList.append((sentence, null.asInstanceOf[CTPattern]))
-        }
+        // get metamap result, associating the result with our result in the same pattern
+        val mmRets = MMApi.process(PTBTokenizer.ptb2Text(sentence.get(classOf[TextAnnotation])))
+        compareCuiResult(mmRets,retPatterns)
+        //if (retPatterns.size > 0) {
+          //retPatterns.foreach(_.metamapList.appendAll(mmRets.iterator()))
+          retList.append((sentence,retPatterns, mmRets))
+        //} else {
+          //retList.append((sentence, null.asInstanceOf[Seq[CTPattern]))
+        //}
       }
     })
     retList.filter(_._2 != null).foreach(p=>{
       println(s"findPattern: ${p._1.get(classOf[TextAnnotation])}, ${p._2.toString}")
     })
     retList
+  }
+
+  def compareCuiResult(metaMap:Seq[MMResult], ours: Seq[CTPattern]) = {
+    for (mm <- metaMap) {
+      for (pt <- ours) {
+        pt.ner2groups.foreach(_.cuis.foreach(s=>{
+          if (mm.cui.equals(s.cui)){
+            mm.matchType |= 1
+            s.matchType |= 1
+          }
+          if (Utils.strSimilarity(mm.orgStr,s.orgStr) >= Conf.umlsLikehoodLimit/100.0){
+            mm.matchType |= 2
+            s.matchType |= 2
+          }
+        }))
+      }
+    }
   }
 
   def main (args: Array[String]): Unit= {
@@ -122,7 +139,7 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "No active pulmonary tuberculosis No acute bronchitis or pneumonia No acute or chronic respiratory failure Other"
+    val text = "History of myocardial infarction or unstable angina within last 12 months prior to study enrollment."
     // create an empty Annotation just with the given text
 
     findPattern(text).foreach(_ => println(""))

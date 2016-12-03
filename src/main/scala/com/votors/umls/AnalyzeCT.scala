@@ -163,6 +163,8 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   var negAheadKey = 0 // negation count before the KEY
   val span = new IntPair(-1,-1)
   var keyPos = -1
+  //val metamapList = new ArrayBuffer[MMResult]() // the result return by metamap
+
   /* *******************************************************
    * Init the information that is used in all Pattern
    ********************************************************/
@@ -683,7 +685,7 @@ object CTPattern {
 case class CTRow(val tid: String, val criteriaType:String, var sentence:String, var markedType:String="", var depth:String="-1", var cui:String="None", var cuiStr:String="None"){
   var hitNumType = false
   var criteriaId = 0
-  val patternList = new ArrayBuffer[(CoreMap, CTPattern)]()
+  val patternList = new ArrayBuffer[(CoreMap, Seq[CTPattern], Seq[MMResult])]()
   var subTitle = "None"
   var splitType = "#"
 
@@ -742,10 +744,22 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tmetamapMatch\tsentLen\tsentence"
     else
       ""
   }
+
+  def metamapOutputCui(writer:PrintWriter, mmResult: MMResult) = {
+    val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
+    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(":")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${"metamap"}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
+    writer.println( str.replace("\"","\\\""))
+
+  }
+  def getMetamapTitle() = {
+    s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tneg\ttermId\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tmetamapMatch\tsentLen\tsentence"
+  }
+
+
 }
 
 
@@ -844,9 +858,11 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
   def analyzeFile(jobType:String="parse"): Unit = {
     var writer = new PrintWriter(new FileWriter(outputFile))
     var writer_cui = new PrintWriter(new FileWriter(outputFile+".cui"))
+    var writer_mm_cui = new PrintWriter(new FileWriter(outputFile+".mm.cui"))
     var writer_norm = new PrintWriter(new FileWriter(outputFile+".norm"))
     writer.println(CTRow("","","").getTitle(jobType))
     writer_cui.println(CTRow("","","").getTitle("cui"))
+    writer_mm_cui.println(CTRow("","","").getMetamapTitle())
     val in = new FileReader(csvFile)
     val records = CSVFormat.DEFAULT
       .withRecordSeparator("\"")
@@ -961,25 +977,27 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           subTitle = sent
         }
 
-        try {
+//        try {
           if (jobType == "parse")
             detectKeyword(ctRow, writer)
           else if (jobType == "quantity")
             detectQuantity(ctRow, writer)
           else if (jobType == "pattern")
-            detectPattern(ctRow,writer,writer_cui,writer_norm)
-        } catch {
-          case e: Exception => System.err.println(e.toString + "\n" + e.getStackTraceString)
-        }
+            detectPattern(ctRow,writer,writer_cui,writer_mm_cui,writer_norm)
+//        } catch {
+//          case e: Exception => System.err.println(e.toString + "\n" + e.getStackTraceString)
+//        }
       })
       writer.flush()
       writer_cui.flush()
+      writer_mm_cui.flush()
       writer_norm.flush()
 
     })
 
     writer.close()
     writer_cui.close()
+    writer_mm_cui.flush()
     writer_norm.close()
 
     if (Conf.analyzNonUmlsTerm) {
@@ -1163,17 +1181,18 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     writer.close()
   }
 
-  def detectPattern (ctRow: CTRow, writer:PrintWriter, writer_cui:PrintWriter, writer_norm: PrintWriter) = {
+  def detectPattern (ctRow: CTRow, writer:PrintWriter, writer_cui:PrintWriter, writer_mm_cui:PrintWriter, writer_norm: PrintWriter) = {
     //writer.println(s"Tid\tType\tsentenId}")
     ctRow.patternList ++= StanfordNLP.findPattern(ctRow.sentence)
     if (ctRow.patternList.size>0) {
       ctRow.patternList.foreach(p => {
-        if (p._2 != null) {
-          writer.println(s"${ctRow.patternOutput(p._2)}")
-          ctRow.patternCuiDurOutput(writer_cui, p._2, "")
-        }else {
-          writer.println(s"${ctRow.patternOutput(null, p._1.get(classOf[TextAnnotation]))}")
-        }
+        p._2.foreach(pt=>{
+          writer.println(s"${ctRow.patternOutput(pt)}")
+          ctRow.patternCuiDurOutput(writer_cui, pt, "")
+        })
+        p._3.foreach(mm=>{
+          ctRow.metamapOutputCui(writer_mm_cui, mm)
+        })
       })
     }else{
       writer.println(s"${ctRow.patternOutput(null,ctRow.sentence)}")
@@ -1223,15 +1242,15 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
           lemma = ""
         } else {
           // for each cui, combine all token
-          patterns.foreach(sp => {
-            sp._2.ner2groups.foreach(p => {
+          patterns.foreach(_._2.foreach(sp => {
+            sp.ner2groups.foreach(p => {
               p.cuis.foreach(c => {
                 if (c.span.get(1) == index+1) { // usually the last word is a noun,
                   lemma = getLemmaTerm(orgText,lemmas,pos,c.orgStr)
                 }
               })
             })
-          })
+          }))
           if (lemma == "") lemma = s"${t}_${p}"
         }
         lemma

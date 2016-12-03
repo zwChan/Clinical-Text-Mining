@@ -1,19 +1,20 @@
 package com.votors.common
 
 import java.io._
-import java.sql.{ResultSet, DriverManager, Statement, Connection}
-import java.util.{Random, Properties, Date}
+import java.sql.{Connection, DriverManager, ResultSet, Statement}
+import java.util.{Date, Properties, Random}
 
 import edu.stanford.nlp.util
 import edu.stanford.nlp.util.IntPair
-import org.apache.commons.csv.{CSVRecord, CSVFormat}
-import org.joda.time.{Duration, DateTime, Period}
+import org.apache.commons.csv.{CSVFormat, CSVRecord}
+import org.apache.commons.lang3.StringUtils
+import org.joda.time.{DateTime, Duration, Period}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.io.Source
 import scala.io.Codec
 import org.joda.time.format.ISOPeriodFormat
@@ -115,6 +116,15 @@ object Utils extends java.io.Serializable{
   def span1based(span: IntPair) = {
     new util.IntPair(span.get(0)+1, span.get(1)+1)
   }
+
+  def strSimilarity(s1:String,s2:String, caseSensitive:Boolean=false):Float = {
+    val diff = if (caseSensitive)
+      StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
+    else
+      StringUtils.getLevenshteinDistance(s1.toLowerCase, s2.toLowerCase)
+    return diff.toFloat/math.max(s1.size, s2.size)
+  }
+
 }
 
 object Conf extends java.io.Serializable{
@@ -250,6 +260,8 @@ object Conf extends java.io.Serializable{
   val MMoptions = prop.getOrDefault("MMoptions", propDef.get("MMoptions")).toString.trim
   val MMhost = prop.getOrDefault("MMhost", propDef.get("MMhost")).toString.trim
   val MMport = prop.getOrDefault("MMport", propDef.get("MMport")).toString.trim
+  val MMenable=prop.getOrDefault("MMenable", propDef.get("MMenable")).toString.toBoolean
+  val MMscoreThreshold=prop.getOrDefault("MMscoreThreshold", propDef.get("MMscoreThreshold")).toString.toInt
 
   println("\n\ndefault properties:")
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${propDef.get(key).toString}"))

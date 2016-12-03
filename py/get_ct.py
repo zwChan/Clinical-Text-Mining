@@ -20,17 +20,23 @@ for line in f.readlines():
     (index, url) = line.split('\t',1)
     #url = "https://www.ncbi.nlm.nih.gov/pubmed/20482476"
     # print (url)
-    html = urllib2.urlopen(url).read()
-    soup = BeautifulSoup(html, 'html.parser')
-    texts = soup.findAll(text=True)
-    visible_texts = filter(visible, texts)
-    text = filter(lambda x: len(x.strip())>5, visible_texts)
-    text2 = " ".join(text)
-    match = re.match(".*(\\bNCT\\d{5,15}\\b).*", text2, re.MULTILINE+re.DOTALL+re.UNICODE)
-    if match is not None:
-        ct = match.group(1)
-        # print (text2.encode('utf-8'))
-        print("%s\t%s" % (index, ct))
-    else:
-        print("%s\t%s" % (index, "None"))
+    try:
+        html = urllib2.urlopen(url).read()
+        soup = BeautifulSoup(html, 'html.parser')
+        texts = soup.findAll(text=True)
+        visible_texts = filter(visible, texts)
+        text = filter(lambda x: len(x.strip())>5, visible_texts)
+        text2 = " ".join(text)
+        match = re.match(".*(\\bNCT\\d{5,15}\\b).*", text2, re.MULTILINE+re.DOTALL+re.UNICODE)
+        if match is not None:
+            ct = match.group(1)
+            # print (text2.encode('utf-8'))
+            print("%s\t%s" % (index, ct))
+        #elif None != re.match(".*(\\bclinicaltrials\\.gov\\b).*", text2, re.MULTILINE+re.DOTALL+re.UNICODE+re.IGNORECASE):
+        elif None != re.match(".*(\\bclinicaltrials\\b).*", text2, re.MULTILINE+re.DOTALL+re.UNICODE+re.IGNORECASE):
+            print("%s\t%s" % (index, "clinicaltrials.gov"))
+        else:
+            print("%s\t%s" % (index, "None"))
+    except:
+        print("%s\t%s" % (index, "Error"))
 
