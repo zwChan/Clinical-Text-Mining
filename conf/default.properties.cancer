@@ -1,0 +1,239 @@
+###########################################################3333333333
+############# UMLS term matching configuration #####################3
+# jdbcDriver is the database url that uses for extern info for a term in UMLS. e.g. selecting TUI by CUI from the table MRSTY.
+# for now, table mrstr is neccessary
+jdbcDriver=jdbc:mysql://somelab12.cci.fsu.edu:3306/umls?user=root&password=HeRa@CCI@FSU
+
+#url of solr we use to match umls term
+solrServerUrl=http://somelab12.cci.fsu.edu:8983/solr
+
+# caseFactor is [0, 1] value. It indicates how much you concern the case. It will affect the similarity score
+# when you select a term from solr. Value 0 means upcase and lowcase are totally different, and
+# value 1 means upcase and lowcase are not different at all.
+caseFactor=0.8
+
+#not used for now
+#Should we take the newline as the end of a sentence? or just ignore the newline?
+#  1: replace with space; 2: replace with '.'; 0: do nothing
+ignoreNewLine=2
+
+
+#######################################################################
+########## data source to fetching configuration ######################
+# how to get the text to get Ngram; the blogId will select as distict, and the blogTextCol will be limit to 1 row.
+blogDbUrl=jdbc:mysql://somelab12.cci.fsu.edu:3306/cancerqa?user=root&password=HeRa@CCI@FSU
+blogTbl=qa_data
+#blogTbl=content_org_new
+#blogTbl=yahootumblr
+blogIdCol=id
+#blogIdCol=blogId
+blogTextCol=concat(subject, ". ", question_content, ". ", answer_content)
+#blogTextCol=text_content
+#blogTextCol=content
+
+# limit the blog to be analyzed, mainly for test
+blogLimit=2000000000
+
+#target term info in database
+targetTermTbl=_target_term_
+targetTermTblDropAndCreate=true
+# if true, using solr for matching a ngram with target terms, else using database query for matching
+targetTermUsingSolr=True
+
+#######################################################################
+################### NLP relative configuration ###############################
+#root dir of lvg
+lvgdir=/data/ra/lvg2015/
+useStanfordNLP=true
+stanfordTokenizerOption=
+stanfordTaggerOption=model=edu/stanford/nlp/models/pos-tagger/english-left3words/english-left3words-distsim.tagger
+#stanfordPatternFile=C:\\fsu\\ra\\UmlsTagger\\conf\\pattern_cancer.txt
+# use the dependcy tree to find terms before using the syntactic tree.
+useDependencyTree=true
+partUmlsTermMatch=false
+
+# for pattern parsing
+analyzNonUmlsTerm = true
+# the maximum length of a sentence. (character, not word)
+sentenceLenMax=500
+
+# include POS tagger. The Ngram (basic terms) have to contain at least one of those POS tagger. it also the definition of 'noun' in this tool. No filter if empty
+#posInclusive=NN NNS NNP NNPS
+posInclusive=
+# 0 - 100. if the similarity score for a ngram is greater than this threshold, the ngran will be consider as umls term
+umlsLikehoodLimit=30
+# the window length to fetch context of a ngram
+WinLen=10
+
+# use to force delimit gram. Delimiter = Pattern.compile("[,;/\\:\\(\\)\\[\\]\\{\\}\"]+")
+delimiter =[,;/\\:\\(\\)\\[\\]\\{\\}\"]+
+
+# how does ngram  match the stop words list? 0:exactly matching; 1: ngram contains any stop word; 2: ngram start or end with any stop word; others: no filter
+stopwordMatchType=2
+# besides the file of stop word, you can specify a regex to indicate what is a stop word.
+# exclude the gram start or end with digit. (remove the matched item)
+# exclude words only start or end with one letter
+# next line    ----- for clustering
+stopwordRegex=^\\d+.*|.*\\d$|^\\S(\\s.*|$)|(^|.*\\s)\\S
+#stopwordRegex=aaaaaaaaaaaaaaaaaaaaaaaa
+# pos tagger filter (remove the matched item). 1: no noun; 2: ^N+P+N 3: not end with N
+#posFilterRegex=[^N]* [^N]*PN .*[^N]$
+posFilterRegex=[^N]*
+# a regex to check a string as a whole (may be several words) should query for a CUI or not
+#(different form stopwords check since stop word checks every word in a string)
+# 1. no a-z; 2. started or ended a word without a-z
+cuiStringFilterRegex=[^a-zA-Z]*|^[^a-zA-Z]+\\s.*|.*\\s[^a-zA-Z]+$
+
+#######################################################################
+############### Ngram relative configuration ###################################
+# the threshold of tf when fetch ngram in partition
+partitionTfFilter=2
+# the threshold of tf when fetch ngram in first stage
+stag1TfFilter=5
+stag1CvalueFilter=2
+# the threshold of tf when fetch ngram in second stage
+stag2TfFilter=100
+stag2CvalueFilter=2
+# the thresholh of umls/chv score. no filter if it is -1
+stag2UmlsScoreFilter= 30
+stag2ChvScoreFilter=-1
+
+# if any of this greater than 0, it will rank the ngram, and take the top N.
+# this configuration can affect bags of words function.
+topTfNgram=0
+topCvalueNgram=0
+topTfdfNgram=0
+
+######################## bags of words configuration ###############
+bagsOfWord=false
+bagsOfWordFilter=true
+bowTopNgram=2000
+######################## end of bags of words configuration ######
+
+#######################################################################
+############# Clustering relative configuration ##########################
+# Nlp do not allow multi-thread, so you can not use local[N] for generating Ngram, but you can use it to run kmeans
+sparkMaster=
+partitionNumber=8
+
+#####*_*####get the training data from (previous save) file, do not construct the Ngram again.
+clusteringFromFile=false
+ngramSaveFile=/tmp/ngram_cancer.serd.no_bow
+########### only use chv term as trainig data
+trainOnlyChv=true
+# filter the ngran before run kmeans (remove the matched item)
+trainedNgramFilterPosRegex=[^N]*PN
+# how many percent of the data is sample as test data(for evaluation), <= 0, no thing is test
+testSample=30
+sampleRuns=10
+#number of ngram for training. For test purpose. <0: no limit;
+trainNgramCnt=-1
+
+####### if normalized the feature to [0,1] range. see https://en.wikipedia.org/wiki/Feature_scaling
+# Rescaling or Standardization
+normalizeFeature=true
+#rescale to [0,1]
+normalize_rescale=true
+# the same as z-score. Be sure you know what it affects if you try to use it
+normalize_standardize=false
+# if the z-score of a value is grater than this factor, it is considered as outlier and will be regular to the value to whose z-score is this factor.
+#like a lower boundary and upper boundary
+normalize_outlier_factor=2
+# generate feature vectors only. So you can use the vectors in R or other tools.
+outputVectorOnly=false
+# PCA only. Compact the feature space matrix to a N dimensions space using PCA. <=0, do nothing.
+pcaDimension=0
+
+
+# the feature used in kmeans
+#           tfdf,cvalue,umls_score,chv_score,contain_umls,contain_chv,win_umls,win_chv,sent_umls,sent_chv,umls_dist,chv_dist,nn,an,pn,anpn,stys,win_pos,capt_first,capt_all,capt_term
+useFeatures4Train=tfdf:0,tf,df,cvalue:1,umls_score:0.5,chv_score:0,contain_umls:1,contain_chv:1,nn,an,pn,anpn,stys:0,win_pos,capt_first,capt_all,capt_term,prefix:1,suffix:1,win_umls,win_chv,sent_umls,sent_chv,umls_dist,chv_dist
+useFeatures4Test =tfdf:0,tf,df,cvalue:1,umls_score:0.5,chv_score:0,contain_umls:1,contain_chv:1,nn,an,pn,anpn,stys:0,win_pos,capt_first,capt_all,capt_term,prefix:1,suffix:1,win_umls,win_chv,sent_umls,sent_chv,umls_dist,chv_dist
+#useFeatures4Train=tfdf,cvalue,umls_score,chv_score,contain_umls,contain_chv,nn,an,pn,anpn,stys,win_pos,capt_first,capt_all,capt_term,prefix,suffix,win_umls,win_chv,sent_umls,sent_chv,umls_dist,chv_dist
+#useFeatures4Test =tfdf,cvalue,umls_score,chv_score,contain_umls,contain_chv,nn,an,pn,anpn,stys,win_pos,capt_first,capt_all,capt_term,prefix,suffix,win_umls,win_chv,sent_umls,sent_chv,umls_dist,chv_dist
+
+
+# the top semantic type we make it as features; only for 'getUmlsScore' function, not 'select'
+# for chv paper
+semanticType=T033,T121,T061,T047,T109,T023,T184,T074,T116,T123,T059,T046
+# for clinical trails pattern paper
+#semanticType=T200,T020,T190,T049,T019,T047,T050,T037,T048,T191,T046,T184,T060,T065,T058,T059,T063,T062,T061
+# all semantic type sorted by largest to smallest in size
+#semanticType=T204,T007,T200,T061,T109,T002,T121,T116,T033,T004,T201,T023,T028,T123,T047,T074,T037,T060,T126,T013,T129,T044,T170,T191,T029,T059,T043,T005,T012,T114,T015,T130,T058,T014,T030,T046,T081,T011,T019,T026,T131,T167,T097,T197,T024,T195,T025,T192,T073,T034,T040,T122,T203,T083,T042,T082,T045,T048,T184,T080,T169,T194,T168,T078,T079,T125,T098,T020,T039,T190,T093,T031,T196,T049,T067,T038,T127,T062,T171,T185,T041,T091,T032,T018,T054,T055,T070,T057,T077,T065,T090,T068,T089,T064,T022,T056,T092,T104,T052,T099,T063,T086,T101,T120,T087,T051,T017,T102,T066,T001,T008,T016,T100,T075,T050,T069,T096,T095,T053,T072,T094,T010,T103,T071,T085,T021,T088
+# filter the semantic type by a regular expression. tag extraction function.
+#sabFilter=SNOMEDCT_US|NCI|GO
+sabFilter=.*
+# the syntax that occur around a ngram in a window. they have been transformed to a single character
+posInWindown=CMDEFPANURTVO
+# prefix/suffix use window or only process ngram itself
+prefixSuffixUseWindow=false
+tfdfLessLog=false
+
+###### k-mean parameters #######
+# if run k-mean or not
+runKmeans=true
+# the start/end/step point of the k (cluster number)
+k_start=5
+k_end=500
+k_step=5
+# the maximum of iteration of the k-mean algorithm if it is not convergent
+maxIterations=1000
+# run the following number of times for every k, and take the least cost one
+runs=10
+# if remove these clusters that contain too small number of points.
+reviseModel=true
+#################################
+# how many percent of the training data does a cluster at least contain (compare to the average number of ngram in a cluster. ?
+clusterThresholdPt=10
+clusterThresholdLimit=3
+# the number of point sampled to calculate the average distance of point to centers
+clusterThresholSample=500
+# if (the distance of a center to other centers) / (average distance of a point to a center) > (this factor), this center will not be discard.
+clusterThresholFactor=3
+# get the score for every K(number of cluster), and then we can choose a 'best' K.
+#see:https://en.wikipedia.org/wiki/Silhouette_(clustering)
+clusterScore=false
+#######################################
+### Ranking relative configuration ###
+# get the baseline result( rank on tfall and cvlaue)
+baseLineRank=true
+runRank=true
+# the granular of rank (percent), e.g. rankGranular=5 work as 5%, 10%, 15%,
+rankGranular=5
+# since rank are based on percentage of ngram, this parameter specify the base number to calculate the percentage.
+# percentage = (# of current ngram)/rankLevelBase, -1: use number of tested ngram if testSample>0, or use number of all ngram
+rankLevelBase=-1
+# specify how many level of percentage, e.g. 4 means 5%,10%,15%,20%, the percentage may be greater than 100%
+rankLevelNumber=40
+
+# the beta value for evaluating f-score, see:https://en.wikipedia.org/wiki/F1_score
+# Two other commonly used F measures are the F_{2} measure, which weights recall higher than precision,
+#and the F_{0.5} measure, which puts more emphasis on precision than recall.
+fscoreBeta=0.5
+
+# ranking with the training data, mainly to evaluatation
+rankWithTrainData=false
+
+#######################################################################
+############### Output configuration ##################################
+# output normalized text for word2vex
+outputNormalizedText=true
+#show original ngram before training
+showOrgNgramNum=0
+showSentence=true
+# save the above showing ngram to file
+saveNgram2file=/tmp/orgGram.txt
+# shown ngram filter based on N
+showOrgNgramOfN=1,2,3,4,5
+# shown ngram filter based on pos tagger
+showOrgNgramOfPosRegex=.*
+# shown ngram filter based on text
+showOrgNgramOfTextRegex=.*
+# show the number of ngram in every cluster. <0, show nothing
+showNgramInCluster=0
+#show the average and standard deviation of tf in clusters. Not configurable, always true
+#showTfAvgSdInCluster=true
+#how many percent of ngram is shown the detail after rank. it show info of every ngram in this top ${showDetailRankPt} percent; <0 don't show detail;
+showDetailRankPt=0
+# if a Ngram math this filter(regex), the detail information will output to console..
+debugFilterNgram=aaaaaaaaaaaaaaaaaa
