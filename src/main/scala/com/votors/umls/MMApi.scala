@@ -71,7 +71,13 @@ object MMApi {
               val sb: StringBuilder = new StringBuilder
               mmRet.sourceSet.addAll(mapEv.getSources.filter(sab => sab.matches(Conf.sabFilter)))
               mmRet.stySet.addAll(mapEv.getSemanticTypes.map(SemanticType.mapAbbr2sty.getOrElse(_,"None")).filter(sty => Conf.semanticType.indexOf(sty) >= 0))
-              if (mmRet.sourceSet.size > 0 && mmRet.stySet.size > 0 && mmRet.score >= Conf.MMscoreThreshold) {
+              if (mmRet.sourceSet.size > 0
+                && mmRet.stySet.size > 0
+                && mmRet.score >= Conf.MMscoreThreshold
+                && !Nlp.checkStopword(mmRet.orgStr,true)
+                && !mmRet.orgStr.matches(Conf.cuiStringFilterRegex)
+                && !mmRets.exists(mm=>mm.cui.equals(mmRet.cui) && mm.orgStr.equals(mmRet.orgStr) && mm.score==mmRet.score)
+               ) {
                 mmRets.add(mmRet)
                 for (p <- mapEv.getPositionalInfo) {
                   if (mmRet.span.get(0) == -1 || p.getX < mmRet.span.get(0)) mmRet.span.set(0, p.getX)
@@ -80,9 +86,9 @@ object MMApi {
                 mmRet.neg = mapEv.getNegationStatus
                 termId += 1
                 mmRet.termId = termId
-                print(mmRet.toString)
+                println(mmRet.toString)
               } else {
-                println(s"filter by sty:${mmRet.stySet.size}, sab:${mmRet.sourceSet.size}, ${mmRet.score}, ${mmRet.cui}, ${mmRet.orgStr}")
+                println(s"filter by sty:${mmRet.stySet.size}, sab:${mmRet.sourceSet.size}, ${mmRet.score}, ${mmRet.cui}, ${mmRet.orgStr}, or already exists.")
               }
             }
           }

@@ -40,7 +40,12 @@ case class Term(name:String, head:IndexedWord) {
   var isInConj = false
 
   def addModifier(m:IndexedWord, rel:String) = {
-    modifiers.append(m)
+    //modifiers.append(m)
+    var index = modifiers.indexWhere(_.index>=m.index)
+    if (index >= 0)
+      modifiers.insert(index,m)
+    else
+      modifiers.append(m)
     spanMerge(span,m.index,m.index)
   }
   def getModifiers = modifiers
@@ -275,7 +280,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
 
   /* Get cui if the group have not found cui by dependency.*/
-  def getCuiByTree(n:Int=5, tree: Tree=tree):Boolean = {
+  def getCuiByTree(n:Int=5, tree: Tree=tree, depth:Int=1):Boolean = {
     if (tree.isLeaf) {
       // do not find a cui
       return false
@@ -308,6 +313,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
             c.span.set(1,span1based(tree.getSpan).get(1))
           })
           g.cuis.appendAll(cuis)
+          println(cuis.map(_.shortDesc()).mkString("#"))
           //println(s"get cuis ${cuis.mkString("\t")}")
           return true
         }
@@ -315,9 +321,13 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     })
 
     var result = false
-    val kids = tree.children
-    for (kid <- kids) {
-      result ||= getCuiByTree(n,kid)
+    val kids = tree.getChildrenAsList
+    var cnt = 0
+    for (kid <- kids.iterator()) {
+      cnt += 1
+      println(s"${depth}/${cnt}/${tree.numChildren()}" + s" ${kid.numChildren()} kid=${kid.toString}")
+      val ret = getCuiByTree(n,kid,depth+1)
+      result ||= ret  // don't put together with above line.
     }
 
     // if there is cui found in its child node, we consider it as possible cui term.
@@ -413,7 +423,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         // we have to may a copy to make sure do not change the modifiers.
         val words = term.getModifiers.clone
         words.append(term.head)
-        val str = words.sortBy(_.index).map(_.value()).mkString(" ")
+        val str = words.map(_.value()).mkString(" ")
         val cuis = getCui(str)
         if (cuis.size>0) {
           termId += 1
@@ -433,7 +443,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           val modNum = term.getModifiers.size
           //first try the (longest suffix modifiers + head), if there is more than 2 modifiers
           var foundCui = false
-          if (modNum>=3) Range(1,modNum).foreach(idx=>if(!foundCui){
+          if (modNum>=2) Range(1,modNum).foreach(idx=>if(!foundCui){
             val str_longest = term.getModifiers.slice(idx,modNum).map(_.value).mkString(" ") + s" ${term.head.value}"
             val cuis_longest = getCui(str_longest)
             if (cuis_longest.size>0) {
@@ -452,6 +462,28 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
               g.cuis.appendAll(cuis_longest)
             }
           })
+          // search the possible noun phrase in modifiers
+          foundCui = false
+          for (left<-Range(0,modNum); right<-Range(1,modNum+1).sortBy(_ * -1)
+               if right - left >= 2 && !foundCui && term.getModifiers(right-1).tag.startsWith("N")) {
+            val str_longest = term.getModifiers.slice(left, right).map(_.value).mkString(" ")
+            val cuis_longest = getCui(str_longest)
+            if (cuis_longest.size>0) {
+              termId += 1
+              cuis_longest.foreach(c=>{
+                c.termId = termId
+                c.method = "partDep2"
+                c.tags = term.name
+                c.skipNum = getDepSkip(term.getModifiers.slice(left,right))
+                c.span.set(0,term.span.get(0))
+                c.span.set(1,term.span.get(1))
+                // FIXME maybe not so good to use the whole term as span
+              })
+              foundCui = true
+              term.cuis.appendAll(cuis_longest)
+              g.cuis.appendAll(cuis_longest)
+            }
+          }
           // try (every modifier + head) to find cui
           /*
           if (!foundCui) term.getModifiers.foreach(m=>{
@@ -1299,7 +1331,7 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
 
     // this is the parse tree of the current sentence
     val tree: Tree = sentence.get(classOf[TreeAnnotation])
-    println("### tree\n" + tree.pennPrint())
+    tree.pennPrint()
     // this is the Stanford dependency graph of the current sentence
     //val dependencies: SemanticGraph = sentence.get(classOf[BasicDependenciesAnnotation])
     //println("### basic dependencies 1\n" + dependencies)
@@ -1309,11 +1341,11 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
     //println("### ++ dependencies 3\n" + dependencies3)
 
     val tokens = sentence.get(classOf[TokensAnnotation])
-    println("### tokens\n" + tokens)
-    for (t <- tokens.iterator()) {
-      val ner = t.get(classOf[NamedEntityTagAnnotation])
-      print(s"${t}:${ner}\n")
-    }
+    println("### tokens:" + tokens)
+//    for (t <- tokens.iterator()) {
+//      val ner = t.get(classOf[NamedEntityTagAnnotation])
+//      print(s"${t}:${ner}\n")
+//    }
 
     val retList = new ArrayBuffer[CTPattern]()
     /* for every mached expressed, we collect the result information. */

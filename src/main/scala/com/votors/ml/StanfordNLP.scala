@@ -116,21 +116,24 @@ object StanfordNLP {
       pt.ner2groups.foreach(_.cuis.foreach(s=>{
         //s.matchDesc.clear()
         for (mm <- metaMap) {
+          var newMatchFlag = 0
           if (mm.cui.equals(s.cui)) {
             mm.matchType |= 1
             s.matchType |= 1
+            newMatchFlag |= 1
           }
           if (Utils.strSimilarity(mm.orgStr, s.orgStr) >= Conf.umlsLikehoodLimit / 100.0) {
             mm.matchType |= 2
             s.matchType |= 2
+            newMatchFlag |= 2
           }
-          if (s.matchType == 3) {
+          if (newMatchFlag == 3) {
             s.matchDesc.append(s"{${mm.shortDesc}}#")
             mm.matchDesc.append(s"{${s.shortDesc}}#")
-          } else if (s.matchType == 2) {
+          } else if (newMatchFlag == 2) {
             s.matchDesc.append(s"[${mm.shortDesc}]#")
             mm.matchDesc.append(s"[${s.shortDesc}]#")
-          } else if (s.matchType >= 1) {
+          } else if (newMatchFlag >= 1) {
             s.matchDesc.append(s"(${mm.shortDesc})#")
             mm.matchDesc.append(s"(${s.shortDesc})#")
           }else {
@@ -153,9 +156,8 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "History of myocardial infarction or unstable angina within last 12 months prior to study enrollment."
+    val text = "No known allergy to ingredients of study drug"
     // create an empty Annotation just with the given text
-
     findPattern(text).foreach(_ => println(""))
     return
 
