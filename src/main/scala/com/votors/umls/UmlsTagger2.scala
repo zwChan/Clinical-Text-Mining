@@ -376,8 +376,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
   //get pos after case/punctuation deleted(input has done this work)
   // XXX: This may be not a correct approach! but we do not rely on POS too much
-  def getPos(phraseNorm: Array[String]) = {
-    Nlp.getPos(phraseNorm,false)
+  def getPos(phraseNorm: Array[String], transfer: Boolean=false) = {
+    Nlp.getPos(phraseNorm,transfer)
   }
   //get sentence
   def getSent(phrase: String) = {
@@ -420,7 +420,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
   }
   def select_solr(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
-    val queryPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
+    val queryPos = getPos(phraseNorm.split(" "), true).sorted.mkString("+")
     val phraseStemmed = stemWords(phraseNorm)
     val phraseSorted = sortWords(phraseStemmed)
 
@@ -448,7 +448,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
         val sab = sdoc.getFieldValue("sab").asInstanceOf[String]
         val descrNorm = normalizeCasePunct(descr)
-        val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
+        val resultPos = getPos(descrNorm.split(" "),true).sorted.mkString("+")
         val score = computeScore(descr,
           scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
         Suggestion(score, descr, cui, aui,sab,phraseSorted,phrase)
@@ -469,7 +469,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    */
   def select_db(phrase: String): Array[Suggestion] = {
     val phraseNorm = normalizeCasePunct(phrase)
-    val queryPos = getPos(phraseNorm.split(" ")).sorted.mkString("+")
+    val queryPos = getPos(phraseNorm.split(" "),true).sorted.mkString("+")
     val phraseStemmed = stemWords(phraseNorm)
     val phraseSorted = sortWords(phraseStemmed)
 
@@ -490,7 +490,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val aui = rsp.getString("aui")
       val sab = rsp.getString("sab")
       val descrNorm = normalizeCasePunct(descr)
-      val resultPos = getPos(descrNorm.split(" ")).sorted.mkString("+")
+      val resultPos = getPos(descrNorm.split(" "),true).sorted.mkString("+")
       val score = computeScore(descr,
         scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
       suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase))

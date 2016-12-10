@@ -251,7 +251,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   def getCui(str: String, reduceBySty:Boolean=true): Array[Suggestion] = {
       var suggustions = UmlsTagger2.tagger.select(str,true,true)
         .filter(s=>{
-        var flag = s.score > Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
+        var flag = s.score >= Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
         var flag_sty = false
         s.stys.foreach(tui=>{
           flag_sty |= (Conf.semanticType.indexOf(tui) >=0)
@@ -485,22 +485,24 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
             }
           }
           // try (every modifier + head) to find cui
-          /*
-          if (!foundCui) term.getModifiers.foreach(m=>{
+          term.getModifiers.foreach(m=>{
             val str_part = s"${m.value} ${term.head.value}"
-            val cuis_part = getCui(str_part)
-            if (cuis_part.size>0) {
-              termId += 1
-              cuis_part.foreach(c=> {
-                c.termId = termId
-                c.method = "partDep1"
-                c.skipNum = getDepSkip(m::term.head::Nil)
-              })
-              term.cuis.appendAll(cuis_part)
-              g.cuis.appendAll(cuis_part)
+            val isContained = if (g.cuis.size>0)g.cuis.map(_.orgStr.contains(str_part)).reduce(_ || _) else false
+            if (!isContained) {
+              val cuis_part = getCui(str_part)
+              if (cuis_part.size > 0) {
+                termId += 1
+                cuis_part.foreach(c => {
+                  c.termId = termId
+                  c.method = "partDep1"
+                  c.skipNum = getDepSkip(m :: term.head :: Nil)
+                })
+                term.cuis.appendAll(cuis_part)
+                g.cuis.appendAll(cuis_part)
+              }
             }
           })
-          */
+
         }
         // if the term is in 'conj' relation, we combine the head word with all the words in 'conj' relation.
         // the word connect by 'or' can only modify the last word in 'or' list.  A, B, CD or E X => AX/BX, no AD and BD
@@ -643,8 +645,17 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
                 t.isInConj = true
               }
             })
-          }else if (rel.equals("neg")){
-
+          }else if (rel.equals("dep")){
+            // dep relation is not well defined, so we have to deal with it carefully
+            // if the source if a modifier of another relation, the target go to the same relation
+            val fatherTerm = g.terms.values.find(_.getModifiers.contains(s.getSource))
+            if (fatherTerm.isDefined) {
+              fatherTerm.get.addModifier(s.getTarget, rel)
+            } else {
+              val tmp = if (s.getSource.index > s.getTarget.index) Term(rel, s.getSource) else Term(rel, s.getTarget)
+              val t = g.terms.getOrElseUpdate(tmp.hashcode(), tmp)
+              if (s.getSource.index > s.getTarget.index) t.addModifier(s.getTarget, rel) else t.addModifier(s.getSource, rel)
+            }
           }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn") || rel.equals("compound") || rel.equals("nmod")){
             val tmp = Term(rel,s.getSource)
             val t = g.terms.getOrElseUpdate(tmp.hashcode(),tmp)
