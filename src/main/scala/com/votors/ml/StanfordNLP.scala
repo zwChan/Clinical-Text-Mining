@@ -127,6 +127,19 @@ object StanfordNLP {
             s.matchType |= 2
             newMatchFlag |= 2
           }
+          // one term contain another term
+          if (mm.orgStr.toLowerCase.contains(s.orgStr.toLowerCase) && !s.orgStr.toLowerCase.contains(mm.orgStr.toLowerCase)) {
+            s.matchType |= 4  // mine is contain by metamap's
+            //s.matchType |= 4
+            //newMatchFlag |= 4
+          }
+          // one term contain another term
+          if (!mm.orgStr.toLowerCase.contains(s.orgStr.toLowerCase) && s.orgStr.toLowerCase.contains(mm.orgStr.toLowerCase)) {
+            //mm.matchType |= 4
+            mm.matchType |= 4
+            //newMatchFlag |= 4
+          }
+
           if (newMatchFlag == 3) {
             s.matchDesc.append(s"{${mm.shortDesc}}#")
             mm.matchDesc.append(s"{${s.shortDesc}}#")
@@ -156,7 +169,7 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "Clinically significant cardiovascular or peripheral vascular disease"
+    val text = "Evidence of bleeding diathesis or coagulopathy."
     // create an empty Annotation just with the given text
     findPattern(text).foreach(_ => println(""))
     return

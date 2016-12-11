@@ -77,6 +77,7 @@ object MMApi {
                 && !Nlp.checkStopword(mmRet.orgStr,true)
                 && !mmRet.orgStr.matches(Conf.cuiStringFilterRegex)
                 && !mmRets.exists(mm=>mm.cui.equals(mmRet.cui) && mm.orgStr.equals(mmRet.orgStr) && mm.score==mmRet.score)
+                //&& !mmRets.exists(mm=>mm.orgStr.toLowerCase.contains(mmRet.orgStr.toLowerCase))  // not exactly what we mean 'overlap'.
                ) {
                 mmRets.add(mmRet)
                 for (p <- mapEv.getPositionalInfo) {
