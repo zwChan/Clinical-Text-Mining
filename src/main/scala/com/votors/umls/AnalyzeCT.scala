@@ -103,10 +103,17 @@ class RegexGroup(var name:String) {
     (spantarget.get(0)<=span.get(0) && spantarget.get(1)>=span.get(1))
   }
 
-  def isHitCuiRange(span: IntPair):Boolean = {
+  def isHitCuiRange(span: IntPair, n:Int=1):Boolean = {
     terms.values.foreach(t=>{
-      if (t.cuis.size>0 && t.isOverlap(span))
+      val maxNgram = t.cuis.map(_.ngram).max
+      if (t.cuis.size>0 && maxNgram>=n && t.isOverlap(span))
         return true
+    })
+    false
+  }
+  def isHitCuiString(str:String):Boolean = {
+    terms.values.foreach(t=>{
+      t.cuis.foreach(c=>if (c.orgStr.equalsIgnoreCase(str)) return true)
     })
     false
   }
@@ -175,7 +182,8 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
    ********************************************************/
   //println(s"Creating pattern: ${name}")
   // if there is no pattern found, process the whole sentence.
-  val ann = if (name != "None") matched.getAnnotation() else sentence
+  //  val ann = if (name != "None") matched.getAnnotation() else sentence
+  val ann = sentence
   //println(matched.getAnnotation().keySet())
   // it is the matched tokens, not all tokens in the sentence
   val tokens = ann.get(classOf[TokensAnnotation])
@@ -201,17 +209,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
   val ner2groups = new ListBuffer[RegexGroup]()
   var lastNer = ""
   // aggregate the congruous tokens with the same ner
-  val rgAll = new RegexGroup("CUI_ALL")
   tokens.iterator().foreach(t=>{
-    if (name == "None") {
-      if (rgAll.getTokens.size == 0) {
-        ner2groups.append(rgAll)
-      }
-      rgAll.addToken(t)
-    }
     val ner = t.get(classOf[NamedEntityTagAnnotation])
     //println(s"ner ${t} -> ${ner}")
-    if (ner != null && !ner.equals("O")) {
+    if (ner != null) {
       //println(s"found group: ${t}->${ner}")
       if (ner.equals("KEY")) {
         keyPos = t.get(classOf[IndexAnnotation])
@@ -220,19 +221,25 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         negation += 1
         if (keyPos >= 0) negAheadKey += 1
       }
-      if (ner != lastNer) {
-        val rg = new RegexGroup(ner)
+      val nerName = if (name == "None" || ner.equals("O")) {
+        "CUI_ALL"
+      }else{
+        ner
+      }
+      if (nerName != lastNer) {
+        val rg = new RegexGroup(nerName)
         rg.addToken(t)
         ner2groups.append(rg)
       } else {
         ner2groups.last.addToken(t)
       }
-      lastNer = ner
+      lastNer = nerName
     }else{
-      // no ner found. consider the previous ner ended, and should start a new group for next ner
       lastNer = ""
+      print("Ner not found. Should not be here!!!")
     }
-
+    // keep the default group as the last group in the list.
+    //ner2groups.append(rgAll)
   })
   // update information of regular groups
   ner2groups.foreach(_.update)
@@ -281,6 +288,24 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
 
   /* Get cui if the group have not found cui by dependency.*/
   def getCuiByTree(n:Int=5, tree: Tree=tree, depth:Int=1):Boolean = {
+    var termId = 0
+    def addCui(str:String,g:RegexGroup,method:String="tree"):Int = {
+      val cuis = getCui(str)
+      if (cuis.size > 0) {
+        termId += 1
+        cuis.foreach(c => {
+          c.termId = termId
+          c.method = method
+          c.tags = getTreePosTags(tree)
+          c.span.set(0, span1based(tree.getSpan).get(0))
+          c.span.set(1, span1based(tree.getSpan).get(1))
+        })
+        g.cuis.appendAll(cuis)
+        println(cuis.map(_.shortDesc()).mkString("#"))
+      }
+      return cuis.size
+    }
+
     if (tree.isLeaf) {
       // do not find a cui
       return false
@@ -291,32 +316,32 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
 
     // filter out these already found cui by dependency.
-    var termId = 0
+    val numLeaves = tree.getLeaves.size
+    val str = tree.getLeaves.iterator().mkString(" ")
     ner2groups.filter(g=>g.name.startsWith("CUI_")/* && g.cuis.size == 0*/).foreach(g=>{
       //println(s"[${tree.getLeaves.size}]${span1based(tree.getSpan))},${ner2groups.map(_.isOverlap(span1based(tree.getSpan))).reduce(_ || _)}, ${StanfordNLP.isNoun(tree.value()) && g.isContains(tree.getSpan)},${tree.value()}\t${tree.getLeaves.iterator().mkString(" ")}")
       // 1. the leave have no POS info; 2. is must be noun; 3. it must be in the group; 4. it should not be found CUI by dependency; 5. its length should less than N
       if (!tree.isLeaf
         && StanfordNLP.isNoun(tree.value())
         && g.isContains(span1based(tree.getSpan))
-        && !g.isHitCuiRange(span1based(tree.getSpan))
-        && tree.getLeaves.size <= n) {
+//        && !g.isHitCuiRange(span1based(tree.getSpan),numLeaves)
+        && !g.isHitCuiString(str)
+        && numLeaves <= n) {
         // if cui is found, return, else continue to search in the subtree.
-        val str = tree.getLeaves.iterator().mkString(" ")
-        val cuis = getCui(str)
-        if (cuis.size>0) {
-          termId += 1
-          cuis.foreach(c=>{
-            c.termId = termId
-            c.method = "tree"
-            c.tags = getTreePosTags(tree)
-            c.span.set(0,span1based(tree.getSpan).get(0))
-            c.span.set(1,span1based(tree.getSpan).get(1))
+        addCui(str, g, "tree")
+
+        // there is no sub-tree. we have to check its max suffix words.
+        // e.g.: (NP (DT The) (JJ same) (JJ diagnostic) (NN imaging) (NN method))
+        // check 'same diagostic imaging method', diagostic imaging mathod', 'imaging mathod'
+        if (numLeaves > 2 && numLeaves == tree.numChildren()) {
+          Range(2, numLeaves - 1).foreach(i => {
+            val suffixStr = str.split(" ", i).last
+            if (!g.isHitCuiString(suffixStr)) {
+              addCui(suffixStr, g, "treeSuffix")
+            }
           })
-          g.cuis.appendAll(cuis)
-          println(cuis.map(_.shortDesc()).mkString("#"))
-          //println(s"get cuis ${cuis.mkString("\t")}")
-          return true
         }
+        return true
       }
     })
 
@@ -628,39 +653,38 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       println(s"### ${s} : ${s.getRelation.toString}")
       val rel = s.getRelation.toString
       // first check if the relation in any group
-      var hitGroup = false
 
-      ner2groups.filter(g=>g.isContains(new IntPair(math.min(s.getSource.index,s.getTarget.index), math.max(s.getSource.index,s.getTarget.index()))))
-        .foreach(g=>{
-          if(name != "CUI_ALL")hitGroup = true  // 'CUI_ALL is the default pattern. excluding.
-          if (rel.equals("conj:or") || rel.equals("conj:and")) {
-            val start = s.getSource.index()
-            val end = s.getTarget.index()
-            println(s"${rel}: ${start}, ${end}")
-            g.logic = rel
-            g.conjWords += s.getSource
-            g.conjWords += s.getTarget
-            g.terms.values.foreach(t=>{
-              if (t.head == s.getTarget || t.getModifiers.find(_ == s.getTarget).isDefined) {
-                t.isInConj = true
+      ner2groups.foreach(g=>{
+          val sIndex = s.getSource.index()
+          val tIndex = s.getTarget.index()
+          if (g.isContains(new IntPair(math.min(s.getSource.index,s.getTarget.index), math.max(s.getSource.index,s.getTarget.index())))) {
+            if (rel.equals("conj:or") || rel.equals("conj:and")) {
+              println(s"${rel}: ${sIndex}, ${tIndex}")
+              g.logic = rel
+              g.conjWords += s.getSource
+              g.conjWords += s.getTarget
+              g.terms.values.foreach(t => {
+                if (t.head == s.getTarget || t.getModifiers.find(_ == s.getTarget).isDefined) {
+                  t.isInConj = true
+                }
+              })
+            } else if (rel.equals("dep")) {
+              // dep relation is not well defined, so we have to deal with it carefully
+              // if the source if a modifier of another relation, the target go to the same relation
+              val fatherTerm = g.terms.values.find(_.getModifiers.contains(s.getSource))
+              if (fatherTerm.isDefined) {
+                fatherTerm.get.addModifier(s.getTarget, rel)
+              } else {
+                val tmp = if (s.getSource.index > s.getTarget.index) Term(rel, s.getSource) else Term(rel, s.getTarget)
+                val t = g.terms.getOrElseUpdate(tmp.hashcode(), tmp)
+                if (s.getSource.index > s.getTarget.index) t.addModifier(s.getTarget, rel) else t.addModifier(s.getSource, rel)
               }
-            })
-          }else if (rel.equals("dep")){
-            // dep relation is not well defined, so we have to deal with it carefully
-            // if the source if a modifier of another relation, the target go to the same relation
-            val fatherTerm = g.terms.values.find(_.getModifiers.contains(s.getSource))
-            if (fatherTerm.isDefined) {
-              fatherTerm.get.addModifier(s.getTarget, rel)
-            } else {
-              val tmp = if (s.getSource.index > s.getTarget.index) Term(rel, s.getSource) else Term(rel, s.getTarget)
+            } else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn") || rel.equals("compound") || rel.equals("nmod")) {
+              val tmp = Term(rel, s.getSource)
               val t = g.terms.getOrElseUpdate(tmp.hashcode(), tmp)
-              if (s.getSource.index > s.getTarget.index) t.addModifier(s.getTarget, rel) else t.addModifier(s.getSource, rel)
+              t.addModifier(s.getTarget, rel)
+              if (g.conjWords.contains(s.getSource) || g.conjWords.contains(s.getTarget)) t.isInConj = true // this term is associated with conj relation
             }
-          }else if (rel.equals("amod") || rel.equals("acomp") || rel.equals("vmod") || rel.equals("nn") || rel.equals("compound") || rel.equals("nmod")){
-            val tmp = Term(rel,s.getSource)
-            val t = g.terms.getOrElseUpdate(tmp.hashcode(),tmp)
-            t.addModifier(s.getTarget,rel)
-            if (g.conjWords.contains(s.getSource) || g.conjWords.contains(s.getTarget)) t.isInConj = true   // this term is associated with conj relation
           }
       })
       // calculate all negation relationship
@@ -762,7 +786,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })

@@ -43,6 +43,38 @@ create table noncui (
 create index idx_str on noncui (str(32)) using hash;
 create index idx_freq on noncui (freq);
 
+drop table cancer_mm_cui;
+CREATE TABLE cancer_mm_cui (
+`task` varchar(30),
+`tid` varchar(30),
+`type` varchar(50),
+`typeDetail` varchar(50),
+`criteriaId` int(20),
+`splitType` varchar(10),
+`sentId` int(20),
+`neg` int(8),
+`termId` int(20),
+`cui` varchar(20),
+`sty` varchar(20),
+`ngram` int(8),
+`org_str` text,
+`cui_str` text,
+`method` varchar(20),
+`score` int,
+`matchType` int,
+`matchDesc` text,
+`sentLen` int(10),
+`sentence` text
+);
+create index idx_cui on cancer_mm_cui (cui) using hash;
+create index idx_org_str on cancer_mm_cui (org_str(32)) using hash;
+create index idx_tid on cancer_mm_cui (tid);
+create index idx_sid on cancer_mm_cui (sentId);
+create index idx_cid on cancer_mm_cui (criteriaId);
+create index idx_termid on cancer_mm_cui (termId);
+create index idx_sty2 on cancer_mm_cui(sty) using hash;
+select count(distinct cui) from cancer_mm_cui;
+
 
 -- tid\ttype\tcriteriaId\tpattern\tcui\tcui_str\tduration\tsentence
 drop table cancer_cui;
@@ -70,6 +102,9 @@ CREATE TABLE cancer_cui (
 `method` varchar(20),
 `nested` varchar(20),
 `tags` varchar(50),
+`score` int,
+`matchType` int,
+`matchDesc` text,
 `sentLen` int(10),
 `sentence` text
 );
@@ -80,22 +115,19 @@ create index idx_tid on cancer_cui (tid);
 create index idx_sid on cancer_cui (sentId);
 create index idx_cid on cancer_cui (criteriaId);
 create index idx_termid on cancer_cui (termId);
-
-
 create index idx_sty2 on cancer_cui(sty) using hash;
 create index idx_nested2 on cancer_cui(nested) using hash;
 
 
-delete from cancer_cui where sty = 'T033'; -- 99002,104777,103562,103383,102505,104535
-delete from cancer_cui where sentLen>500; -- 2027,1974,1940,1876,944
-delete from cancer_cui where duration<-1; -- 11,10,10,11,11
-delete from cancer_cui where nested='nesting';
+-- delete from cancer_cui where sty = 'T033'; -- 99002,104777,103562,103383,102505,104535
+-- delete from cancer_cui where sentLen>500; -- 2027,1974,1940,1876,944
+-- delete from cancer_cui where duration<-1; -- 11,10,10,11,11
+-- delete from cancer_cui where nested='nesting';
 -- update cancer_cui set month = -1 where duration = -1; -- 456818,329828
 
 select cui,count(*) as cui_freq from cancer_cui group by cui;
 select count(*) from cancer_cui where sentLen > 500; -- 1800
 
-  
  select distinct sab from umls.mrconso where sab like '%GO%';
   select * from umls.MRCONSO where cui = 'C0014518';
 
@@ -199,6 +231,7 @@ select * from cancer_cui where type='PRIOR CONCURRENT THERAPY';
 
 
 
+
 -- drop table cancer_cui;
 select distinct sentence from cancer_cui where length(sentence) > 500 ;
 
@@ -255,11 +288,19 @@ load data local infile '/tmp/random_200_sentences_cancer_studies_sm.csv' into ta
 
 select C.cui, C.sty, C.cui_str, count(*) as cnt from cancer_cui C join (select distinct D.tid from cancer_cui D where D.cui='C1522449' and D.sty = 'T061') E on C.tid=E.tid group by C.cui, C.sty order by cnt desc;
 
-
-
-
 SELECT V.month,SUM(V.type='INCLUSION'), SUM(V.type='EXCLUSION') FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and  (V.nested = 'None' or V.nested = 'nesting')  group by V.month order by month;
 SELECT count(*) FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and  (V.nested = 'None' or V.nested = 'nesting')  group by V.month order by month;
 
 
-select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DISTINCT V.tid as tid FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and (V.nested = 'None' or V.nested = 'nesting') ) D on C.tid=D.tid and (C.nested = 'None' or C.nested = 'nesting') and C.task = 'Prostate' group by C.cui,C.sty order by cnt desc limit 100
+select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DISTINCT V.tid as tid FROM cancer_cui V, meta T where V.task = 'Prostate' and V.cui='C0201899' and V.sty = 'T059' and  T.tid = V.tid and (V.nested = 'None' or V.nested = 'nesting') ) D on C.tid=D.tid and (C.nested = 'None' or C.nested = 'nesting') and C.task = 'Prostate' group by C.cui,C.sty order by cnt desc limit 100;
+
+select * from cancer_cui where cui='None';
+select * from cancer_cui ;
+select org_str,cui, matchType,matchDesc, sentence from cancer_cui where matchType=4;
+select org_str,cui,matchType,matchDesc, sentence from cancer_metamap_cui where matchType>3;
+
+select * from umls.mrsty where cui='C0009429';
+select sum(matchtype=0)/count(*) from cancer.cancer_metamap_cui;
+select sum(matchtype=0)/count(*) from cancer.cancer_cui;
+
+
