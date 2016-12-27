@@ -113,7 +113,7 @@ class RegexGroup(var name:String) {
   }
   def isHitCuiString(str:String):Boolean = {
     terms.values.foreach(t=>{
-      t.cuis.foreach(c=>if (c.orgStr.equalsIgnoreCase(str)) return true)
+      t.cuis.foreach(c=>if (c.orgStr.toLowerCase.contains(str.toLowerCase)) return true)
     })
     false
   }
@@ -287,7 +287,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     }
 
   /* Get cui if the group have not found cui by dependency.*/
-  def getCuiByTree(n:Int=5, tree: Tree=tree, depth:Int=1):Boolean = {
+  def getCuiByTree(n:Int=7, tree: Tree=tree, depth:Int=1):Boolean = {
     var termId = 0
     def addCui(str:String,g:RegexGroup,method:String="tree"):Int = {
       val cuis = getCui(str)
@@ -327,21 +327,24 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
 //        && !g.isHitCuiRange(span1based(tree.getSpan),numLeaves)
         && !g.isHitCuiString(str)
         && numLeaves <= n) {
+        var cuiNum = 0
         // if cui is found, return, else continue to search in the subtree.
-        addCui(str, g, "tree")
+        cuiNum += addCui(str, g, "tree")
 
-        // there is no sub-tree. we have to check its max suffix words.
+        // Apply ngram to a noun componend..
         // e.g.: (NP (DT The) (JJ same) (JJ diagnostic) (NN imaging) (NN method))
         // check 'same diagostic imaging method', diagostic imaging mathod', 'imaging mathod'
-        if (numLeaves > 2 && numLeaves == tree.numChildren()) {
-          Range(2, numLeaves - 1).foreach(i => {
-            val suffixStr = str.split(" ", i).last
-            if (!g.isHitCuiString(suffixStr)) {
-              addCui(suffixStr, g, "treeSuffix")
+        if (numLeaves > 2) {
+          val tokens = str.split(" ")
+          for (i <- Range(0,tokens.size-1); j <- i+2 to tokens.size) {
+            val tmpStr = tokens.slice(i,j).mkString(" ")
+            if (!g.isHitCuiString(tmpStr)) {
+              cuiNum += addCui(tmpStr, g, "treeNgram")
             }
-          })
+          }
         }
-        return true
+        if (cuiNum>0)
+          return true
       }
     })
 
