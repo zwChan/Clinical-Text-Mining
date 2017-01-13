@@ -75,6 +75,7 @@ class RegexGroup(var name:String) {
   val cuis = new ListBuffer[Suggestion]
   var cuiSource = new ListBuffer[String] // "fullDep" / "partDep" / "tree".
   var duration: Duration = null //the string after within or without, describe how long of the history
+  val durStr = new StringBuilder
   val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
   var logic = "None"  // logic in the group, for now, 'or' / 'and',
   // keep all the words in conj reletion, so that we can combine them. A, B or J C => AC BC JC
@@ -140,7 +141,12 @@ class RegexGroup(var name:String) {
     if (name.contains("DURATION")){
       getTokens.foreach(d=>{
         if(duration == null || duration.getStandardSeconds <= 0) {
-          duration = TimeX.parse(d.get(classOf[NormalizedNamedEntityTagAnnotation]))
+          var durNstr = d.get(classOf[NormalizedNamedEntityTagAnnotation])
+          durStr.append(s"${durNstr};")
+          // if there are multiple duration, just use the last one. e.g 3 - 4 month => P3M/P4M, use P4M
+          if (durNstr.contains("/"))
+            durNstr = durNstr.split("/").last
+          duration = TimeX.parse(durNstr)
         }
       })
     }
@@ -353,7 +359,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     var cnt = 0
     for (kid <- kids.iterator()) {
       cnt += 1
-      println(s"${depth}/${cnt}/${tree.numChildren()}" + s" ${kid.numChildren()} kid=${kid.toString}")
+      println(s"${depth}/${cnt}/[${str}]${tree.numChildren()}" + s" ${kid.numChildren()} kid=${kid.toString}")
       val ret = getCuiByTree(n,kid,depth+1)
       result ||= ret  // don't put together with above line.
     }
@@ -775,8 +781,10 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
   }
   def patternCuiDurOutput(writer:PrintWriter,pattern: CTPattern, filter:String) = {
     if (pattern != null ) {
+      var durStr = ""
       val durGroup = pattern.ner2groups.find(_.name == "DURATION").getOrElse(null)
       val dur = if (durGroup!=null) {
+        durStr += durGroup.getTokens.map(_.get(classOf[TextAnnotation])).mkString(" ")
         durGroup.duration.getStandardDays
       }else{
         -1
@@ -789,7 +797,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
@@ -797,7 +805,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -814,14 +822,14 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
     else
       ""
   }
 
   def metamapOutputCui(writer:PrintWriter, mmResult: MMResult) = {
     val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(":")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
+    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${mmResult.sentId}\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(":")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
     writer.println( str.replace("\"","\\\""))
 
   }

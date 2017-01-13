@@ -89,6 +89,7 @@ CREATE TABLE cancer_cui (
 `pattern` varchar(50),
 `duration` int(20),
 `month` int(8),
+`durStr` varchar(50),
 `neg` int(8),
 `negAheadKey` int(8),
 `group` varchar(50),
@@ -296,11 +297,20 @@ select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DIS
 
 select * from cancer_cui where cui='None';
 select * from cancer_cui ;
-select org_str,cui, matchType,matchDesc, sentence from cancer_cui where matchType=4;
+select org_str,cui, matchType,matchDesc, sentence from cancer_cui where matchType=0;
 select org_str,cui,matchType,matchDesc, sentence from cancer_metamap_cui where matchType>3;
 
 select * from umls.mrsty where cui='C0009429';
 select sum(matchtype=0)/count(*) from cancer.cancer_metamap_cui;
-select sum(matchtype=0)/count(*) from cancer.cancer_cui;
+select sum(matchtype=0)/count(length(cui)>4) from cancer.cancer_cui;
+
+select cui, org_str,cui_str,score,matchDesc,sentence from cancer.cancer_metamap_cui where matchtype=0;
+select cui, org_str,cui_str,score,matchDesc,sentence from cancer.cancer_cui where matchtype=0 and length(cui)>4;
+select * from umls.mrconso where cui='C0004936';
+select * from umls.mrconso where str='luteinizing hormone-releasing hormone';
+
+select distinct(method) from cancer_cui;
+select duration,sentence from cancer_cui where duration > -1 and sentence like '% history of % after %';
+
 
 
