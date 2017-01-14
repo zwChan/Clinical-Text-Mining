@@ -1,28 +1,30 @@
 package com.votors.umls
 
-import java.io.{FileWriter, PrintWriter, FileReader}
+import java.io.{FileReader, FileWriter, PrintWriter}
 import java.util.concurrent.atomic.AtomicInteger
-import com.votors.common.{TimeX, Conf}
+import java.util.regex.Pattern
+
+import com.votors.common.{Conf, TimeX}
 import com.votors.common.Utils.Trace._
 import com.votors.common.Utils._
 import com.votors.ml.{Nlp, StanfordNLP}
 import edu.stanford.nlp.ie.machinereading.structure.MachineReadingAnnotations.RelationMentionsAnnotation
 import edu.stanford.nlp.ling.CoreAnnotations._
 import edu.stanford.nlp.ling.{IndexedWord, Label}
-import edu.stanford.nlp.ling.tokensregex.{NodePattern, MatchedExpression, CoreMapExpressionExtractor, TokenSequencePattern}
+import edu.stanford.nlp.ling.tokensregex.{CoreMapExpressionExtractor, MatchedExpression, NodePattern, TokenSequencePattern}
 import edu.stanford.nlp.parser.lexparser.BinaryHeadFinder
 import edu.stanford.nlp.pipeline.Annotation
 import edu.stanford.nlp.process.PTBTokenizer
 import edu.stanford.nlp.semgraph.SemanticGraph
 import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations._
-import edu.stanford.nlp.trees.{LeftHeadFinder, TypedDependency, Tree}
+import edu.stanford.nlp.trees.{LeftHeadFinder, Tree, TypedDependency}
 import edu.stanford.nlp.trees.TreeCoreAnnotations.TreeAnnotation
-import edu.stanford.nlp.util.{IntPair, CoreMap}
+import edu.stanford.nlp.util.{CoreMap, IntPair}
 import org.apache.commons.csv._
 import org.apache.commons.lang3.StringUtils
 import org.joda.time.Duration
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
 
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
@@ -69,17 +71,19 @@ case class Term(name:String, head:IndexedWord) {
 
 /* The tokens that is matched in a group of the regular expression.
 * First we mark it as a special ner-type, than extracted them from the ner-annotation*/
-class RegexGroup(var name:String) {
+class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
   private val tokens = new ListBuffer[CoreMap]
   val span = new IntPair(-1,-1)   // start from 1. Be care the span from tree.getSpan() is start from 0;
   val cuis = new ListBuffer[Suggestion]
   var cuiSource = new ListBuffer[String] // "fullDep" / "partDep" / "tree".
   var duration: Duration = null //the string after within or without, describe how long of the history
+  var durationEnd: Duration = null //when there ia a range, e.g. 3 to 4 months, duration is 3 months, and durationEnd is 4 months
   val durStr = new StringBuilder
   val terms = new mutable.HashMap[Int,Term] // sub-group of this regex group. Usually is 'or'/'and'.
   var logic = "None"  // logic in the group, for now, 'or' / 'and',
   // keep all the words in conj reletion, so that we can combine them. A, B or J C => AC BC JC
   val conjWords = new mutable.HashSet[IndexedWord]()
+
 
 
   def addToken(t:CoreMap) = {
@@ -94,6 +98,7 @@ class RegexGroup(var name:String) {
     }
   }
   def getTokens = tokens
+  def getText = tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")
   def isOverlap(spanOther: IntPair) = {
     !(spanOther.get(1)<span.get(0) || spanOther.get(0)>span.get(1))
   }
@@ -142,11 +147,40 @@ class RegexGroup(var name:String) {
       getTokens.foreach(d=>{
         if(duration == null || duration.getStandardSeconds <= 0) {
           var durNstr = d.get(classOf[NormalizedNamedEntityTagAnnotation])
-          durStr.append(s"${durNstr};")
+          durStr.append(s"${this.getText}(${durNstr});")
           // if there are multiple duration, just use the last one. e.g 3 - 4 month => P3M/P4M, use P4M
-          if (durNstr.contains("/"))
-            durNstr = durNstr.split("/").last
+          if (durNstr.contains("/")) {
+            val durs = durNstr.split("/")
+            durNstr = durs(0)
+            durationEnd = TimeX.parse(durs(1))
+          }
           duration = TimeX.parse(durNstr)
+
+
+          // there is duration but can't be extracted. Process some of the special cases.
+          if (duration.getMillis <= 0 || durNstr.matches("PX.+")) {
+            val str = this.getText
+            // 10-days
+            val p = Pattern.compile("""\D*(\d+)\D*.*""").matcher(str)
+            if (p.matches()){
+              val number = p.group(1)
+              val durNstrNew = durNstr.replaceFirst("X",number)
+              duration = TimeX.parse(durNstrNew)
+            }
+            // 3-4 month
+            if (this.preGroup != null && (duration.getMillis <= 0 || durNstr.matches("PX.+"))) {
+              val str = this.preGroup.getText
+              // 10-days
+              val p = Pattern.compile("""\D*(\d+)\s*(-|/)\s*(\d+)\D*.*""").matcher(str)
+              if (p.matches()) {
+                val number1 = p.group(1)
+                val number2 = p.group(3)
+                duration = TimeX.parse(durNstr.replaceFirst("X", number1))
+                durationEnd = TimeX.parse(durNstr.replaceFirst("X", number2))
+                durStr.append(s"${str};")
+              }
+            }
+          }
         }
       })
     }
@@ -162,7 +196,7 @@ class RegexGroup(var name:String) {
       }
       s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {
-      s"${name}\t[${span}]:${duration.getStandardDays}"
+      s"${name}\t[${span}]:${duration.getStandardDays}:${durationEnd.getStandardDays} days=> ${durStr}"
     }else{
       s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}:(${termStr})"
     }
@@ -233,7 +267,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         ner
       }
       if (nerName != lastNer) {
-        val rg = new RegexGroup(nerName)
+        val rg = new RegexGroup(nerName,ner2groups.lastOption.getOrElse(null))
         rg.addToken(t)
         ner2groups.append(rg)
       } else {
@@ -779,15 +813,24 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     val str = s"${tid.trim}\t${criteriaType}\t${criteriaId}\t${subTitle}\t" + paternStr
     str.replace("\"","\\\"")
   }
+  def toMonth(seconds:Long) = if (seconds<0) -1L else math.round(seconds/(30.58333*24*3600))
   def patternCuiDurOutput(writer:PrintWriter,pattern: CTPattern, filter:String) = {
     if (pattern != null ) {
       var durStr = ""
       val durGroup = pattern.ner2groups.find(_.name == "DURATION").getOrElse(null)
+      // the name of result: _AF and _MT mean lower bound duration; else means uppper bound duration
+      // if there are two durations, it is a range
       val dur = if (durGroup!=null) {
-        durStr += durGroup.getTokens.map(_.get(classOf[TextAnnotation])).mkString(" ")
-        durGroup.duration.getStandardDays
+        durStr += durGroup.durStr.toString
+        if (durGroup.durationEnd != null) {
+          (durGroup.duration.getStandardSeconds, durGroup.durationEnd.getStandardSeconds)
+        }else if (pattern.name.contains("_MT") || pattern.name.contains("_AF")) {
+          (durGroup.duration.getStandardSeconds,-1L)
+        }else{
+          (-1L,durGroup.duration.getStandardSeconds)
+        }
       }else{
-        -1
+        (-1L,-1L)
       }
       var hasCui = false
       pattern.ner2groups.foreach(g => {
@@ -797,7 +840,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
@@ -805,7 +848,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur}\t${if (dur== -1) -1 else math.round(dur/30.58333)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -822,7 +865,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tduration\tmonth\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
     else
       ""
   }
