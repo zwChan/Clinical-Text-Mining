@@ -12,6 +12,10 @@ tokens = { type: "CLASS", value: "edu.stanford.nlp.ling.CoreAnnotations$TokensAn
 # Define ruleType to be over tokens
 ENV.defaults["ruleType"] = "tokens"
 
+#### SOME things are used in the code, should not be changed separately
+# 1. the ner name started with 'CUI' means this tokens will be used to extract UMLS terms
+# 2. the name of result: _AF and _MT mean lower bound duration; else means uppper bound duration
+
 ########## Use stage to control the priority of the patern:
 ## 50: lowest 
 ## 10: highest
@@ -42,7 +46,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "CUI_DISEASE_MAIN"),Annotate($2, ner, "KEY")),
   priority:100.0,
   stage:45,
-  result: "MORETHAN"
+  result: "MORETHAN_MT"
 }
 
 
@@ -62,7 +66,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_MAIN")),
   priority:100.0,
   stage:20,
-  result: "HISTORY_MORETHAN"
+  result: "HISTORY_MT"
 }
 
 
@@ -81,7 +85,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "CUI_DISEASE_EF")),
   priority:0,
   stage:10,
-  result: "HISTORY_MORETHAN_EF"
+  result: "HISTORY_MT_EF"
 }
 
 #history of () within () prior to ()
@@ -107,7 +111,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "CUI_DISEASE_PT")),
   priority:100,
   stage:10,
-  result: "HISTORY_MORETHAN_PT"
+  result: "HISTORY_MT_PT"
 }
 {
   ruleType: "tokens",  
@@ -115,7 +119,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "CUI_DISEASE_AF")),
   priority:100,
   stage:10,
-  result: "HISTORY_MORETHAN_AF"
+  result: "HISTORY_MT_AF"
 }
 
 #within () prior ()
@@ -142,7 +146,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "CUI_DISEASE_MAIN"), Annotate($2, ner, "KEY"),Annotate($3, ner, "CUI_DISEASE_PT")),
   priority:100,
   stage:40,
-  result: "MORETHAN_PT"
+  result: "MORETHAN_MT_PT"
 }
 {
   ruleType: "tokens",  
@@ -150,7 +154,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "CUI_DISEASE_MAIN"), Annotate($2, ner, "KEY"),Annotate($3, ner, "CUI_DISEASE_AF")),
   priority:100,
   stage:40,
-  result: "MORETHAN_AF"
+  result: "MORETHAN_MT_AF"
 }
 # prior () for ()
 {
@@ -248,7 +252,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "KEY"),Annotate($2, ner, "CUI_DISEASE_MAIN")),
   priority:100,
   stage:20,
-  result: "CONFIRMED_MORETHAN"
+  result: "CONFIRMED_MT"
 }
 
 {
@@ -310,7 +314,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "KEY")),
   priority:100.0,
   stage:20,
-  result: "MORETHAN"
+  result: "MORETHAN_MT"
 }
 
 {
@@ -327,7 +331,7 @@ $AFTER    = ( "after" )
   action: (Annotate($1, ner, "NEG"),Annotate($2, ner, "CUI_DISEASE_MAIN"),Annotate($3, ner, "KEY"),Annotate($4, ner, "CUI_DISEASE_PT")),
   priority:100.0,
   stage:10,
-  result: "MORETHAN_PT"
+  result: "MORETHAN_MT_PT"
 }
 
 {
