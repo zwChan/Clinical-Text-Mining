@@ -87,9 +87,11 @@ CREATE TABLE cancer_cui (
 `splitType` varchar(10),
 `sentId` int(20),
 `pattern` varchar(50),
-`duration` int(20),
-`month` int(8),
-`durStr` varchar(50),
+`durstart` int(20),
+`durend` int(20),
+`monthstart` int(8),
+`monthend` int(8),
+`durStr` varchar(100),
 `neg` int(8),
 `negAheadKey` int(8),
 `group` varchar(50),
@@ -310,7 +312,7 @@ select * from umls.mrconso where cui='C0004936';
 select * from umls.mrconso where str='luteinizing hormone-releasing hormone';
 
 select distinct(method) from cancer_cui;
-select duration,sentence from cancer_cui where duration > -1 and sentence like '% history of % after %';
+select duration,sentence from cancer_cui where duration = 0 ; -- and sentence like '% history of % after %';
 
 
 

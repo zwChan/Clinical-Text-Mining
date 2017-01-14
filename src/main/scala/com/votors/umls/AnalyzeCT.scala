@@ -196,7 +196,7 @@ class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
       }
       s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {
-      s"${name}\t[${span}]:${duration.getStandardDays}:${durationEnd.getStandardDays} days=> ${durStr}"
+      s"${name}\t[${span}]:${duration.getStandardDays}:${if(durationEnd!=null)durationEnd.getStandardDays else -1} days=> ${durStr}"
     }else{
       s"${name}\t[${span}]:${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}:(${termStr})"
     }
@@ -840,7 +840,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
