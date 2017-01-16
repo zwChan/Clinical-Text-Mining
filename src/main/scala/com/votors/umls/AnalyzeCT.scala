@@ -783,10 +783,10 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     getCuiByTree()
     partCuiConjunction()
   }
-  private def value = {
-    ner2groups.map(g=>s"${g.toString}").mkString("\t")
+  def groupsString = {
+    ner2groups.map(g=>s"${g.toString}").mkString(" # ")
   }
-  override def toString = s"${name}\t${negation}\t${negAheadKey}\t${value}"
+  override def toString = s"${name}\t${negation}\t${negAheadKey}\t${groupsString}"
 }
 object CTPattern {
   def getTitle = "PatternName\tNegation\tnegAheadKey\tGroup1Name\tGroup1VAlue\tGroup2Name\tGroup2VAlue\tGroup3Name\tGroup3VAlue..."
@@ -840,7 +840,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.foreach(sty=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           })
         })
@@ -848,7 +848,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -865,7 +865,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
     else
       ""
   }
