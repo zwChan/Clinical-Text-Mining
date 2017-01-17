@@ -171,12 +171,38 @@ class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
             if (this.preGroup != null && (duration.getMillis <= 0 || durNstr.matches("PX.+"))) {
               val str = this.preGroup.getText
               // 10-days
-              val p = Pattern.compile("""\D*(\d+)\s*(-|/)\s*(\d+)\D*.*""").matcher(str)
-              if (p.matches()) {
-                val number1 = p.group(1)
-                val number2 = p.group(3)
+              val p2number = Pattern.compile("""\D*(\d+)\s*(-|/)\s*(\d+)\D*.*""").matcher(str)
+              val p1number = Pattern.compile("""\D*(\d+)\D*.*""").matcher(str)
+              if (p2number.matches()) {
+                val number1 = p2number.group(1)
+                val number2 = p2number.group(3)
                 duration = TimeX.parse(durNstr.replaceFirst("X", number1))
                 durationEnd = TimeX.parse(durNstr.replaceFirst("X", number2))
+                durStr.append(s"${str};")
+              }
+              if (p1number.matches()) {
+                val number1 = p1number.group(1)
+                duration = TimeX.parse(durNstr.replaceFirst("X", number1))
+                durStr.append(s"${str};")
+              }
+            }
+            // find a previous 'number'
+            // 3-4 continuvie  month
+            if (this.preGroup != null && this.preGroup.preGroup != null && (duration.getMillis <= 0 || durNstr.matches("PX.+"))) {
+              val str = this.preGroup.preGroup.getText
+              // 10-days
+              val p2number = Pattern.compile("""\D*(\d+)\s*(-|/)\s*(\d+)\D*.*""").matcher(str)
+              val p1number = Pattern.compile("""\D*(\d+)\D*.*""").matcher(str)
+              if (p2number.matches()) {
+                val number1 = p2number.group(1)
+                val number2 = p2number.group(3)
+                duration = TimeX.parse(durNstr.replaceFirst("X", number1))
+                durationEnd = TimeX.parse(durNstr.replaceFirst("X", number2))
+                durStr.append(s"${str};")
+              }
+              if (p1number.matches()) {
+                val number1 = p1number.group(1)
+                duration = TimeX.parse(durNstr.replaceFirst("X", number1))
                 durStr.append(s"${str};")
               }
             }
@@ -261,19 +287,21 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         negation += 1
         if (keyPos >= 0) negAheadKey += 1
       }
-      val nerName = if (name == "None" || ner.equals("O")) {
-        "CUI_ALL"
-      }else{
-        ner
+      if (!t.originalText().matches("\\p{Punct}")) {
+        val nerName = if (name == "None" || ner.equals("O")) {
+          "CUI_ALL"
+        } else {
+          ner
+        }
+        if (nerName != lastNer) {
+          val rg = new RegexGroup(nerName, ner2groups.lastOption.getOrElse(null))
+          rg.addToken(t)
+          ner2groups.append(rg)
+        } else {
+          ner2groups.last.addToken(t)
+        }
+        lastNer = nerName
       }
-      if (nerName != lastNer) {
-        val rg = new RegexGroup(nerName,ner2groups.lastOption.getOrElse(null))
-        rg.addToken(t)
-        ner2groups.append(rg)
-      } else {
-        ner2groups.last.addToken(t)
-      }
-      lastNer = nerName
     }else{
       lastNer = ""
       print("Ner not found. Should not be here!!!")
@@ -1003,27 +1031,39 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
       var stagFlag = STAG_HEAD
       var subTitle = ""
       var splitType = "#"
-      criteria.split("#|\\n").flatMap(s=> {
-        // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
-        if (s.count(_ == ':') >= 3) {
-          splitType = ":"
-          s.split(":")
-        } else if (s.count(_ == '-') >= 3) {
-          splitType = "-"
-          s.split(" - ")
-    /*    } else if (s.split("\\s").count(_=="No") >= 3) {
-          // some sentences without any punctuation to separate
-          splitType = "No"
-          s.split("(?=\\sNo\\s)")
-    */
-        }  else if (s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3) {
-            // some sentences without any punctuation to separate
-          splitType = "or"
-          s.split("Or|OR")
-        } else {
-          s :: Nil
+      // split a block of text into 'sentences' base on our rule, recursively. This 's sentence can't be split by StanfordNLP
+      val sentences_tmp = criteria.split("#|\\n").flatMap(input=> {
+        val sents_result = new ArrayBuffer[String] // the final sentence
+        val sents_process = new mutable.Queue[String] // the sentence to be splited
+        sents_process.enqueue(input)
+          while (sents_process.size > 0) {
+            val s = sents_process.dequeue()
+            // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
+            if (s.count(_ == ':') >= 3) {
+              splitType = ":"
+              s.split(":").foreach(v=>sents_process.enqueue(v.trim))
+            } else if (s.count(_ == '-') >= 3) {
+              splitType = "-"
+              s.split(" - ").foreach(v=>sents_process.enqueue(v.trim))
+            } else if ( /*s.split("\\s").count(_=="No") >= 1 && */ s.split("\\s").lastIndexOf("No") > 0) {
+              // some sentences without any punctuation to separate
+              splitType = "No"
+              s.split("(?=\\sNo\\s)").foreach(v=>sents_process.enqueue(v.trim))
+            } else if ( /*s.split("\\s").count(_=="At") >= 1 && */ s.split("\\s").lastIndexOf("At") > 1) {
+              // some sentences without any punctuation to separate
+              splitType = "At"
+              s.split("(?=\\sAt\\s)").foreach(v=>sents_process.enqueue(v.trim))
+            } else if ( /*s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3*/ s.split("\\s").lastIndexOf("Or") > 3 || s.split("\\s").lastIndexOf("OR") > 3) {
+              // some sentences without any punctuation to separate
+              splitType = "Or"
+              s.split("Or|OR").foreach(v=>sents_process.enqueue(v.trim))
+            } else {
+              sents_result.append(s)
+            }
         }
-      }).filter(_.trim.size > 2).foreach(sent_org =>{
+        sents_result
+      })
+      sentences_tmp.filter(_.trim.size > 2).foreach(sent_org =>{
         val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*","") // the punctuation at the beginning of a sentence
 
           /**

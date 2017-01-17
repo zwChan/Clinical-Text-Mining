@@ -108,6 +108,7 @@ CREATE TABLE cancer_cui (
 `score` int,
 `matchType` int,
 `matchDesc` text,
+`groupDesc` text,
 `sentLen` int(10),
 `sentence` text
 );
