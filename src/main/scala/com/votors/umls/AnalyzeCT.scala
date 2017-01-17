@@ -1042,7 +1042,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
             if (s.count(_ == ':') >= 3) {
               splitType = ":"
               s.split(":").foreach(v=>sents_process.enqueue(v.trim))
-            } else if (s.count(_ == '-') >= 3) {
+            } else if (s.split(" - ").size >= 3) {
               splitType = "-"
               s.split(" - ").foreach(v=>sents_process.enqueue(v.trim))
             } else if ( /*s.split("\\s").count(_=="No") >= 1 && */ s.split("\\s").lastIndexOf("No") > 0) {
