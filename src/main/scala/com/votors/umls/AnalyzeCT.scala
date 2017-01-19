@@ -1036,7 +1036,9 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
         val sents_result = new ArrayBuffer[String] // the final sentence
         val sents_process = new mutable.Queue[String] // the sentence to be splited
         sents_process.enqueue(input)
-          while (sents_process.size > 0) {
+        var maxRecursive = 100 // some extremely special case make a dead loop. I have fix several, but may be some left
+          while (sents_process.size > 0 && maxRecursive > 0) {
+            maxRecursive -= 1 // " - No", this example makes a dead loop.
             val s = sents_process.dequeue()
             // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
             if (s.count(_ == ':') >= 3) {
