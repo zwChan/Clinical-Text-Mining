@@ -285,7 +285,8 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       }
       if (ner.equals("NEG")) {
         negation += 1
-        if (keyPos >= 0) negAheadKey += 1
+        negAheadKey += 1  // this type of negation should be consider as important.
+        // if (keyPos >= 0) negAheadKey += 1
       }
       if (!t.originalText().matches("\\p{Punct}")) {
         val nerName = if (name == "None" || ner.equals("O")) {
@@ -421,7 +422,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     var cnt = 0
     for (kid <- kids.iterator()) {
       cnt += 1
-      println(s"${depth}/${cnt}/[${str}]${tree.numChildren()}" + s" ${kid.numChildren()} kid=${kid.toString}")
+      println(s"${depth}/${cnt}/${tree.numChildren()} text: [${str}]" + s", kid.numChildren: ${kid.numChildren()} kid=${kid.toString}")
       val ret = getCuiByTree(n,kid,depth+1)
       result ||= ret  // don't put together with above line.
     }

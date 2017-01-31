@@ -1,5 +1,12 @@
 create database ner200 char set utf8;
 use ner200;
+drop table cancer_cui;
+create table cancer_cui like cancer.cancer_cui;
+
+drop table bioportal;
+drop table lvalue;
+drop table lvaluerake;
+drop table manual;
 CREATE TABLE bioportal (
 `tid` varchar(30),
 `org_str` varchar(100),
@@ -26,10 +33,7 @@ CREATE TABLE manual (
 `sentence` text
 );
 
- drop table bioportal;
- drop table lvalue;
- drop table lvaluerake;
-drop table manual;
+
 
 load data local infile 'C:\\fsu\\ra\\data\\201601\\split_criteria\\1308_colorectal_trials_criteria_0413_ret.csv.cui' into table cancer_cui fields terminated by '\t' enclosed by '"' lines terminated by '\n' ignore 1 lines;
 load data local infile 'C:\\fsu\\ra\\data\\201601\\split_criteria\\1308_colorectal_trials_criteria_0413_ret.csv.mm.cui' into table cancer_mm_cui fields terminated by '\t' enclosed by '"' lines terminated by '\n' ignore 1 lines;
@@ -71,3 +75,6 @@ select distinct m.tid,m.major,m.sentence from bioportal c, manual m where c.tid 
 select distinct m.tid,m.major,m.sentence from lvalue c, manual m where c.tid = m.tid and c.cui is not null and m.cui is not null and  instr(c.org_str,m.major) > 0; 
 select distinct m.tid,m.major,m.sentence from lvaluerake c, manual m where c.tid = m.tid and c.cui is not null and m.cui is not null and  instr(c.org_str,m.major) > 0; 
 
+select * from cancer_cui;
+
+select SUM(`group` like '%_PT'),SUM(`group` like '%_AF') from cancer_cui;
