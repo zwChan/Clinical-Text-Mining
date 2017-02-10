@@ -328,11 +328,8 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       var suggustions = UmlsTagger2.tagger.select(str,true,true)
         .filter(s=>{
         var flag = s.score >= Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
-        var flag_sty = false
-        s.stys.foreach(tui=>{
-          flag_sty |= (Conf.semanticType.indexOf(tui) >=0)
-        })
-        flag && flag_sty
+        s.stys.filter(tui=> Conf.semanticType.indexOf(tui) >=0 )
+        flag && (s.stys.size > 0)
       })
       if (reduceBySty) suggustions = suggustions.flatMap(s=>{
         // map to (tui,suggestion)

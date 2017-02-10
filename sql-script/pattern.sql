@@ -312,7 +312,7 @@ select cui, org_str,cui_str,score,matchDesc,sentence from cancer.cancer_cui wher
 select * from umls.mrconso where cui='C0004936';
 select * from umls.mrconso where str='luteinizing hormone-releasing hormone';
 
-select distinct(method) from cancer_cui;
+select distinct(splitType) from cancer_cui;
 select duration,sentence from cancer_cui where duration = 0 ; -- and sentence like '% history of % after %';
 
 
