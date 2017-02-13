@@ -164,6 +164,7 @@ case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
 class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=Conf.rootDir) {
 
   val solrServer = new HttpSolrServer(solrServerUrl)
+  val cache_suggestions = new mutable.HashMap[String,Array[Suggestion]]()
 
   //opennlp models path
   val modelRoot = rootDir + "/data"
@@ -397,10 +398,17 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return all the suggestion result in an array, sorted by score.
    */
   def select(phrase: String, isGetSty:Boolean=false, firstCuiOnly:Boolean=true): Array[Suggestion] = {
-    var ret = if (Conf.targetTermUsingSolr)
-      select_solr(phrase.replaceAll("\'","\\\\'"))
-    else
-      select_db(phrase.replaceAll("\'","\\\\'"))
+    var cach = cache_suggestions.get(phrase)
+    var ret = if (cach.isEmpty) {
+      val got_cui = if (Conf.targetTermUsingSolr)
+        select_solr(phrase.replaceAll("\'", "\\\\'"))
+      else
+        select_db(phrase.replaceAll("\'", "\\\\'"))
+      cache_suggestions.put(phrase,got_cui)
+      got_cui
+    }else{
+      cach.get
+    }
     //println(s"select: ${phrase}, number ${ret.size}")
     ret = ret.filter(s=>s.sab.matches(Conf.sabFilter) && !s.NormDescr.matches(Conf.cuiStringFilterRegex))   //filter by sab and regex
     // for the same cui, we only return the highest score record. (there may be several records (e.g.diferent aui))
