@@ -1,0 +1,141 @@
+sty1	name1	sty2	name2	cnt	Preferred ST	Reason		Example term		
+T062	Research Activity	T061	Therapeutic or Preventive Procedure	21383	T061	Preference Rule		treatment	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC61361/table/tbl11/	https://www.ncbi.nlm.nih.gov/pmc/articles/PMC61361/figure/fig2/
+T062	Research Activity	T059	Laboratory Procedure	20665	T059	Relevance to criteria		study		
+T061	Therapeutic or Preventive Procedure	T060	Diagnostic Procedure	7944	T061	Relevance to criteria		procedure		
+T060	Diagnostic Procedure	T058	Health Care Activity	7003	T060	Relevance to criteria		"biopsy, scanning, procedure"		
+T061	Therapeutic or Preventive Procedure	T058	Health Care Activity	5188	T061	Relevance to criteria		procedure		
+T047	Disease or Syndrome	T046	Pathologic Function	5160	T047	Relevance to criteria				
+T191	Neoplastic Process	T059	Laboratory Procedure	4947	T059	Relevance to criteria		PSA		
+T062	Research Activity	T058	Health Care Activity	4923	T062	Relevance to criteria				
+T060	Diagnostic Procedure	T047	Disease or Syndrome	2464	T047	Relevance to criteria		Myocardial Infarction		
+T060	Diagnostic Procedure	T059	Laboratory Procedure	1942	T060	Relevance to criteria				
+T062	Research Activity	T060	Diagnostic Procedure	1698	T060	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T059	Laboratory Procedure	1532	T061	Relevance to criteria				
+T047	Disease or Syndrome	T019	Congenital Abnormality	1288	T047	Relevance to criteria				
+T191	Neoplastic Process	T047	Disease or Syndrome	1257	T047	Relevance to criteria				
+T191	Neoplastic Process	T046	Pathologic Function	941	T191	Relevance to criteria				
+T059	Laboratory Procedure	T047	Disease or Syndrome	876	T047	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T047	Disease or Syndrome	579	T047	Relevance to criteria				
+T191	Neoplastic Process	T061	Therapeutic or Preventive Procedure	543	T061	Relevance to criteria				
+T059	Laboratory Procedure	T046	Pathologic Function	501	T059	Relevance to criteria				
+T190	Anatomical Abnormality	T047	Disease or Syndrome	447	T047	Relevance to criteria				
+T046	Pathologic Function	T037	Injury or Poisoning	417	T037	Relevance to criteria				
+T047	Disease or Syndrome	T020	Acquired Abnormality	158	T047	Relevance to criteria				
+T184	Sign or Symptom	T037	Injury or Poisoning	152	T184	Relevance to criteria				
+T184	Sign or Symptom	T046	Pathologic Function	142	T184	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T046	Pathologic Function	137	T061	Relevance to criteria				
+T063	Molecular Biology Research Technique	T059	Laboratory Procedure	131	T059	Relevance to criteria				
+T063	Molecular Biology Research Technique	T049	Cell or Molecular Dysfunction	126	T049	Relevance to criteria				
+T048	Mental or Behavioral Dysfunction	T047	Disease or Syndrome	76	T047	Relevance to criteria				
+T184	Sign or Symptom	T061	Therapeutic or Preventive Procedure	66	T061	Relevance to criteria				
+T058	Health Care Activity	T046	Pathologic Function	63	T046	Relevance to criteria				
+T170	Intellectual Product	T060	Diagnostic Procedure	60	T060	Relevance to criteria				
+T184	Sign or Symptom	T059	Laboratory Procedure	57	T059	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T020	Acquired Abnormality	53	T020	Relevance to criteria				
+T059	Laboratory Procedure	T058	Health Care Activity	52	T059	Relevance to criteria				
+T059	Laboratory Procedure	T037	Injury or Poisoning	50	T059	Relevance to criteria				
+T170	Intellectual Product	T062	Research Activity	48	T062	Relevance to criteria				
+T062	Research Activity	T047	Disease or Syndrome	47	T047	Relevance to criteria				
+T059	Laboratory Procedure	T019	Congenital Abnormality	47	T019	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T019	Congenital Abnormality	44	T019	Relevance to criteria				
+T184	Sign or Symptom	T047	Disease or Syndrome	44	T047	Relevance to criteria				
+T049	Cell or Molecular Dysfunction	T047	Disease or Syndrome	41	T047	Relevance to criteria				
+T047	Disease or Syndrome	T037	Injury or Poisoning	39	T047	Relevance to criteria				
+T190	Anatomical Abnormality	T019	Congenital Abnormality	23	T190	Relevance to criteria				
+T190	Anatomical Abnormality	T020	Acquired Abnormality	19	T190	Relevance to criteria				
+T046	Pathologic Function	T020	Acquired Abnormality	14	T020	Relevance to criteria				
+T058	Health Care Activity	T047	Disease or Syndrome	13	T047	Relevance to criteria				
+T191	Neoplastic Process	T019	Congenital Abnormality	13	T019	Relevance to criteria				
+T190	Anatomical Abnormality	T061	Therapeutic or Preventive Procedure	13	T061	Relevance to criteria				
+T020	Acquired Abnormality	T019	Congenital Abnormality	12	T019	Relevance to criteria				
+T190	Anatomical Abnormality	T046	Pathologic Function	11	T190	Preference Rule				
+T190	Anatomical Abnormality	T049	Cell or Molecular Dysfunction	10	T190	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T037	Injury or Poisoning	10	T061	Relevance to criteria				
+T037	Injury or Poisoning	T020	Acquired Abnormality	9	T020	Relevance to criteria				
+T060	Diagnostic Procedure	T019	Congenital Abnormality	8	T019	Relevance to criteria				
+T058	Health Care Activity	T037	Injury or Poisoning	7	T037	Relevance to criteria				
+T184	Sign or Symptom	T048	Mental or Behavioral Dysfunction	5	T184	Relevance to criteria				
+T062	Research Activity	T049	Cell or Molecular Dysfunction	4	T062	Relevance to criteria				
+T170	Intellectual Product	T047	Disease or Syndrome	4	T047	Relevance to criteria				
+T060	Diagnostic Procedure	T046	Pathologic Function	4	T046	Relevance to criteria				
+T062	Research Activity	T046	Pathologic Function	4	T046	Relevance to criteria				
+T170	Intellectual Product	T065	Educational Activity	4	T170	Relevance to criteria				
+T061	Therapeutic or Preventive Procedure	T048	Mental or Behavioral Dysfunction	3	T048	Relevance to criteria				
+T063	Molecular Biology Research Technique	T047	Disease or Syndrome	3	T047	Relevance to criteria				
+T060	Diagnostic Procedure	T048	Mental or Behavioral Dysfunction	3	T048	Relevance to criteria				
+T200	Clinical Drug	T059	Laboratory Procedure	2	T200	Relevance to criteria				
+T065	Educational Activity	T060	Diagnostic Procedure	2	T060	Relevance to criteria				
+T184	Sign or Symptom	T060	Diagnostic Procedure	1	T184	Relevance to criteria				
+T191	Neoplastic Process	T060	Diagnostic Procedure	1	T060	Relevance to criteria				
+T059	Laboratory Procedure	T049	Cell or Molecular Dysfunction	1	T059	Relevance to criteria				
+T184	Sign or Symptom	T058	Health Care Activity	1	T184	Relevance to criteria				
+
+
+
+T121	Pharmacologic Substance	T109	Organic Chemical	182612	T121	Semantic Preference Rule
+T126	Enzyme	T116	Amino Acid, Peptide, or Protein	158262	T126	Semantic Preference Rule
+T129	Immunologic Factor	T116	Amino Acid, Peptide, or Protein	105033	T129	Semantic Preference Rule
+T121	Pharmacologic Substance	T116	Amino Acid, Peptide, or Protein	90932	T121	Semantic Preference Rule
+T129	Immunologic Factor	T121	Pharmacologic Substance	71640	T121	Semantic Preference Rule
+T125	Hormone	T121	Pharmacologic Substance	71213	T121	Semantic Preference Rule
+T129	Immunologic Factor	T126	Enzyme	49903	T129	Relevance to Criteria
+T125	Hormone	T109	Organic Chemical	37192	T125	Semantic Preference Rule
+T192	Receptor	T116	Amino Acid, Peptide, or Protein	35093	T192	Semantic Preference Rule
+T125	Hormone	T116	Amino Acid, Peptide, or Protein	33167	T125	Semantic Preference Rule
+T123	Biologically Active Substance	T116	Amino Acid, Peptide, or Protein	29772	T123	Semantic Preference Rule
+T123	Biologically Active Substance	T109	Organic Chemical	28857	T123	Semantic Preference Rule
+T192	Receptor	T126	Enzyme	19107	T192	Relevance to Criteria
+T195	Antibiotic	T109	Organic Chemical	16870	T195	Semantic Preference Rule
+T131	Hazardous or Poisonous Substance	T116	Amino Acid, Peptide, or Protein	14036	T131	Semantic Preference Rule
+T131	Hazardous or Poisonous Substance	T126	Enzyme	13815	T131	Relevance to Criteria
+T131	Hazardous or Poisonous Substance	T109	Organic Chemical	12907	T131	Semantic Preference Rule
+T131	Hazardous or Poisonous Substance	T121	Pharmacologic Substance	11714	T131	Relevance to Criteria
+T123	Biologically Active Substance	T121	Pharmacologic Substance	11500	T123	Relevance to Criteria
+T130	Indicator, Reagent, or Diagnostic Aid	T109	Organic Chemical	11455	T130	Semantic Preference Rule
+T127	Vitamin	T121	Pharmacologic Substance	9926	T127	Relevance to Criteria
+T127	Vitamin	T109	Organic Chemical	9834	T127	Semantic Preference Rule
+T123	Biologically Active Substance	T114	Nucleic Acid, Nucleoside, or Nucleotide	7283	T123	Semantic Preference Rule
+T061	Therapeutic or Preventive Procedure	T060	Diagnostic Procedure	6936	T061	Relevance to Criteria
+T121	Pharmacologic Substance	T114	Nucleic Acid, Nucleoside, or Nucleotide	6155	T121	Semantic Preference Rule
+T196	Element, Ion, or Isotope	T131	Hazardous or Poisonous Substance	4740	T131	Semantic Preference Rule
+T196	Element, Ion, or Isotope	T121	Pharmacologic Substance	4685	T121	Semantic Preference Rule
+T196	Element, Ion, or Isotope	T123	Biologically Active Substance	3517	T123	Semantic Preference Rule
+T197	Inorganic Chemical	T121	Pharmacologic Substance	3191	T121	Semantic Preference Rule
+T122	Biomedical or Dental Material	T109	Organic Chemical	2901	T122	Semantic Preference Rule
+T130	Indicator, Reagent, or Diagnostic Aid	T121	Pharmacologic Substance	2846	T130	Relevance to Criteria
+T122	Biomedical or Dental Material	T121	Pharmacologic Substance	2572	T122	Relevance to Criteria
+T192	Receptor	T129	Immunologic Factor	2511	T192	Relevance to Criteria
+T126	Enzyme	T121	Pharmacologic Substance	1618	T126	Relevance to Criteria
+T047	Disease or Syndrome	T019	Congenital Abnormality	1360	T047	Relevance to Criteria
+T131	Hazardous or Poisonous Substance	T130	Indicator, Reagent, or Diagnostic Aid	1299	T130	Relevance to Criteria
+T197	Inorganic Chemical	T123	Biologically Active Substance	807	T123	Semantic Preference Rule
+T195	Antibiotic	T116	Amino Acid, Peptide, or Protein	704	T195	Relevance to Criteria
+T131	Hazardous or Poisonous Substance	T069	Environmental Effect of Humans	704	T131	Relevance to Criteria
+T131	Hazardous or Poisonous Substance	T123	Biologically Active Substance	478	T131	Relevance to Criteria
+T130	Indicator, Reagent, or Diagnostic Aid	T123	Biologically Active Substance	454	T130	Relevance to Criteria
+T130	Indicator, Reagent, or Diagnostic Aid	T116	Amino Acid, Peptide, or Protein	405	T130	Semantic Preference Rule
+T127	Vitamin	T125	Hormone	368	T125	Relevance to Criteria
+T126	Enzyme	T109	Organic Chemical	324	T126	Semantic Preference Rule
+T190	Anatomical Abnormality	T047	Disease or Syndrome	296	T047	Relevance to Criteria
+T197	Inorganic Chemical	T122	Biomedical or Dental Material	264	T122	Semantic Preference Rule
+T197	Inorganic Chemical	T131	Hazardous or Poisonous Substance	251	T131	Semantic Preference Rule
+T047	Disease or Syndrome	T020	Acquired Abnormality	204	T047	Relevance to Criteria
+T195	Antibiotic	T130	Indicator, Reagent, or Diagnostic Aid	198	T195	Relevance to Criteria
+T129	Immunologic Factor	T109	Organic Chemical	196	T129	Semantic Preference Rule
+T196	Element, Ion, or Isotope	T130	Indicator, Reagent, or Diagnostic Aid	192	T130	Semantic Preference Rule
+T063	Molecular Biology Research Technique	T059	Laboratory Procedure	120	T059	Relevance to Criteria
+T129	Immunologic Factor	T125	Hormone	112	T125	Relevance to Criteria
+T197	Inorganic Chemical	T130	Indicator, Reagent, or Diagnostic Aid	109	T130	Semantic Preference Rule
+T170	Intellectual Product	T060	Diagnostic Procedure	76	T060	Relevance to Criteria
+T121	Pharmacologic Substance	T025	Cell	68	T121	Relevance to Criteria
+T170	Intellectual Product	T062	Research Activity	64	T062	Relevance to Criteria
+T122	Biomedical or Dental Material	T116	Amino Acid, Peptide, or Protein	63	T122	Semantic Preference Rule
+T130	Indicator, Reagent, or Diagnostic Aid	T114	Nucleic Acid, Nucleoside, or Nucleotide	36	T130	Semantic Preference Rule
+T129	Immunologic Factor	T114	Nucleic Acid, Nucleoside, or Nucleotide	36	T129	Semantic Preference Rule
+T130	Indicator, Reagent, or Diagnostic Aid	T129	Immunologic Factor	27	T130	Relevance to Criteria
+T120	Chemical Viewed Functionally	T104	Chemical Viewed Structurally	24	T120	Semantic Preference Rule
+T130	Indicator, Reagent, or Diagnostic Aid	T122	Biomedical or Dental Material	16	T122	Relevance to Criteria
+T130	Indicator, Reagent, or Diagnostic Aid	T126	Enzyme	9	T126	Relevance to Criteria
+T168	Food	T109	Organic Chemical	8	T168	Relevance to Criteria
+T062	Research Activity	T059	Laboratory Procedure	4	T059	Relevance to Criteria
+T062	Research Activity	T060	Diagnostic Procedure	4	T060	Relevance to Criteria
