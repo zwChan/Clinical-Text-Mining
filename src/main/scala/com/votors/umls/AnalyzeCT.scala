@@ -1,6 +1,6 @@
 package com.votors.umls
 
-import java.io.{FileReader, FileWriter, PrintWriter}
+import java.io.{File, FileReader, FileWriter, PrintWriter}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 
@@ -216,7 +216,7 @@ class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}><${c.method}><${c.tags}>").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}[${c.styIgnored.mkString(",")}]><${c.method}><${c.tags}>").mkString(";")});"
       }else{
         s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})"
       }
@@ -333,15 +333,17 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       })
       if (reduceBySty) suggustions = suggustions.flatMap(s=>{
         // map to (tui,suggestion)
-        val cuiCopy = s.copy()
-        cuiCopy.stys.clear()
-        s.stys.map((_,cuiCopy))
+        s.stys.map(sty=>{
+          val cuiCopy = s.copy()
+          cuiCopy.stys.clear()
+          (sty,cuiCopy)
+        })
       }).groupBy(_._1).map(kv=>{
         // choose the smallest cui for key (cui,tui)
         val tmp = kv._2.sortBy(_._2.cui)
         val firstKv = tmp(0)
         val sugg = firstKv._2
-        sugg.stys.add(firstKv._1)
+        if (sugg.stys.indexOf(firstKv._1)<0)sugg.stys.append(firstKv._1)
         sugg
       }).toArray
 
@@ -349,8 +351,70 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         val term = AnalyzeCT.termFreqency.getOrElseUpdate(str.toLowerCase(),AnalyzeCT.NonUmlsTerm(str,0))
         term.freq += 1L
       }
+
+      styPrefer(suggustions)
       suggustions
     }
+
+  def styPrefer(suggustions:Array[Suggestion]): Unit = {
+    def IGNORED_NOT_IGNORED = 0
+    def IGNORED_PREFER_IN_CUI = 1
+    def IGNORED_PREFER_BW_CUI = 2
+    def IGNORED_PICK_IN_CUI = 4
+    def IGNORED_PICK_BW_CUI = 8
+
+    if (suggustions.size>1){
+          suggustions.foreach(s=>{
+        if (s.styIgnored.size < s.stys.size) s.styIgnored = Array.fill(s.stys.size)(IGNORED_NOT_IGNORED)
+        // prefer a semantic type for a cui
+        if (s.stys.size > 1) {
+          for (i <- Range(0 , s.stys.size); j <- Range(0, s.stys.size) if i != j) {
+            val prefer = UmlsTagger2.styPrefer.get((s.stys(i), s.stys(j)))
+            if (prefer.isDefined) {
+              if (s.stys(i).equals(prefer.get)) {
+                s.styIgnored(j) |= IGNORED_PREFER_IN_CUI
+              } else {
+                s.styIgnored(i) |= IGNORED_PREFER_IN_CUI
+              }
+            }
+          }
+          // pick a semantic type in cui
+          var cnt = 0
+          for (i <- Range(0, s.styIgnored.size)) {
+            if (cnt > 0 && s.styIgnored(i) == IGNORED_NOT_IGNORED) {
+              s.styIgnored(i) |= IGNORED_PICK_IN_CUI
+            }
+            if (s.styIgnored(i) == IGNORED_NOT_IGNORED) cnt += 1
+          }
+        }
+      })
+      // prefer a semantic type for a org_string
+      for (i <- Range(0, suggustions.size); j <- Range(0, suggustions.size) if i != j) {
+        val idx1 = suggustions(i).styIgnored.indexOf(0)
+        val idx2 = suggustions(j).styIgnored.indexOf(0)
+        if (idx1 >= 0 && idx2 >= 0) {
+          val prefer = UmlsTagger2.styPrefer.get((suggustions(i).stys(idx1), suggustions(j).stys(idx2)))
+          if (prefer.isDefined) {
+            if (suggustions(i).stys(idx1).equals(prefer.get)) {
+              suggustions(j).styIgnored(idx2) |= IGNORED_PREFER_BW_CUI
+            } else {
+              suggustions(i).styIgnored(idx1) |= IGNORED_PREFER_BW_CUI
+            }
+          }
+        }
+      }
+      // pick a semantic type between cui
+      var cnt = 0
+      for (s <- suggustions) {
+        for (i <- Range(0,s.styIgnored.size)) {
+          if (cnt > 0 && s.styIgnored(i) == IGNORED_NOT_IGNORED) {
+            s.styIgnored(i) |= IGNORED_PICK_BW_CUI
+          }
+          if (s.styIgnored(i) == IGNORED_NOT_IGNORED) cnt += 1
+        }
+      }
+    }
+  }
 
   /* Get cui if the group have not found cui by dependency.*/
   def getCuiByTree(n:Int=7, tree: Tree=tree, depth:Int=1):Boolean = {
@@ -864,17 +928,17 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           val cui = vi._1
           val index = vi._2
           hasCui = true
-          cui.stys.foreach(sty=> {
+          cui.stys.zipWithIndex.foreach{case (sty,idx)=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
-          })
+          }}
         })
       })
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t0\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -891,7 +955,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tsty_ignored\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
     else
       ""
   }

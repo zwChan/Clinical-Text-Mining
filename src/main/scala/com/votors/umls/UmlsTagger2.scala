@@ -58,7 +58,7 @@ import org.apache.commons.csv._
  */
 case class Suggestion(val score: Float,
                       val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="",var termId:Long=0) {
-  val stys = new mutable.HashSet[String]()  // semantic type for this cui
+  val stys = new mutable.ArrayBuffer[String]()  // semantic type for this cui
   var method = ""  // the method to find this cui
   var nested = "None" // if this cui has a parent noun phrase that is consider as a 'part matching cui': "None", "Nested", "nesting"
   var skipNum = 0  // if the words in the term is not adjacent in original sentence, it is the number of  non-useful words
@@ -67,13 +67,13 @@ case class Suggestion(val score: Float,
   var matchType = 0; //match with metamap result: 1=same cui; 2= same orgStr; 3=1+2
   val matchDesc = new StringBuilder
   val ngram:Int= 1 + orgStr.count(_ == ' ') // # of words
-
+  var styIgnored:Array[Int] = Array(0)  // 0: not ignored; 1: ignored by prefer rules; 2: ignore by random picking
 
   def isContainedBy(spanOther: IntPair) = {
     (spanOther.get(0)<=span.get(0) && spanOther.get(1)>=span.get(1))
   }
   override  def toString(): String = {
-      "[%2.2f%%] (%s) (%s) (%s) (%s) (%d,%d) %s".format(score, cui, aui, sab,tags, span.get(0),span.get(1), descr)
+      "[%2.2f%%] (%s) (%s) (%s) (%s) (%d,%d) ([%s],[%s]) %s".format(score, cui, aui, sab,tags, span.get(0),span.get(1), stys.mkString(" "),styIgnored.mkString(" "),descr)
   }
   def shortDesc() = {
     s"${cui}|${orgStr}|${score.toInt}"
@@ -88,6 +88,7 @@ case class Suggestion(val score: Float,
     s.method = this.method
     s.stys ++= this.stys
     s.tags ++= this.tags
+    s.styIgnored = this.styIgnored.clone()
     s
   }
 }
@@ -414,7 +415,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       while (mrsty.next) {
         //for each TUI, get their semantic type
         val tui = mrsty.getString("TUI")
-        suggestion.stys.add(tui)
+        if (suggestion.stys.indexOf(tui)<0)suggestion.stys.append(tui)
       }
     })
     ret.sortBy(_.score*(-1.0))  //desc
@@ -926,6 +927,14 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 object UmlsTagger2 {
   val tagger = new UmlsTagger2(Conf.solrServerUrl, Conf.rootDir)
 
+  val styPrefer = new mutable.HashMap[(String,String),String]()  // semantic type map (sty1,sty2) => prefer_sty
+  Source.fromFile(Conf.rootDir+"/data/sty_pairs_preference_extended_STs.txt").getLines().foreach(line=>{
+    val tokens = line.split('\t')
+    if (tokens.size >= 6) {
+      styPrefer.put((tokens(0),tokens(2)),tokens(5))
+    }
+  })
+  println(styPrefer)
 
   def main(args: Array[String]) {
 
