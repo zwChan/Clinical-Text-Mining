@@ -60,10 +60,10 @@ class Clustering (sc: SparkContext) {
     rdd.mapPartitions(iter=> {
       println(s"getBlogTextRdd ***")
       val sqlUtil = new SqlUtils(url)
-//      val sqlUtil = new SqlUtils("jdbc:mysql://localhost:3306/ytex?user=root&password=root")
+      //val sqlUtil = new SqlUtils("jdbc:mysql://localhost:3306/ytex?user=root&password=root")
       val texts = for (id <- iter) yield {
         val ret = sqlUtil.execQuery(s"select ${textCol} as blogText from ${tbl} where ${idCol}=${id} limit 1")
-//        val ret = sqlUtil.execQuery(s"select chosenanswer as blogText from tmp_org_yahoo limit 1")
+        //val ret = sqlUtil.execQuery(s"select chosenanswer as blogText from tmp_org_yahoo limit 1")
         ret.next()
         (id, ret.getString(1))
       }
@@ -172,6 +172,8 @@ class Clustering (sc: SparkContext) {
         g.context.wordsInbags=null;
         g
       }))
+      sys.exit(0)*/
+       /*Utils.writeObjectToFile(Conf.ngramSaveFile + ".part", ngrams.filter(g=>g.hashCode()%10==0))
       sys.exit(0)*/
 
       if (Conf.trainNgramCnt>0)ngrams = ngrams.take(Conf.trainNgramCnt)
@@ -287,13 +289,13 @@ class Clustering (sc: SparkContext) {
       if (gram.context.wordsInbags == null) {
         println("You configured bagsOfWords enable, but there is no bagsOfWords info in ngram.")
         sys.exit(1)
-      };
+      }
       if (Conf.bowTopNgram>gram.context.wordsInbags.size) {
         println(s"Warning: You specify Conf.bowTopCvalueNgram=${Conf.bowTopNgram}, but only ${gram.context.wordsInbags.size} available")
         Conf.bowTopNgram = gram.context.wordsInbags.size
       }
       vectorWeight.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(_=>1.0).take(Conf.bowTopNgram))
-      columnName.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(_=>"bow"))
+      columnName.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).zipWithIndex.map(kv => s"bow${kv._2}"))
     }
     println(s"* the weight for the feature vecotr is \n${columnName.zip(vectorWeight).mkString(",")} *")
     //println(Nlp.wordsInbags.mkString("\t"))
@@ -752,7 +754,7 @@ object Clustering {
       if (fw != null)
         fw.write(f"${v._1.toStringVector()}\n")
       else
-      println(f"${v._1.toStringVector()}")
+        println(f"${v._1.toStringVector()}")
     })
     if (fw != null)fw.close()
     println("ngram vector:")
