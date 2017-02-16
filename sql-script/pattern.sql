@@ -275,9 +275,7 @@ select can.cui, can.cui_str, can.month, freq.cui_freq, count(*) as num,can.sty f
  
  SELECT T.gender, count(*) FROM meta T WHERE T.tid in (SELECT distinct tid from cancer_cui where task = 'Lung') GROUP BY T.gender;
  
- 
  select nested ,count(*) from cancer_cui group by nested;
-
 
 drop table sarah_sample;
 create table sarah_sample (
