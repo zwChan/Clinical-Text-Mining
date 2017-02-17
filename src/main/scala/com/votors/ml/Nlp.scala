@@ -85,6 +85,7 @@ object Nlp {
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
   final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
 
+  // (ngram-key, index-in-array-ordered-by-frequency)
   var wordsInbags: Map[String,Int] = null
 
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
@@ -402,7 +403,8 @@ object Nlp {
       }else{
         (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
       }
-      println(Nlp.wordsInbags.toSeq.sortBy(_._2).mkString("\t"))
+      println("the words in the bags: ")
+      println(Nlp.wordsInbags.toSeq.sortBy(_._2 * -1).mkString("\t"))
     }
 
     //println(s"generateNgramStage2, pre gram # ${hPreNgram.size}")
@@ -464,49 +466,51 @@ object Nlp {
       for (end <- Range(0, gramInSent.size) if (start != end)) {
         val w = gramInSent(end) // grams walking around the center-gram in the range of window
         val wPreGram = w._3 // result of stage 1 for walker gram
+        if (!cGram.key.equals(wPreGram.key)) {
+          //exclude the term that is nested by cGram
+          if (w._1 < c._1 || w._1 + wPreGram.n > c._1 + cGram.n) {
+            // update in the sentence
+            if (wPreGram.isUmlsTerm(true)) {
+              // score of chv
+              cGram.context.sent_chvCnt += 1
+              cGram.context.sent_umlsCnt += 1
+            } else if (wPreGram.isUmlsTerm(false)) {
+              //score of umls
+              cGram.context.sent_umlsCnt += 1
+            }
+          }
 
-        //exclude the term that is nested by cGram
-        if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
-          // update in the sentence
-          if (wPreGram.isUmlsTerm(true)) {
-            // score of chv
-            cGram.context.sent_chvCnt += 1
-            cGram.context.sent_umlsCnt += 1
-          } else if (wPreGram.isUmlsTerm(false)) {
-            //score of umls
-            cGram.context.sent_umlsCnt += 1
+          // update bags of words counter by sentence
+          if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
+            val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse(-1)
+            traceFilter(INFO, cGram.text, s"${cGram.key} found ${wPreGram.key},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v => (v._1, v._2.key)).mkString(",")}")
+            // !! It is importance to make sure that don't count itself in to the context bag-of-word
+            if (index >= 0) {
+              cGram.context.wordsInbags(index) += 1
+            }
           }
-        }
 
-        // update bags of words counter by sentence
-        if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
-          val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse(-1)
-          traceFilter(INFO, cGram.text, s"${cGram.key} found ${wPreGram.key},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v=>(v._1,v._2.key)).mkString(",")}")
-          if (index>=0){
-            cGram.context.wordsInbags(index) += 1
+          // update the nearest umls term, exclude the term that is nested by cGram
+          if (w._1 < c._1 || w._1 + wPreGram.n > c._1 + cGram.n) {
+            if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
+              traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.key}, ${wPreGram.key}")
+              nearestUmls = Math.abs(c._1 - w._1)
+            }
+            if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
+              traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.key}, ${wPreGram.key}")
+              nearestChv = Math.abs(c._1 - w._1)
+            }
           }
-        }
-
-        // update the nearest umls term, exclude the term that is nested by cGram
-        if (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n) {
-          if (wPreGram.isUmlsTerm() && Math.abs(c._1 - w._1) < nearestUmls) {
-            traceFilter(INFO, cGram.text, s"umls/chv dist is ${c._1} & ${w._1}, ${cGram.key}, ${wPreGram.key}")
-            nearestUmls = Math.abs(c._1 - w._1)
-          }
-          if (wPreGram.isUmlsTerm(true) && Math.abs(c._1 - w._1) < nearestChv) {
-            traceFilter(INFO, cGram.text, s"chv dist is ${c._1}-${w._1}, ${cGram.key}, ${wPreGram.key}")
-            nearestChv = Math.abs(c._1 - w._1)
-          }
-        }
-        // update in the window,  exclude the term that is nested by cGram
-        if (((w._1 + w._2.n + Ngram.WinLen > c._1) && (c._1 + c._2.n + Ngram.WinLen) < w._1) && (w._1<c._1 || w._1+wPreGram.n>c._1+cGram.n)) {
-          if (wPreGram.isUmlsTerm(true)) {
-            // score of chv
-            cGram.context.win_chvCnt += 1
-            cGram.context.win_umlsCnt += 1
-          } else if (wPreGram.isUmlsTerm()) {
-            //score of umls
-            cGram.context.win_umlsCnt += 1
+          // update in the window,  exclude the term that is nested by cGram
+          if (((w._1 + w._2.n + Ngram.WinLen > c._1) && (c._1 + c._2.n + Ngram.WinLen) < w._1) && (w._1 < c._1 || w._1 + wPreGram.n > c._1 + cGram.n)) {
+            if (wPreGram.isUmlsTerm(true)) {
+              // score of chv
+              cGram.context.win_chvCnt += 1
+              cGram.context.win_umlsCnt += 1
+            } else if (wPreGram.isUmlsTerm()) {
+              //score of umls
+              cGram.context.win_umlsCnt += 1
+            }
           }
         }
       }
