@@ -146,14 +146,13 @@ class Clustering (sc: SparkContext) {
       rddSent.unpersist()
       if(Conf.ngramSaveFile.trim.length>0) {
         if (Conf.bagsOfWord) {
-          Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
           Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", rddNgram2.map(g=>{
-            g.context.wordsInbags=null;
+            g.context.wordsInbags=null
             g
           }).collect())
-        }else{
-          Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
         }
+        Utils.writeObjectToFile(Conf.ngramSaveFile+".bow.index", Nlp.wordsInbags)
+        Utils.writeObjectToFile(Conf.ngramSaveFile, rddNgram2.collect())
       }
 
       if (Conf.trainNgramCnt>0) {
@@ -165,16 +164,29 @@ class Clustering (sc: SparkContext) {
 
     }else {
       println(s"start load ngram from file:")
-      var ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v=>{
-        !v.text.matches(Conf.stopwordRegex) && v.tfAll>Conf.stag2TfFilter
-      })
+      var ngrams:Array[Ngram] = null
+      if (Conf.bagsOfWord) {
+         ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v => {
+          !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
+        })
+        Nlp.wordsInbags = Utils.readObjectFromFile(Conf.ngramSaveFile + ".bow.index")
+      }else{
+        ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile+".no_bow").filter(v => {
+          !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
+        })
+      }
      /* Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", ngrams.map(g=>{
         g.context.wordsInbags=null;
         g
       }))
       sys.exit(0)*/
-       /*Utils.writeObjectToFile(Conf.ngramSaveFile + ".part", ngrams.filter(g=>g.hashCode()%10==0))
+       /*Utils.writeObjectToFile(Conf.ngramSaveFile + ".part", ngrams.filter(g=>g.hashCode()%10<5))
       sys.exit(0)*/
+
+      println(Nlp.wordsInbags.toArray.sortBy(kv=>kv._2._1).mkString("\t") + "\tkeyOfTerm")
+      ngrams.sortBy(_.tfAll * -1).foreach(g=>{
+        println(g.context.wordsInbags.mkString("\t") + s"\t${g.key}")
+      })
 
       if (Conf.trainNgramCnt>0)ngrams = ngrams.take(Conf.trainNgramCnt)
       val rddNgram2 = sc.parallelize(ngrams, Conf.partitionNumber)
@@ -295,7 +307,7 @@ class Clustering (sc: SparkContext) {
         Conf.bowTopNgram = gram.context.wordsInbags.size
       }
       vectorWeight.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).map(_=>1.0).take(Conf.bowTopNgram))
-      columnName.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).zipWithIndex.map(kv => s"bow${kv._2}"))
+      columnName.appendAll(gram.context.wordsInbags.take(Conf.bowTopNgram).zipWithIndex.map(kv => s"bow${kv._2+1}"))
     }
     println(s"* the weight for the feature vecotr is \n${columnName.zip(vectorWeight).mkString(",")} *")
     //println(Nlp.wordsInbags.mkString("\t"))
@@ -507,12 +519,10 @@ class Clustering (sc: SparkContext) {
     // check the discarded centers, if the cost of then grater than the average cost * 2, add them as center again
     val finalCenter = new ArrayBuffer[Vector]()
     finalCenter.appendAll(newCenter)
-    modelOrg.clusterCenters.filter(v => {
-      !retPredictFiltered.contains(modelOrg.clusterCenters.indexOf(v))
-    }).foreach(p=>{
+    modelOrg.clusterCenters.filter(retPredictFiltered.indexOf(_) < 0).foreach(p=>{
       val cost = MyKmean.findClosest(model.clusterCenters,p)._2
-      println(f"discarded center cost is ${cost}, factor ${cost/avgCost}%.1f")
       if(cost > avgCost * Conf.clusterThresholFactor){
+        println(f"center cost is ${cost}, factor ${cost/avgCost}%.1f > ${Conf.clusterThresholFactor}, so it still is a center")
         finalCenter.append(p)
       }
     })
@@ -767,7 +777,7 @@ object Clustering {
     //if (Conf.showNgramInCluster<=0) rddVector.unpersist()
 
     //print the name of the features in vetors
-    println("The feature name is:\n" + clustering.columnName.zipWithIndex.map(kv=>s"${kv._1}-${kv._2+1}").mkString("\t"))
+    println("The feature name is:\n" + clustering.columnName.zipWithIndex.map(kv=>s"${kv._1}").mkString("\t"))
 
     if (Conf.outputVectorOnly) {
       if(Conf.bagsOfWord)
@@ -794,8 +804,6 @@ object Clustering {
 
         val avgCost = clustering.sampleAvgCost(model,rddVectorDbl)
         println(f"final: sample average cost of model for k=${model.k} is ${avgCost}")
-
-
 
         val tfStatMap = if(Conf.showTfAvgSdInCluster){
           println("tf average and standard deviation in new clusters:")

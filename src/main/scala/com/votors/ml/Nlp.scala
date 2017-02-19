@@ -86,7 +86,7 @@ object Nlp {
   final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
 
   // (ngram-key, index-in-array-ordered-by-frequency)
-  var wordsInbags: Map[String,Int] = null
+  var wordsInbags: Map[String,(Int,Long)] = null
 
   //val solrServer = new HttpSolrServer(Conf.solrServerUrl)
 
@@ -398,13 +398,10 @@ object Nlp {
                     ngram: Int = Ngram.N
                     ): Unit = {
     if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
-      Nlp.wordsInbags = if (Conf.bowTopNgram>0) {
-        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(Conf.bowTopNgram).map(_._1).zipWithIndex.toMap
-      }else{
-        (if(Conf.bagsOfWordFilter) hPreNgram.filter(kv=>kv._2.isUmlsTerm(Conf.trainOnlyChv)) else {hPreNgram}).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).map(_._1).zipWithIndex.toMap
-      }
-      println("the words in the bags: ")
-      println(Nlp.wordsInbags.toSeq.sortBy(_._2 * -1).mkString("\t"))
+      val topBow = if (Conf.bowTopNgram == 0) hPreNgram.size else Conf.bowTopNgram
+      Nlp.wordsInbags =  (if(Conf.bowUmlsOnly) hPreNgram.filter(kv=>kv._2.isUmlsTerm(true)) else {hPreNgram}).filter(_._2.tfAll >= Conf.bowTfFilter).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(topBow).zipWithIndex.map(kv=>(kv._1._1,(kv._2,kv._1._2))).toMap
+      println("\n ### the words in the bags: ")
+      println(Nlp.wordsInbags.toSeq.sortBy(_._2._2 * -1).mkString("\t"))
     }
 
     //println(s"generateNgramStage2, pre gram # ${hPreNgram.size}")
@@ -463,10 +460,10 @@ object Nlp {
       val cGram = c._2 // the center gram, which is to be updated
       var nearestUmls = Ngram.WinLen
       var nearestChv  = Ngram.WinLen
-      for (end <- Range(0, gramInSent.size) if (start != end)) {
+      for (end <- Range(0, gramInSent.size) if (start != end)) {  // in the dianoges, it counts the term co-occurrence with itself
         val w = gramInSent(end) // grams walking around the center-gram in the range of window
         val wPreGram = w._3 // result of stage 1 for walker gram
-        if (!cGram.key.equals(wPreGram.key)) {
+        //if (!cGram.key.equals(wPreGram.key)) {
           //exclude the term that is nested by cGram
           if (w._1 < c._1 || w._1 + wPreGram.n > c._1 + cGram.n) {
             // update in the sentence
@@ -482,7 +479,7 @@ object Nlp {
 
           // update bags of words counter by sentence
           if (Conf.bagsOfWord && cGram.context.wordsInbags != null) {
-            val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse(-1)
+            val index = Nlp.wordsInbags.get(wPreGram.key).getOrElse((-1,0L))._1
             traceFilter(INFO, cGram.text, s"${cGram.key} found ${wPreGram.key},index ${index}, blog ${sent.blogId},sent ${sent.sentId}, ${sent.tokens.mkString(",")}, ${gramInSent.map(v => (v._1, v._2.key)).mkString(",")}")
             // !! It is importance to make sure that don't count itself in to the context bag-of-word
             if (index >= 0) {
@@ -512,7 +509,7 @@ object Nlp {
               cGram.context.win_umlsCnt += 1
             }
           }
-        }
+        //}
       }
       cGram.context.umlsDist += nearestUmls
       cGram.context.chvDist += nearestChv

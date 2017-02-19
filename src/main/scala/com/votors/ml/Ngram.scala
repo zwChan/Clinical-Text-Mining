@@ -499,7 +499,7 @@ object Ngram {
    */
   def updateAfterReduce(itr: Iterator[Ngram], docNum: Long, isStage2:Boolean=false) = {
     val s = itr.toSeq
-    println(s"grams number after redusce (in this partition) is  ${s.size}")
+    println(s"grams number after redusce (in this partition, isStage2: ${isStage2}) is  ${s.size}")
     val tagger = new UmlsTagger2()
     s.foreach(gram => {
       gram.procTfdf(docNum)
