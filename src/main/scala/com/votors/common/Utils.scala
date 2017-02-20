@@ -238,12 +238,13 @@ object Conf extends java.io.Serializable{
   val bagsOfWord=prop.getOrDefault("bagsOfWord", propDef.get("bagsOfWord")).toString.toBoolean
   val bowUmlsOnly=prop.getOrDefault("bowUmlsOnly", propDef.get("bowUmlsOnly")).toString.toBoolean
   val bowTfFilter=prop.getOrDefault("bowTfFilter", propDef.get("bowTfFilter")).toString.toInt
+  val bowDialogSetOne=prop.getOrDefault("bowDialogSetOne", propDef.get("bowDialogSetOne")).toString.toBoolean
   val tfdfLessLog=prop.getOrDefault("tfdfLessLog", propDef.get("tfdfLessLog")).toString.toBoolean
   var bowTopNgram=prop.getOrDefault("bowTopNgram", propDef.get("bowTopNgram")).toString.toInt
   val reviseModel=prop.getOrDefault("reviseModel", propDef.get("reviseModel")).toString.toBoolean
   val clusterScore=prop.getOrDefault("clusterScore", propDef.get("clusterScore")).toString.toBoolean
   var showNgramInCluster=prop.getOrDefault("showNgramInCluster", propDef.get("showNgramInCluster")).toString.toInt
-  var pcaDimension=prop.getOrDefault("pcaDimension", propDef.get("pcaDimension")).toString.toInt
+  var pcaDimension=prop.getOrDefault("pcaDimension", propDef.get("pcaDimension")).toString.toFloat
   val sampleRuns=prop.getOrDefault("sampleRuns", propDef.get("sampleRuns")).toString.toInt
   val showSentence=prop.getOrDefault("showSentence", propDef.get("showSentence")).toString.toBoolean
   //val showTfAvgSdInCluster=prop.getOrDefault("showTfAvgSdInCluster", propDef.get("showTfAvgSdInCluster")).toString.toBoolean

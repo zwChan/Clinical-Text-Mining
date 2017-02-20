@@ -133,6 +133,9 @@ class Clustering (sc: SparkContext) {
         firstStageRet ++= rddNgram.collect().map(gram => (gram.key, gram))
 
       //firstStageRet.foreach(println)
+      Nlp.wordsInbags = Nlp.sortBowKey(firstStageRet)  // Note that the driver process and the work process are separated
+      println(s"\n ### the words in the bags ${Nlp.wordsInbags.size}: ")
+      println(Nlp.wordsInbags.toSeq.sortBy(_._2._2 * -1).mkString("\t"))
       val firstStageNgram = sc.broadcast(firstStageRet)
 
       val rddNgram2 = this.getNgramRdd(rddSent, 0, firstStageNgram)
@@ -166,10 +169,14 @@ class Clustering (sc: SparkContext) {
       println(s"start load ngram from file:")
       var ngrams:Array[Ngram] = null
       if (Conf.bagsOfWord) {
-         ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v => {
+        Nlp.wordsInbags = Utils.readObjectFromFile(Conf.ngramSaveFile + ".bow.index")
+        ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v => {
           !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
         })
-        Nlp.wordsInbags = Utils.readObjectFromFile(Conf.ngramSaveFile + ".bow.index")
+        ngrams.foreach(g=>if(Conf.bowDialogSetOne){
+           val index = Nlp.wordsInbags.getOrElse(g.key,(-1,0L))
+           if (index._1 >= 0) g.context.wordsInbags(index._1) = g.tfAll.toInt
+         })
       }else{
         ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile+".no_bow").filter(v => {
           !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
@@ -698,14 +705,32 @@ class Clustering (sc: SparkContext) {
     score
   }
 
-  def pca(rddVectorDbl: RDD[Vector], nDim:Int) = {
+  /**
+    * if nDim < 1, it means keep this proportion of variance
+    * @param rddVectorDbl
+    * @param nDim
+    */
+  def pca(rddVectorDbl: RDD[Vector], nDim:Float) = {
     val mat = new RowMatrix(rddVectorDbl)
-    // Compute the top 10 principal components.
-    val pc: Matrix = mat.computePrincipalComponents(nDim) // Principal components are stored in a local dense matrix.
+    var topK = nDim.toInt
+    if (topK < 1) {
+      val svd = mat.computeSVD(math.min(mat.numRows(),mat.numCols()).toInt)
+      val s = svd.s.toArray
+      for (i <- 0 to s.size) {
+        if (s.slice(0,i).sum / s.sum < nDim) {
+          topK = i
+        }
+      }
+      println(s"** PCA keep ${nDim} variance with dimension ${topK} out of ${mat.numCols()}")
+    }
 
+    // Compute the top 10 principal components.
+    val pc: Matrix = mat.computePrincipalComponents(topK) // Principal components are stored in a local dense matrix.
     // Project the rows to the linear space spanned by the top 10 principal components.
     val projected: RowMatrix = mat.multiply(pc)
     println(projected.rows.collect().foreach(v=>println(v.toArray.mkString(" "))))
+
+    projected.rows
   }
 
 }
@@ -723,7 +748,7 @@ object Clustering {
     val startTime = new Date()
     val conf = new SparkConf()
       .setAppName("NLP")
-    if (Conf.sparkMaster.length>0)
+    if (Conf.sparkMaster.length>3)
       conf .setMaster(Conf.sparkMaster)
     val sc = new SparkContext(conf)
 
@@ -743,6 +768,8 @@ object Clustering {
     val ngramCntAll = rddNgram4Train.count()
     val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
     val ngramCntUmls = rddNgram4Train.filter(_.isUmlsTerm(false)).count()
+    val ngramCntTest = rddNgram4Train.filter(g=> !g.isTrain).count()
+    val ngramCntUmlsTest = rddNgram4Train.filter(g=>g.isUmlsTerm(false)&& !g.isTrain).count()
     val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
     clustering.trainNum = rddNgram4Train.filter(g=>g.isTrain).count()
 
@@ -751,7 +778,9 @@ object Clustering {
     val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test).persist()
     rddNgram4Train.unpersist()
 
-    println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramCntChvTest ${ngramCntChvTest} **")
+    println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramOther ${ngramCntAll-ngramCntUmls} **")
+    println(s"** ngramCntTrain ${ngramCntAll-ngramCntTest} ngramCntUmlsTrain ${ngramCntUmls-ngramCntUmlsTest} ngramCntChvTrain ${ngramCntChv-ngramCntChvTest}  **")
+    println(s"** ngramCntTest ${ngramCntTest} ngramCntUmlsTest ${ngramCntUmlsTest} ngramCntChvTest ${ngramCntChvTest}  ngramOther ${ngramCntTest-ngramCntUmlsTest} **")
     val ngramShown = if (Conf.showOrgNgramNum>0){
       clustering.getVectorRdd(rddNgram4Train, Conf.useFeatures4Train).filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()

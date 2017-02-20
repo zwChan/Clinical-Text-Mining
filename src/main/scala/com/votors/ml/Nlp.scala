@@ -391,6 +391,18 @@ object Nlp {
     })
   }
 
+  /**
+    * The order should be unique and definitive. So we use the tf and string to combine a string key for sorting
+    * @param hPreNgram
+    * @return
+    */
+  def sortBowKey(hPreNgram: mutable.HashMap[String, Ngram]) = {
+    val topBow = if (Conf.bowTopNgram == 0) hPreNgram.size else Conf.bowTopNgram
+    (if(Conf.bowUmlsOnly) hPreNgram.filter(kv=>kv._2.isUmlsTerm(true)) else {hPreNgram})
+      .filter(_._2.tfAll >= Conf.bowTfFilter).map(kv=>(kv._1,kv._2.tfAll)).toSeq
+      .sortBy(g=>f"${Int.MaxValue-g._2}%10d"+g._1).take(topBow).zipWithIndex.map(kv=>(kv._1._1,(kv._2,kv._1._2))).toMap
+  }
+
   def generateNgramStage2(sentence: Seq[Sentence],
                     gramId: AtomicInteger,
                     hNgrams: mutable.LinkedHashMap[String,Ngram],
@@ -398,9 +410,9 @@ object Nlp {
                     ngram: Int = Ngram.N
                     ): Unit = {
     if (Conf.bagsOfWord && Nlp.wordsInbags == null) {
-      val topBow = if (Conf.bowTopNgram == 0) hPreNgram.size else Conf.bowTopNgram
-      Nlp.wordsInbags =  (if(Conf.bowUmlsOnly) hPreNgram.filter(kv=>kv._2.isUmlsTerm(true)) else {hPreNgram}).filter(_._2.tfAll >= Conf.bowTfFilter).map(kv=>(kv._1,kv._2.tfAll)).toSeq.sortBy(_._2 * -1).take(topBow).zipWithIndex.map(kv=>(kv._1._1,(kv._2,kv._1._2))).toMap
-      println("\n ### the words in the bags: ")
+      // the sorted order should be unique and definitive.
+      Nlp.wordsInbags =  sortBowKey(hPreNgram)
+      println(s"\n ### the words in the bags ${Nlp.wordsInbags.size}: ")
       println(Nlp.wordsInbags.toSeq.sortBy(_._2._2 * -1).mkString("\t"))
     }
 
