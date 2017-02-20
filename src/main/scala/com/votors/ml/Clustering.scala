@@ -786,7 +786,7 @@ object Clustering {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
       }).takeSample(false,Conf.showOrgNgramNum,Seed)
     } else null
-    println(s"original ngram: ngramShown count is ${ngramShown.size}")
+    if (Conf.showOrgNgramNum<1000)println(s"original ngram: ngramShown count is ${ngramShown.size}")
     val fw = if (Conf.saveNgram2file.length > 0) new FileWriter(Conf.saveNgram2file,false) else null
     if (fw != null) fw.write(f"${Ngram.getVectorHead()}\n")
     if (ngramShown!=null) ngramShown.foreach(v => {
