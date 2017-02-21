@@ -230,13 +230,12 @@ object Nlp {
   }
   val lvg = new Lvg()
   def stemWords(str: String,tokenSt: TokenState=null): String = {
-    val ret = lvg.getNormTerm(str)
-    if (ret.length > 0) {
-      ret
+    val ret =  if (lvg != null) {
+      lvg.getNormTerm(str)
     }else{
       stemWordsPorter(str,null)
     }
-
+    ret
   }
   val stemmer = new PorterStemmer()
 
