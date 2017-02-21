@@ -2,7 +2,7 @@ package com.votors.ml
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import com.votors.common.Conf
+import com.votors.common.{Conf, Utils}
 import com.votors.common.Utils._
 import com.votors.umls.UmlsTagger2
 import opennlp.tools.parser.Parse
@@ -20,10 +20,9 @@ import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.io.Source
 import scala.io.Codec
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -39,7 +38,6 @@ import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.util.ContentStreamBase
 import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
-
 import opennlp.tools.cmdline.BasicCmdLineTool
 import opennlp.tools.cmdline.CLI
 import opennlp.tools.cmdline.PerformanceMonitor
@@ -51,7 +49,7 @@ import opennlp.tools.stemmer.snowball.englishStemmer
 import opennlp.tools.tokenize.WhitespaceTokenizer
 import opennlp.tools.util.ObjectStream
 import opennlp.tools.util.PlainTextByLineStream
-import java.sql.{Statement, Connection, DriverManager, ResultSet}
+import java.sql.{Connection, DriverManager, ResultSet, Statement}
 
 import org.apache.commons.csv._
 
@@ -188,8 +186,26 @@ class Ngram (var text: String) extends java.io.Serializable{
         this.capt_first += 1
       }
     }
-
-
+  }
+  /**
+    * Just mark a Ngram as 'trainning' status, do not remove the non-training Ngram.
+    * @return
+    */
+  def trainSampleMark():Ngram = {
+    if (Conf.testSample>0) {
+      // take a random number for each Ngram, if the random number is not in the 'test' percentage, it is a training percentage.
+      if (Utils.random.nextInt(100000000) >= Conf.testSample*1000000 && (!Conf.trainOnlyChv || isUmlsTerm(true)))
+        isTrain = true
+      else
+        isTrain = false
+    }else{
+      if (!Conf.trainOnlyChv || isUmlsTerm(true)) {
+        isTrain = true
+      }else{
+        isTrain = false
+      }
+    }
+    this
   }
 
   /**
@@ -506,7 +522,7 @@ object Ngram {
       gram.getCValue()
       // the following not run at stage 2
       if (!isStage2) {
-        val (umlsscore, stysTmp) = tagger.getUmlsScore(gram.text)
+        val (umlsscore, stysTmp) = tagger.getUmlsScore(gram.text,"fetch")  // do not use 'filter'
         gram.umlsScore = (umlsscore._1,umlsscore._2,if(umlsscore._3!=null)umlsscore._3.cui else "",if (umlsscore._4!=null)umlsscore._4.cui else "")
         if (stysTmp == null)
           gram.stys = Ngram.stysEmpty

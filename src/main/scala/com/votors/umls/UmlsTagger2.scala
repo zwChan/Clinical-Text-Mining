@@ -397,7 +397,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param phrase the words to be search in solr
    * @return all the suggestion result in an array, sorted by score.
    */
-  def select(phrase: String, isGetSty:Boolean=false, firstCuiOnly:Boolean=true): Array[Suggestion] = {
+  def select(phrase: String, isGetSty:Boolean=true, firstCuiOnly:Boolean=false): Array[Suggestion] = {
     var cach = cache_suggestions.get(phrase)
     var ret = if (cach.isEmpty) {
       val got_cui = if (Conf.targetTermUsingSolr)
@@ -744,7 +744,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     var chvSugg:Suggestion = null
     var stys:Array[Boolean] = null
 
-    select(currTag) match {
+    select(currTag,false,false) match {
       case suggestions: Array[Suggestion] => {
         // for each UMLS terms, get their TUI from MRSTY table
         if (suggestions.length > 0) {
@@ -942,7 +942,7 @@ object UmlsTagger2 {
       styPrefer.put((tokens(0),tokens(2)),tokens(5))
     }
   })
-  println(styPrefer)
+  println(s"semantic type prefer rules number: ${styPrefer.size}")
 
   def main(args: Array[String]) {
 
