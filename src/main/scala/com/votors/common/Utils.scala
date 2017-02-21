@@ -272,7 +272,7 @@ object Conf extends java.io.Serializable{
   prop.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>println(s"${key}: ${prop.get(key).toString}"))
   propDef.keySet().iterator().toArray.map(_.toString).sorted.foreach(key=>{
     if (prop.get(key) != null && !propDef.get(key).equals(prop.get(key))) {
-      println(s"!!! You change the configuration: key= [${key.toString}], from default value [${propDef.get(key).toString}] to [${prop.get(key).toString}}] !!!")
+      println(s"!!! You change the configuration: key= [${key}], from default value [${propDef.get(key).toString}] to [${prop.get(key).toString}] !!!")
     }
   })
 
