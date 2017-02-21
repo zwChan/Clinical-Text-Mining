@@ -239,8 +239,16 @@ object Nlp {
 
   }
   val stemmer = new PorterStemmer()
+
+  /**
+    * Porter stemmer is so problematic, e.g., 'day' to 'dai', so that I decide to abandon it.
+    * @param str
+    * @param tokenSt
+    * @return
+    */
   def stemWordsPorter(str: String,tokenSt: TokenState=null): String = {
-    stemmer.stem(str)
+    //stemmer.stem(str)
+    throw new Exception("You have to configure LVG. Porter stemmer is so problematic, e.g., 'day' to 'dai', so that I decide to abandon it. ")
   }
   def normalizeAll(str: String, tokenSt: TokenState=null, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str,tokenSt)
