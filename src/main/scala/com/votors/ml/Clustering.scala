@@ -160,9 +160,11 @@ class Clustering (sc: SparkContext) {
 
       if (Conf.trainNgramCnt>0) {
         val tmp = sc.parallelize( rddNgram2.take(Conf.trainNgramCnt), Conf.partitionNumber)
-        trainSampleMark(tmp)
+//        trainSampleMark(tmp)
+        tmp
       }else{
-        trainSampleMark(rddNgram2)
+//        trainSampleMark(rddNgram2)
+        rddNgram2
       }
 
     }else {
@@ -190,24 +192,19 @@ class Clustering (sc: SparkContext) {
        /*Utils.writeObjectToFile(Conf.ngramSaveFile + ".part", ngrams.filter(g=>g.hashCode()%10<5))
       sys.exit(0)*/
 
-      println(Nlp.wordsInbags.toArray.sortBy(kv=>kv._2._1).mkString("\t") + "\tkeyOfTerm")
-      ngrams.sortBy(_.tfAll * -1).foreach(g=>{
-        println(g.context.wordsInbags.mkString("\t") + s"\t${g.key}")
-      })
-
       if (Conf.trainNgramCnt>0)ngrams = ngrams.take(Conf.trainNgramCnt)
       val rddNgram2 = sc.parallelize(ngrams, Conf.partitionNumber)
-      trainSampleMark(rddNgram2)
+//      trainSampleMark(rddNgram2)
+      rddNgram2
     }
   }
 
   /**
    * Just mark a Ngram as 'trainning' status, do not remove the non-training Ngram.
-   * @param ngramRdd
+   * @param ngram
    * @return
    */
-  def trainSampleMark(ngramRdd: RDD[Ngram]):RDD[Ngram] = {
-      ngramRdd.map(ngram=>{
+  def trainSampleMark(ngram: Ngram):Ngram = {
         if (Conf.testSample>0) {
           // take a random number for each Ngram, if the random number is not in the 'test' percentage, it is a training percentage.
           if (Utils.random.nextInt(100000000) >= Conf.testSample*1000000 && (!Conf.trainOnlyChv || ngram.isUmlsTerm(true)))
@@ -222,7 +219,6 @@ class Clustering (sc: SparkContext) {
           }
         }
         ngram
-      })
   }
   /**
    *
@@ -721,7 +717,7 @@ class Clustering (sc: SparkContext) {
           topK = i
         }
       }
-      println(s"** PCA keep ${nDim} variance with dimension ${topK} out of ${mat.numCols()}")
+      //println(s"** PCA keep ${nDim} variance with dimension ${topK} out of ${mat.numCols()}")
     }
 
     // Compute the top 10 principal components.
@@ -737,13 +733,6 @@ class Clustering (sc: SparkContext) {
 
 object Clustering {
   def main (args: Array[String]): Unit = {
-    Range(1,Conf.sampleRuns+1).foreach(i =>{
-      println(s"## iteration ${i} ##")
-      main_do(null)
-    })
-
-  }
-  def main_do (args: Array[String]): Unit = {
     // init spark
     val startTime = new Date()
     val conf = new SparkConf()
@@ -757,36 +746,39 @@ object Clustering {
 
     // printf more debug info of the gram that match the filter
     Trace.filter = Conf.debugFilterNgram
-    val Seed = new Date().getTime
 
     val clustering = new Clustering(sc)
 
+    // get all the ngram as a RDD
     val rddNgram4Train = if (Conf.trainedNgramFilterPosRegex.length>0)
-        clustering.getTrainNgramRdd().filter(gram=>Ngram.TrainedNgramFilterPosRegex.matcher(gram.posString).matches()==false).persist()
-      else
-        clustering.getTrainNgramRdd().persist()
-    val ngramCntAll = rddNgram4Train.count()
-    val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
-    val ngramCntUmls = rddNgram4Train.filter(_.isUmlsTerm(false)).count()
-    val ngramCntTest = rddNgram4Train.filter(g=> !g.isTrain).count()
-    val ngramCntUmlsTest = rddNgram4Train.filter(g=>g.isUmlsTerm(false)&& !g.isTrain).count()
-    val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
-    clustering.trainNum = rddNgram4Train.filter(g=>g.isTrain).count()
+      clustering.getTrainNgramRdd().filter(gram=>Ngram.TrainedNgramFilterPosRegex.matcher(gram.posString).matches()==false)
+    else
+      clustering.getTrainNgramRdd()
 
-    val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train).persist()
-    // if (!Conf.trainOnlyChv&&Conf.testSample<=0), there is no test ngram for rank.
-    val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test).persist()
+    rddNgram4Train.persist()
+    var rddGramVectorAll_org = clustering.getVectorRdd(rddNgram4Train, Conf.useFeatures4Train).persist()
     rddNgram4Train.unpersist()
+    val rddVectorAll = if (Conf.pcaDimension>0) {
+      clustering.pca(rddGramVectorAll_org.map(_._2), Conf.pcaDimension)
+    }else{
+      rddGramVectorAll_org.map(_._2)
+    }
+    // we used the vector after pca dimension reduction
+    val rddGramVectorAll = if (Conf.pcaDimension>0) {
+      val tmpRdd = rddGramVectorAll_org.zip(rddVectorAll).map(kv => (kv._1._1, kv._2)).persist()
+      rddGramVectorAll_org.unpersist()
+      tmpRdd
+    }else{
+      rddGramVectorAll_org
+    }
 
-    println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramOther ${ngramCntAll-ngramCntUmls} **")
-    println(s"** ngramCntTrain ${ngramCntAll-ngramCntTest} ngramCntUmlsTrain ${ngramCntUmls-ngramCntUmlsTest} ngramCntChvTrain ${ngramCntChv-ngramCntChvTest}  **")
-    println(s"** ngramCntTest ${ngramCntTest} ngramCntUmlsTest ${ngramCntUmlsTest} ngramCntChvTest ${ngramCntChvTest}  ngramOther ${ngramCntTest-ngramCntUmlsTest} **")
+    val Seed = new Date().getTime
     val ngramShown = if (Conf.showOrgNgramNum>0){
-      clustering.getVectorRdd(rddNgram4Train, Conf.useFeatures4Train).filter(kv => {
+      rddGramVectorAll.filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
-      }).takeSample(false,Conf.showOrgNgramNum,Seed)
+      }).takeSample(false,Conf.showOrgNgramNum,Seed).sortBy(_._1.tfAll * -1)
     } else null
-    if (Conf.showOrgNgramNum<1000)println(s"original ngram: ngramShown count is ${ngramShown.size}")
+    if (Conf.showOrgNgramNum>0)println(s"original ngram: ngramShown count is ${ngramShown.size}")
     val fw = if (Conf.saveNgram2file.length > 0) new FileWriter(Conf.saveNgram2file,false) else null
     if (fw != null) fw.write(f"${Ngram.getVectorHead()}\n")
     if (ngramShown!=null) ngramShown.foreach(v => {
@@ -795,30 +787,65 @@ object Clustering {
       else
         println(f"${v._1.toStringVector()}")
     })
+
+    if (Conf.bagsOfWord && Conf.bowOutputMatrix) {
+      println(Nlp.wordsInbags.toArray.sortBy(kv => kv._2._1).mkString("\t") + "\tkeyOfTerm")
+      rddGramVectorAll.sortBy(_._1.tfAll * -1).collect().foreach(kv => {
+        if (fw!=null)
+          fw.write(s"${kv._1.isUmlsTerm(true)}\t"+kv._1.context.wordsInbags.mkString("\t") + s"\t${kv._1.key}\n")
+        else
+          print(s"${kv._1.isUmlsTerm(true)}\t"+kv._1.context.wordsInbags.mkString("\t") + s"\t${kv._1.key}\n")
+      })
+    }
+
+    //  output the vectors
+    if (fw != null){
+      rddGramVectorAll.map(kv=>(kv._1.isUmlsTerm(true),kv._2)).collect().foreach(kv =>{fw.write(s"${kv._1}\t" + kv._2.toArray.mkString("\t") + "\n")})
+    }
+    if (Conf.outputVectorOnly) {
+      rddGramVectorAll.map(kv=>(kv._1.isUmlsTerm(true),kv._2)).collect().foreach(kv =>{print(s"${kv._1}\t" + kv._2.toArray.mkString("\t") + "\n")})
+      sys.exit(0)
+    }
     if (fw != null)fw.close()
-    println("ngram vector:")
-    if (ngramShown!=null)ngramShown.foreach(v => {
-      //println(f"${v._1.key}%-15s\t${v._2.toArray.map(f => f"${f}%.2f").mkString("\t")}")
+
+    Range(1,Conf.sampleRuns+1).foreach(i =>{
+      println(s"## iteration ${i} ##")
+      val sampleRdd = rddGramVectorAll_org.map(kv=>(kv._1.trainSampleMark(), kv._2)).persist()
+      main_do(sampleRdd,clustering)
+      sampleRdd.unpersist()
     })
 
+    sc.stop()
+    println("*******result is ******************")
+    System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())/1000+" ###")
+  }
+  def main_do (rddGramVectorAll:RDD[(Ngram,Vector)],clustering:Clustering): Unit = {
+
+    val rddNgram4Train = rddGramVectorAll.map(_._1)
+    val ngramCntAll = rddNgram4Train.count()
+    val ngramCntChv = rddNgram4Train.filter(_.isUmlsTerm(true)).count()
+    val ngramCntUmls = rddNgram4Train.filter(_.isUmlsTerm(false)).count()
+    val ngramCntTest = rddNgram4Train.filter(g=> !g.isTrain).count()
+    val ngramCntUmlsTest = rddNgram4Train.filter(g=>g.isUmlsTerm(false)&& !g.isTrain).count()
+    val ngramCntChvTest = rddNgram4Train.filter(g=>g.isUmlsTerm(true)&& !g.isTrain).count()
+    clustering.trainNum = rddNgram4Train.filter(g=>g.isTrain).count()
+
+    //val rddVector = clustering.getVectorRdd(rddNgram4Train.filter(g=>g.isTrain), Conf.useFeatures4Train).persist()
+    val rddVector = rddGramVectorAll.filter(_._1.isTrain).persist()
+    // if (!Conf.trainOnlyChv&&Conf.testSample<=0), there is no test ngram for rank.
+    //val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test).persist()
+    val rddRankVector_all = if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddGramVectorAll else {rddGramVectorAll.filter(_._1.isTrain==false)}.persist()
+    //rddNgram4Train.unpersist()  // don't used it again
+
+    println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramOther ${ngramCntAll-ngramCntUmls} **")
+    println(s"** ngramCntTrain ${ngramCntAll-ngramCntTest} ngramCntUmlsTrain ${ngramCntUmls-ngramCntUmlsTest} ngramCntChvTrain ${ngramCntChv-ngramCntChvTest}  **")
+    println(s"** ngramCntTest ${ngramCntTest} ngramCntUmlsTest ${ngramCntUmlsTest} ngramCntChvTest ${ngramCntChvTest}  ngramOther ${ngramCntTest-ngramCntUmlsTest} **")
+
     val rddVectorDbl = rddVector.map(_._2).persist()
-    // show ngram need this rdd.
     //if (Conf.showNgramInCluster<=0) rddVector.unpersist()
 
     //print the name of the features in vetors
     println("The feature name is:\n" + clustering.columnName.zipWithIndex.map(kv=>s"${kv._1}").mkString("\t"))
-
-    if (Conf.outputVectorOnly) {
-      if(Conf.bagsOfWord)
-        rddVector.foreach(kv=>{println(f"${if(kv._1.isUmlsTerm(true)) 1 else 0} ${kv._2.toArray.mkString(" ")}")})
-      else
-        rddVectorDbl.collect().foreach(v =>{println(v.toArray.mkString(" "))})
-      sys.exit(0)
-    }
-    if (Conf.pcaDimension>0) {
-      clustering.pca(rddVectorDbl, Conf.pcaDimension)
-      sys.exit(0)
-    }
 
     if (Conf.runKmeans) {
       val kCost = for (k <- Range(Conf.k_start, Conf.k_end+1, Conf.k_step)) yield {
@@ -857,7 +884,6 @@ object Clustering {
 
           avgSd.map(kv=>(kv._1,(kv))).toMap
         } else {null}
-        println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime()) + " ###")
         val clusterScore = if (Conf.clusterScore) {
           clustering.getSilhouetteScore(model,rddVectorDbl)
         }else{
@@ -867,6 +893,7 @@ object Clustering {
 
         val (recallVsRank, precisionVsRank, fscoreVsRank, precisionUmlsVsRank) = clustering.rank(k,"kmeans",model,rddRankVector_all, ngramCntChvTest,tfStatMap)
         val kc = (k, model.k, costOrg,cost, avgCost,clusterScore,ngramCntAll, ngramCntChv, ngramCntChvTest, recallVsRank, precisionVsRank,fscoreVsRank,precisionUmlsVsRank)
+        println(s"###single kMeans used time: " + (new Date().getTime() - startTimeTmp.getTime())/1000 + " ###")
         kc
       }
 
@@ -886,8 +913,5 @@ object Clustering {
       kCostBase.foreach(kc => println(f"${kc._1}\t${kc._2}\t${kc._3}%.1f\t${kc._4}%.1f\t${kc._5}%.4f\t${kc._6}%.4f\t${kc._7}\t${kc._8}\t${kc._9}\t${kc._10.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._11.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._12.map(v=>f"${v}%.2f").mkString("\t")}\t${kc._10.max}%.2f\t${kc._11.max}%.2f\t${kc._12.max}%.2f\t${kc._13.max}%.2f"))
     }
 
-    sc.stop()
-    println("*******result is ******************")
-    System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
   }
 }
