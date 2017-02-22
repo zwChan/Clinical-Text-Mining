@@ -724,7 +724,7 @@ class Clustering (sc: SparkContext) {
     val pc: Matrix = mat.computePrincipalComponents(topK) // Principal components are stored in a local dense matrix.
     // Project the rows to the linear space spanned by the top 10 principal components.
     val projected: RowMatrix = mat.multiply(pc)
-    println(projected.rows.collect().foreach(v=>println(v.toArray.mkString(" "))))
+    //println(projected.rows.collect().foreach(v=>println(v.toArray.mkString(" "))))
 
     projected.rows
   }

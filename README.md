@@ -2,27 +2,25 @@
 
 ## Overview
 
- A project focus on mining potential knowledge from clinical text, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
-   and platform [Apcache Spark](http://spark.apache.org/). 
+ A project focus on mining potential knowledge from clinical text, based on database [UMLS](https://www.nlm.nih.gov/research/umls/),
+   [StanfordNLP](http://nlp.stanford.edu/)/[OpenNLP](https://opennlp.apache.org/) and platform [Apcache Spark](http://spark.apache.org/).
  
 ## Features
 ### General text processing
  We call it "general" because anytime given a text dataset, we have to transform the text into
  the form that we can process them, usually it can be a vector of words.
- Currently, we use [Apache openNLP](https://opennlp.apache.org/) to process the text, 
- including sentence detection, tokenization and  Part-of-Speech parsing. We may adopt
-  [Stanford NLP](http://nlp.stanford.edu/) in the future since it provide  richer of features.
+ Currently, we use Apache openNLP or StanfordNLP (based on the configuration; we recommend to use StanfordNLP to process the text,
+ including sentence detection, tokenization and  Part-of-Speech parsing.
  We use Lexical Variant Generation (LVG) to convert the variant of a word to its basic form.
  We use a user-defined stop word list to filter out the meaningless words. Note that a term contains
  more than one word, we will filter out it if it begins or ends with a stop word.
 
-### Term identification
+### Term identification (fuzzy matching)
  Term identification is a feature that given some texts and a list of term, we identify if the term 
  occurs in the text.
  To put it simply, Clinical-Text-Mining includes steps:
 
-
- - For the list of tems, we do the same general process, also remove stop words, normalization and 
+ - For the list of tems, we do the same general process, also remove stop words, normalization and
    resort the order of ther words in the terms, to get the basic form of the term, then store the result in Mysql (or solr)
  - For the texts, applay the general process mentioned above, then we obtain a vector of words for every
    text also the syntax information of the text.  
@@ -31,25 +29,6 @@
  - For a N-gram, it may match more than one term in the list. We will give a similarity score based on
    the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance), and we also collecting
    other information about the term, such as the semantic type if it is a term in UMLS.
-
-### Tasks List:
-
- - [x] Extract UMLS terms (AUIs or CUI and so on) from text, just a basic function as an example.
-  For example, in the UMLS, for the CUI C0027051 “Myocardial infarction”
-  is the preferred term. It has many synonyms such as “heart attack” (A1303513), “coronary attack” (A18648338).
-  Each of the synonyms has a AUI (term unique identifier). In this basic task, it extracts the AUIs
-  like A1303513, A18648338 according to the text.
-    - [x] Use sentence as the basic unit to apply the n-gram algorithm (currently use a line as unit). Using opennlp.
-    - [x] Use the POS tag of a word when match.(if pos not match, 70% discount)
-    - [x] Filter the gram (in n-gram algorithm) to search by POS tag, e.g. ignore the gram without noun
-    - [x] Get all the resault from Mysql/Solr, sorted with the score
-    - [ ] Choose a best result. It is about Word Sense Disambiguation.
-    - [x] The case different should get penalty less than other different when compare UMLS term and input term.
- - [x] Map the extracted CUI to a semantic type
-    - [x] Get all STY from MRSTY table by cui
-    - [x] Get semantic group name from semGroups.txt by TUI
- - [x] Term identification
- - [x] Term recommendation
 
 ## How to run
 
