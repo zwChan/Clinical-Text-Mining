@@ -1,16 +1,16 @@
 library('base')
 
 # tf > 100, filter cluster < 3
-data = read.table("C:\\fsu\\ra\\data\\cross-evaluation-tf100-200to300.txt",sep='\t')
+data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-tf100-200to300.txt",sep='\t')
 rd_pc=25.5
 
 
 data.avg=aggregate(data[,1:ncol(data)], list(data[,1]),mean)
 
-# ev=read.table("C:\\fsu\\ra\\data\\evaluation.txt", sep = '\t')
+# ev=read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\evaluation.txt", sep = '\t')
 ev=data.avg[order(data.avg$Group.1),]
 
-write.table(data.avg[,2:ncol(data.avg)], "C:\\fsu\\ra\\data\\tmp.txt", sep='\t',row.names = FALSE,col.names = FALSE)
+write.table(data.avg[,2:ncol(data.avg)], "C:\\fsu\\ra\\UmlsTagger\\r\\data\\tmp.txt", sep='\t',row.names = FALSE,col.names = FALSE)
 x = matrix(seq(5,200,5),ncol=1) * (100/100)
 
 # random baseline data
