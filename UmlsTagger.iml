@@ -171,16 +171,16 @@
     <orderEntry type="library" name="Maven: net.razorvine:pyrolite:4.9" level="project" />
     <orderEntry type="library" name="Maven: net.sf.py4j:py4j:0.9" level="project" />
     <orderEntry type="library" name="Maven: org.spark-project.spark:unused:1.0.0" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: org.apache.spark:spark-sql_2.10:1.6.0" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: org.apache.spark:spark-catalyst_2.10:1.6.0" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: org.codehaus.janino:janino:2.7.8" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: org.codehaus.janino:commons-compiler:2.7.8" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-column:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-common:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-encoding:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-hadoop:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-format:2.1.0-cdh5.7.0-SNAPSHOT" level="project" />
-    <orderEntry type="library" scope="PROVIDED" name="Maven: com.twitter:parquet-jackson:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.spark:spark-sql_2.10:1.6.0" level="project" />
+    <orderEntry type="library" name="Maven: org.apache.spark:spark-catalyst_2.10:1.6.0" level="project" />
+    <orderEntry type="library" name="Maven: org.codehaus.janino:janino:2.7.8" level="project" />
+    <orderEntry type="library" name="Maven: org.codehaus.janino:commons-compiler:2.7.8" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-column:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-common:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-encoding:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-hadoop:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-format:2.1.0-cdh5.7.0-SNAPSHOT" level="project" />
+    <orderEntry type="library" name="Maven: com.twitter:parquet-jackson:1.5.0-cdh5.7.0-SNAPSHOT" level="project" />
     <orderEntry type="library" name="Maven: org.apache.spark:spark-mllib_2.10:1.6.0" level="project" />
     <orderEntry type="library" name="Maven: org.apache.spark:spark-streaming_2.10:1.6.0" level="project" />
     <orderEntry type="library" name="Maven: org.apache.spark:spark-graphx_2.10:1.6.0" level="project" />
