@@ -1,5 +1,5 @@
 # Read values from tab-delimited autos.dat 
-autos_data <- read.table("C:/fsu/ra/data/human_review.txt", header=F, sep="\t")
+autos_data <- read.table("C:/fsu/ra/UmlsTagger/r/data/human_review.txt", header=F, sep="\t")
 name <- c("1-grams",	"2-grams",	"3-grams",	"4-grams",	"5-grams")
 
 # Graph autos with adjacent bars using rainbow colors
@@ -24,36 +24,36 @@ legend("top", c("Should not be added","Could possibly be added","Should be added
 
 
 
-
-
-slices <- c(3,1,4,2) 
-names <- c( "¼×", "ÒÒ", "±û", "¶¡") 
-
-#png("r-graph-sample.png") 
-
-barplot(beside=TRUE, 
-        slices, #×ÝÖáÈ¡Öµ 
-        names.arg=names, #±ß¿òÃû×Ö 
-        border="black",  #±ß¿òÑÕÉ« 
-        col=c("purple","green3","blue","red"), #¿òÄÚÏßÌõÑÕÉ«
-        density =   c(7.5,12.5,17.5,22.5), #¿òÄÚÏßÌõÃÜ¶È
-        angle =  c(45,60,120,135),  #¿òÄÚÏßÌõÇãÐ±½Ç¶È
-        width = c(4,2.2,2.2,3),  #±ß¿ò¿í¶È 
-        space = c(1.5,0.5,0.5,1), #±ß¿ò¼ä¾à 
-        ylim=c(0,5),  #×ÝÖáÈ¡Öµ·¶Î§ 
-)  
-
-title(xlab="ºá") #ºáÖáÃû×Ö 
-title(ylab="Êú") #×ÝÖáÃû×Ö 
-
-lbls <- round(slices/sum(slices)*100) 
-lbls <- paste(lbls,"%",sep="") # ad % to labels 
-lbls <- paste(names, lbls) # add percents to labels 
-
-#Í¼Àý 
-legend("topright",lbls, 
-       fill=c("purple","green3","blue","red"), 
-       density =   c(7.5,12.5,17.5,22.5), 
-       angle =  c(45,60,120,135),   
-) 
+# 
+# 
+# slices <- c(3,1,4,2) 
+# names <- c( "¼×", "ÒÒ", "±û", "¶¡") 
+# 
+# #png("r-graph-sample.png") 
+# 
+# barplot(beside=TRUE, 
+#         slices, #×ÝÖáÈ¡Öµ 
+#         names.arg=names, #±ß¿òÃû×Ö 
+#         border="black",  #±ß¿òÑÕÉ« 
+#         col=c("purple","green3","blue","red"), #¿òÄÚÏßÌõÑÕÉ«
+#         density =   c(7.5,12.5,17.5,22.5), #¿òÄÚÏßÌõÃÜ¶È
+#         angle =  c(45,60,120,135),  #¿òÄÚÏßÌõÇãÐ±½Ç¶È
+#         width = c(4,2.2,2.2,3),  #±ß¿ò¿í¶È 
+#         space = c(1.5,0.5,0.5,1), #±ß¿ò¼ä¾à 
+#         ylim=c(0,5),  #×ÝÖáÈ¡Öµ·¶Î§ 
+# )  
+# 
+# title(xlab="ºá") #ºáÖáÃû×Ö 
+# title(ylab="Êú") #×ÝÖáÃû×Ö 
+# 
+# lbls <- round(slices/sum(slices)*100) 
+# lbls <- paste(lbls,"%",sep="") # ad % to labels 
+# lbls <- paste(names, lbls) # add percents to labels 
+# 
+# #Í¼Àý 
+# legend("topright",lbls, 
+#        fill=c("purple","green3","blue","red"), 
+#        density =   c(7.5,12.5,17.5,22.5), 
+#        angle =  c(45,60,120,135),   
+# ) 
 

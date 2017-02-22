@@ -1,23 +1,17 @@
 library('base')
 
 # tf > 100, filter cluster < 3
-#data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-tf100.txt",sep='\t')
-#rd_pc=25.5
-#cnt=c(3541,1895) #(#_ngram_in_test, #_chv_in_test)
-#tf=100
-
-#tf > 100, filter cluster < 3
-data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-bow.txt",sep='\t')
-rd_pc=25.5
-cnt=c(3541,1895) #(#_ngram_in_test, #_chv_in_test)
-tf=100
+# data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-tf100.txt",sep='\t')
+# rd_pc=25.5
+# cnt=c(3541,1895) #(#_ngram_in_test, #_chv_in_test)
+# tf=100
 
 # 
 # # tf > 100, filter cluster < 3   -- cancer data
-# data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-tf100-cancer.txt",sep='\t')
-# rd_pc=25.5
-# cnt=c(4344,2280)
-# tf=100
+data = read.table("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cross-evaluation-tf100-cancer.txt",sep='\t')
+rd_pc=25.5
+cnt=c(4344,2280)
+tf=100
 
 
 #tf > 5
@@ -64,7 +58,7 @@ matplot(x,y2,type=c('o'),
         add=TRUE,
         col=rainbow(3,start=1))
 
-legend("topright",legend = c("tf", "c-value", "random", "semiTerm (k=5)", "semiTerm (k=300)"), 
+legend("topright",legend = c("tf", "c-value", "random", "simiTerm (k=5)", "simiTerm (k=300)"), 
        col=c(rainbow(3,start=1),
              gray.colors(2,0.9,0)), 
        pch=c(1,5,6,16,16)) # optiona
@@ -91,7 +85,7 @@ matplot(x,y2,type=c('o'),
         lend=3,
         add=TRUE,
         col=rainbow(3,start=1))
-legend("topleft",legend = c("tf", "c-value", "random", "semiTerm (k=5)", "semiTerm (k=300)"), 
+legend("topleft",legend = c("tf", "c-value", "random", "simiTerm (k=5)", "simiTerm (k=300)"), 
        col=c(rainbow(3,start=1),
              gray.colors(2,0.9,0)), 
        pch=c(1,5,6,16,16)) # optiona
@@ -120,7 +114,7 @@ matplot(x,y2,type=c('o'),
         add=TRUE,
         col=rainbow(3,start=1))
 
-legend("bottomright",legend = c("tf", "c-value","random", "semiTerm (k=5)", "semiTerm (k=300)"), 
+legend("topright",legend = c("tf", "c-value","random", "simiTerm (k=5)", "simiTerm (k=300)"), 
        col=c(rainbow(3,start=1),
-             gray.colors(3,0.9,0)), 
+             gray.colors(2,0.9,0)), 
        pch=c(1,5,6,16,16)) # optiona

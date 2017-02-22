@@ -102,5 +102,5 @@ matplot(x,y2,type=c('o'),
 
 legend("bottomright",legend = c("tf", "c-value","random", "BOW (k=5)", "BOW (k=300)"), 
        col=c(rainbow(3,start=1),
-             gray.colors(3,0.9,0)), 
+             gray.colors(2,0.9,0)), 
        pch=c(1,5,6,16,16)) # optiona
