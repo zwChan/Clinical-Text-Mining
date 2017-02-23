@@ -32,17 +32,18 @@
 
 ## Prepare to run
 1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
-   you use an IDE such as IDEA.  Is is a maven project, so it should be easy to build it.
+   to use an IDE such as IDEA.  It is a maven project, so it should be easy to build it.
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
-2. **Prepare the UMLS data for test**. **(This step may take lots of time)**
+2. Add the dependency package int `libs` directory to the project, see file ( docs/dependency-package.jpg)
+3. **Prepare the UMLS data for test**. **(This step may take lots of time)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
    or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
    At the end, you will import the UMLS data into Mysql.
-3. Build index database for fuzzy matching.
+4. Build index database for fuzzy matching.
    Run the test function: com.votors.umls.UmlsTagger2Test.testBuildIndex2db, and it will create a index table from UMLS database
 
-4. (Instead of using Mysql, use Solr for fuzzy matching. More complicated, not recommended)
+5. (Instead of using Mysql, use Solr for fuzzy matching. More complicated, not recommended)
    Then export the test data  using sql:
    ```
     select CUI, AUI, STR from MRCONSO
@@ -56,7 +57,7 @@
    Configure the jdbc of you Mysql in configuration file (conf\default.properties), then
    use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
    
-5. Good luck and enjoy it!
+6. Good luck and enjoy it!
 
 ## Dependency
  - UMLS data

@@ -1,0 +1,2 @@
+http://stanfordnlp.github.io/CoreNLP/download.html
+Add the downloaded file to project dependency path.
