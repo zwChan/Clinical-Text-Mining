@@ -840,6 +840,10 @@ object Clustering {
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramOther ${ngramCntAll-ngramCntUmls} **")
     println(s"** ngramCntTrain ${ngramCntAll-ngramCntTest} ngramCntUmlsTrain ${ngramCntUmls-ngramCntUmlsTest} ngramCntChvTrain ${ngramCntChv-ngramCntChvTest}  **")
     println(s"** ngramCntTest ${ngramCntTest} ngramCntUmlsTest ${ngramCntUmlsTest} ngramCntChvTest ${ngramCntChvTest}  ngramOther ${ngramCntTest-ngramCntUmlsTest} **")
+    if  (clustering.trainNum <= 0) {
+      println("Number of training terms is 0, there much be something configure wrong!")
+      sys.exit(1)
+    }
 
     val rddVectorDbl = rddVector.map(_._2).persist()
     //if (Conf.showNgramInCluster<=0) rddVector.unpersist()

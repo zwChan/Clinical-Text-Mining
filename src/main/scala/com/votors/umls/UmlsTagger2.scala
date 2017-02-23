@@ -103,9 +103,21 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
     "id,cui,aui,sab,descr,descr_norm,descr_sorted,descr_stemmed"
   }
   def createTableSql(tblName:String) = {
-    val str=s"create table if not exists ${tblName} (`id` bigint default 0,`cui` varchar(100) DEFAULT NULL," +
-      "`aui` varchar(100) DEFAULT NULL,`sab` varchar(100) DEFAULT NULL,`descr` text DEFAULT NULL," +
-      "`descr_norm` text DEFAULT NULL,`descr_stemmed` text DEFAULT NULL,`descr_sorted` text DEFAULT NULL)"
+    val str=s"create table if not exists ${tblName} (`id` bigint default 0," +
+      s"`cui` varchar(100) DEFAULT NULL," +
+      "`aui` varchar(100) DEFAULT NULL," +
+      "`sab` varchar(100) DEFAULT NULL," +
+      "`descr` text DEFAULT NULL," +
+      "`descr_norm` text DEFAULT NULL," +
+      "`descr_stemmed` text DEFAULT NULL," +
+      "`descr_sorted` text DEFAULT NULL)" +
+//      " INDEX idx_cui using hash (cui)," +
+//      " INDEX idx_aui using hash (aui)," +
+//      " INDEX idx_sab using hash (sab)," +
+//      " INDEX idx_sescr using hash (descr)," +
+//      " INDEX idx_stemmed using hash (stemmed)," +
+//      " INDEX idx_sorted using hash (sorted)"+
+      ""
     println(str)
     str
   }
@@ -116,7 +128,7 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
   }
   def createIndexSql(tblName:String) = {
     val str=s"CREATE INDEX PIndex ON ${tblName} ( cui,descr (32),descr_norm (32),descr_sorted (32),descr_stemmed (32) );"
-    println(str)
+    println("\n" + str)
     str
   }
 }
@@ -165,11 +177,6 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
   val solrServer = new HttpSolrServer(solrServerUrl)
   val cache_suggestions = new mutable.HashMap[String,Array[Suggestion]]()
-
-  //opennlp models path
-  val modelRoot = rootDir + "/data"
-  val posModlePath = s"${modelRoot}/en-pos-maxent.bin"
-  val sentModlePath = s"${modelRoot}/en-sent.bin"
 
   /**
    *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
@@ -220,10 +227,10 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         .replaceAll("\\\\", "")
         .split("\t")
       // the string in a Glossary is always considered as a sentence. No sentence detecting step.
-      val strNorm = normalizeCasePunct(str)
+      val (strNorm,strStemmed,strSorted) = deCompose(str)
       //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
-      val strStemmed = stemWords(strNorm)
-      val strSorted = sortWords(strStemmed)
+//      val strStemmed = stemWords(strNorm)
+//      val strSorted = sortWords(strStemmed)
       val obuf = new StringBuilder()
       if (newFile == false) obuf.append(",")
       newFile = false
@@ -285,10 +292,11 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         .replaceAll(",", " ")
         .split("\t")
       // the string in a Glossary is always considered as a sentence. No sentence detecting step.
-      val strNorm = normalizeCasePunct(str)
-      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
-      val strStemmed = stemWords(strNorm)
-      val strSorted = sortWords(strStemmed)
+      val (strNorm,strStemmed,strSorted) = deCompose(str)
+//        val strNorm = normalizeCasePunct(str)
+//      //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+//      val strStemmed = stemWords(strNorm)
+//      val strSorted = sortWords(strStemmed)
       val obuf = new StringBuilder()
       if (newFile == false) obuf.append(",")
       newFile = false
@@ -317,63 +325,77 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.flush()
     writer.close()
   }
-  def buildIndex2db(inputFile: File): Unit = {
+  def buildIndex2db(): Unit = {
     implicit val codec = Codec("UTF-8")
     codec.onMalformedInput(CodingErrorAction.REPLACE)
     codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
     val emptyTerm = TargetTermsIndex(0,"","","","","","","")
     // init table
-    if (Conf.targetTermTblDropAndCreate) execUpdate(s"drop table if exists ${Conf.targetTermTbl}")
+    if (Conf.targetTermTblDropAndCreate) {
+      execUpdate(s"drop table if exists ${Conf.targetTermTbl}")
+    }
     execUpdate(emptyTerm.createTableSql( Conf.targetTermTbl))
 
+    // construct query. boost different score to stress fields.
+    val sqlUtilTemp = new SqlUtils(Conf.jdbcDriver.toString)
+    val query = s"select cui,aui,sab,str from ${Conf.sourceTermTbl} where ${Conf.sourceTermQueryOption} ;"
+    println(query)
+    val rsp = sqlUtilTemp.execQuery(query)
     var i = 0
-    Source.fromFile(inputFile)
-      .getLines()
-      .foreach(line => {
-      val Array(cui, str) = line
-        .replace("\",\"", "\t")
-        .replaceAll("\"", "")
-        .replaceAll("\\\\", "")
-        .replaceAll(",", " ")
-        .split("\t")
-        // the string in a Glossary is always considered as a sentence. No sentence detecting step.
-        val strNorm = normalizeCasePunct(str)
-        val aui = "null"
-        val sab = "null"
-        //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
-        val strStemmed = stemWords(strNorm)
-        val strSorted = sortWords(strStemmed)
-        val obuf = new StringBuilder()
-        val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
-        // skip first line
-        if (i>0)execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
-        i += 1
-        })
-    if (Conf.targetTermTblDropAndCreate)execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
+    while(rsp.next()) {
+      val cui = rsp.getString("cui")
+      val aui = rsp.getString("aui")
+      val sab = rsp.getString("sab")
+      val str = rsp.getString("str")
 
+      // the string in a Glossary is always considered as a sentence. No sentence detecting step.
+      val (strNorm,strStemmed,strSorted) = deCompose(str)
+      val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
+      // skip first line
+      execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
+      i += 1
+      if (i%100 == 0)print(s"\b ${i} done.")
+    }
+    if (Conf.targetTermTblDropAndCreate)sqlUtilTemp.execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
+    sqlUtilTemp.jdbcClose()
   }
   ///////////// phrase munging methods //////////////
 
+  // you should input the original string
   def normalizeCasePunct(str: String): String = {
     Nlp.normalizeCasePunct(str,null)
   }
 
+  // you should input the stemmed string
   def sortWords(str: String): String = {
     val words = Nlp.getToken(str)
     Nlp.sortWords(words).mkString(" ")
   }
 
-  def stemWords(str: String): String = {
+  // you should input the original string
+/*  def stemWords(str: String): String = {
     trace(DEBUG,s"before stem:${str}")
-    val stemmedWords = Nlp.getToken(str).filter(false == Nlp.checkStopword(_)).map(Nlp.stemWords(_)).mkString(" ")
+    val lemmas = Nlp.getTokenPosLemma(str)
+    val strNorm = normalizeCasePunct(lemmas.map(_._3).mkString(" "))
+    val stemmedWords = Nlp.getToken(strNorm).filter(false == Nlp.checkStopword(_)).mkString(" ")
     trace(DEBUG,s"after stem :${stemmedWords}")
     stemmedWords
+  }*/
+
+  def deCompose(str: String) = {
+    val lemmas = Nlp.getTokenPosLemma(str).toArray
+    val strNorm = normalizeCasePunct(lemmas.map(_._1).mkString(" "))
+    val strNormTmp = normalizeCasePunct(lemmas.map(_._3).mkString(" "))
+    val strStemmed = Nlp.getToken(strNormTmp).filter(false == Nlp.checkStopword(_))
+    val strSorted = Nlp.sortWords(strStemmed).mkString(" ")
+    (strNorm, normalizeCasePunct(strStemmed.mkString(" ")), strSorted)
   }
 
   def normalizeAll(str: String, isSort:Boolean=true, isStem: Boolean=true): String = {
-    var ret = normalizeCasePunct(str)
-    if (isStem)ret = stemWords(ret)
-    if (isSort)ret = sortWords(ret)
+    val (strNorm,strStemmed,strSorted) = deCompose(str)
+    var ret = strNorm
+    if (isStem)ret = strStemmed
+    if (isSort)ret = strSorted
     ret
   }
 
@@ -429,10 +451,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     ret.sortBy(_.score*(-1.0))  //desc
   }
   def select_solr(phrase: String): Array[Suggestion] = {
-    val phraseNorm = normalizeCasePunct(phrase)
+//    val phraseNorm = normalizeCasePunct(phrase)
+//    val phraseStemmed = stemWords(phraseNorm)
+//    val phraseSorted = sortWords(phraseStemmed)
+    val (phraseNorm,phraseStemmed,phraseSorted) = deCompose(phrase)
     val queryPos = getPos(phraseNorm.split(" "), true).sorted.mkString("+")
-    val phraseStemmed = stemWords(phraseNorm)
-    val phraseSorted = sortWords(phraseStemmed)
+
 
     // construct query. boost different score to stress fields.
 //    val query = """descr:"%s"^10 descr_norm:"%s"^5 descr_sorted:"%s" descr_stemmed:"%s"^2"""
@@ -478,10 +502,11 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return all the suggestion result in an array, sorted by score.
    */
   def select_db(phrase: String): Array[Suggestion] = {
-    val phraseNorm = normalizeCasePunct(phrase)
-    val queryPos = getPos(phraseNorm.split(" "),true).sorted.mkString("+")
-    val phraseStemmed = stemWords(phraseNorm)
-    val phraseSorted = sortWords(phraseStemmed)
+    //    val phraseNorm = normalizeCasePunct(phrase)
+    //    val phraseStemmed = stemWords(phraseNorm)
+    //    val phraseSorted = sortWords(phraseStemmed)
+    val (phraseNorm,phraseStemmed,phraseSorted) = deCompose(phrase)
+    val queryPos = getPos(phraseNorm.split(" "), true).sorted.mkString("+")
 
     // construct query. boost different score to stress fields.
     val query = s"select * from ${Conf.targetTermTbl} where descr='%s'or descr_norm='%s'or descr_sorted='%s'or descr_stemmed='%s';"
@@ -965,13 +990,8 @@ object UmlsTagger2 {
 
 object BuildTargetTerm {
   def main(args: Array[String]) = {
-    println(s"The input is: ${args.mkString(",")}")
-    if (args.length <1) {
-      println("Input invalid: args should be: targetTermFile. The file format could be a [tab] separated or csv")
-      sys.exit(1)
-    }
     val tagger = new UmlsTagger2()
-    tagger.buildIndex2db(new File(args(0)))
+    tagger.buildIndex2db()
     println(s"target term is imported to table ${Conf.targetTermTbl} in Mysql")
   }
 }

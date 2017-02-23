@@ -37,8 +37,7 @@ class UmlsTagger2Test   {
   @Test
   def testBuildIndex2db(): Unit = {
     val tagger = new UmlsTagger2("",rootDir)
-    tagger.buildIndex2db(
-      new File("C:\\fsu\\target.terms.csv"))
+    tagger.buildIndex2db()
   }
 
     @Test

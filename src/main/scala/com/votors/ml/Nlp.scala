@@ -48,34 +48,6 @@ import scala.util.control.Exception
 ;
 
 
-/**
- * Created by Jason on 2015/11/9 0009.
- */
-class Lvg(lvgdir: String=Conf.lvgdir) {
-  val properties = new util.Hashtable[String, String]()
-  properties.put("LVG_DIR", lvgdir)
-  println("lvgdir: " + Conf.lvgdir)
-  //option see: http://lexsrv3.nlm.nih.gov/LexSysGroup/Projects/lvg/2015/docs/designDoc/UDF/flow/index.html
-  val lvgApi = if (File(Conf.lvgdir + "data/config/lvg.properties").exists) {
-    new LvgCmdApi("-f:g:o:t:l:B", Conf.lvgdir + "data/config/lvg.properties", properties)
-  }else{
-    println("!!!!!lvg config not find, maybe something wrong, use PorterStemmer!!!!!!")
-    null
-  }
-
-  def getNormTerm(term: String) = {
-    var ret = ""
-    if (lvgApi != null) {
-      val outputFromLvg = lvgApi.MutateToString(term)
-      val arrrayRet = outputFromLvg.split("\\|")
-      //println(outputFromLvg)
-      if (arrrayRet.size >= 2)
-        ret = arrrayRet(1)
-    }
-    ret
-  }
-}
-
 object Nlp {
   final val NotPos = "*"      // the char using indicating this is not a POS tagger, may be a punctuation
   //final val TokenEnd = "$$"
@@ -121,10 +93,7 @@ object Nlp {
   var tokenizer:TokenizerME = null
   def getToken(str: String) = {
     if (Conf.useStanfordNLP) {
-      val reader = new StringReader(str)
-      val dp = new DocumentPreprocessor(reader)
-      dp.setTokenizerFactory(tokenizerFactory)
-      dp.iterator().map(_.toArray().map(_.toString)).flatMap(_.toSeq).toArray
+      Nlp.getTokenPosLemma(str).map(_._1).toArray
     }else{
       if (tokenizer == null) {
         val tokenModeIn = new FileInputStream(s"${modelRoot}/en-token.bin");
@@ -146,15 +115,7 @@ object Nlp {
    */
   def getPos(phraseNorm: Array[String], transfer: Boolean=false) = {
     if (Conf.useStanfordNLP) {
-      if (tagger == null) {
-        val options = Conf.stanfordTaggerOption.split(" ").map(_.split("=")).filter(_.length>=2).map(t=>(t(0),t(1))).toMap
-        val properties = new Properties()
-        options.foreach(p=>properties.setProperty(p._1,p._2))
-        println(properties)
-        val config: TaggerConfig = new TaggerConfig(properties)
-        tagger = new MaxentTagger(config.getModel, config)
-      }
-      val orgPos = tagger.tagSentence(phraseNorm.map(w=>new Word(w)).toList.asJava).iterator().map(t=>t.tag).toArray
+      val orgPos = Nlp.getTokenPosLemma(phraseNorm.mkString(" ")).map(_._2).toArray
       if (transfer) orgPos.map(Nlp.posTransform(_)) else orgPos
     }else {
       if (postagger ==null) {
@@ -205,6 +166,9 @@ object Nlp {
 
   ///////////// phrase munging methods //////////////
 
+  def getTokenPosLemma(str: String) = {
+    StanfordNLP.getPosLemma(str)
+  }
   /**
    * 1. replace all punctuation to space
    * 2. replace all continuous space to one space
@@ -228,27 +192,10 @@ object Nlp {
   def sortWords(str: Array[String], tokenSt: TokenState=null)  = {
     str.sortWith(_ < _)
   }
-  val lvg = new Lvg()
   def stemWords(str: String,tokenSt: TokenState=null): String = {
-    val ret =  if (lvg != null) {
-      lvg.getNormTerm(str)
-    }else{
-      stemWordsPorter(str,null)
-    }
-    ret
+    StanfordNLP.getPosLemma(str).map(_._3).mkString(" ")
   }
-  val stemmer = new PorterStemmer()
 
-  /**
-    * Porter stemmer is so problematic, e.g., 'day' to 'dai', so that I decide to abandon it.
-    * @param str
-    * @param tokenSt
-    * @return
-    */
-  def stemWordsPorter(str: String,tokenSt: TokenState=null): String = {
-    //stemmer.stem(str)
-    throw new Exception("You have to configure LVG. Porter stemmer is so problematic, e.g., 'day' to 'dai', so that I decide to abandon it. ")
-  }
   def normalizeAll(str: String, tokenSt: TokenState=null, isStem: Boolean=true): String = {
     var ret = normalizeCasePunct(str,tokenSt)
     if (isStem)ret = stemWords(ret,tokenSt)

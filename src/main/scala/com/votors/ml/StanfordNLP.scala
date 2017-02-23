@@ -65,25 +65,31 @@ object StanfordNLP {
 
   def isNoun(pos: String) = pos.startsWith("N")
 
-  def init() = {
+  def init(isLemmaOnlsy:Boolean=false) = {
     // creates a StanfordCoreNLP object, with POS tagging, lemmatization, NER, parsing, and coreference resolution
     val props:Properties = new Properties()
-    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
-//    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
-    props.setProperty("ner.useSUTime","true")
-    props.setProperty("ner.applyNumericClassifiers","true")
-    props.setProperty("ner.sutime.includeRange","true")
-    props.setProperty("ner.sutime.markTimeRanges","true")
-    props.setProperty("sutime.binders", "0");
-//    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
-//    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
+    if (isLemmaOnlsy) {
+      props.setProperty("annotators", "tokenize, ssplit, pos, lemma")
+    } else {
+      props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
 
+      //    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
+      props.setProperty("ner.useSUTime", "true")
+      props.setProperty("ner.applyNumericClassifiers", "true")
+      props.setProperty("ner.sutime.includeRange", "true")
+      props.setProperty("ner.sutime.markTimeRanges", "true")
+      props.setProperty("sutime.binders", "0");
+      //    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
+      //    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
+    }
     val pipeline: StanfordCoreNLP = new StanfordCoreNLP(props)
     pipeline
   }
-  val pipeline = init()
+  var  pipeline:StanfordCoreNLP = null
+  var pipelineLemma:StanfordCoreNLP = null
 
   def findPattern(text: String) = {
+    if (pipeline == null) pipeline =init(false)
     val retList = new ArrayBuffer[(CoreMap,Seq[CTPattern],Seq[MMResult])]()
     // we split using semicolon first, because stanfordNlp doesnot treat semicolon as a delimiter.
     text.split(";").filter(_.trim.length>0).foreach(sent=>{
@@ -91,7 +97,7 @@ object StanfordNLP {
       pipeline.annotate(document)
       val sentences = document.get(classOf[SentencesAnnotation])
       var sentId = 0
-      for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).size <= Conf.sentenceLenMax) {
+      for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
         sentId += 1  // sentence id is a index in the criteria
         val retPatterns = ParseSentence(sentence,sentId).getPattern()
         // get metamap result, associating the result with our result in the same pattern
@@ -110,6 +116,26 @@ object StanfordNLP {
     })
     retList
   }
+
+  /**
+    * Give a string, output its lemma format string
+    * @param str input string
+    *  return: (text, pos, lemma)
+    */
+  def getPosLemma(str: String) = {
+    if (pipelineLemma == null) pipelineLemma =init(true)
+    val document: Annotation = new Annotation(str)
+    pipelineLemma.annotate(document)
+    val tokens = document.get(classOf[TokensAnnotation])
+    val lemmas = tokens.iterator().map(t=>{
+      val lemma = t.get(classOf[LemmaAnnotation])
+      val text = PTBTokenizer.ptb2Text(t.get(classOf[TextAnnotation]))
+      val pos = t.get(classOf[PartOfSpeechAnnotation])
+      (text,pos,lemma)
+    })
+    lemmas
+  }
+
 
   def compareCuiResult(metaMap:Seq[MMResult], ours: Seq[CTPattern]) = {
     for (pt <- ours) {
@@ -169,9 +195,10 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "Prostate-specific antigen (PSA) 20-100 ng/mL and Gleason score at least 7 (any T stage)"
+    val text = "There are three GIRLS."
     // create an empty Annotation just with the given text
-    findPattern(text).foreach(_ => println(""))
+    //findPattern(text).foreach(_ => println(""))
+    //println(getPosLemma(text).mkString(" "))
     return
 
   }

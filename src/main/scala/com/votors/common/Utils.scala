@@ -152,7 +152,9 @@ object Conf extends java.io.Serializable{
   val blogIdCol = Conf.prop.getOrDefault("blogIdCol", propDef.get("blogIdCol")).toString
   val blogTextCol = Conf.prop.getOrDefault("blogTextCol", propDef.get("blogTextCol")).toString
   val blogLimit = Conf.prop.getOrDefault("blogLimit", propDef.get("blogLimit")).toString.toInt
-  val targetTermTbl = Conf.prop.getOrDefault("targetTermTbl", propDef.get("targetTermTbl")).toString.toString
+  val targetTermTbl = Conf.prop.getOrDefault("targetTermTbl", propDef.get("targetTermTbl")).toString
+  val sourceTermTbl = Conf.prop.getOrDefault("sourceTermTbl", propDef.get("sourceTermTbl")).toString
+  val sourceTermQueryOption = Conf.prop.getOrDefault("sourceTermQueryOption", propDef.get("sourceTermQueryOption")).toString
   val targetTermTblDropAndCreate = Conf.prop.getOrDefault("targetTermTblDropAndCreate", propDef.get("targetTermTblDropAndCreate")).toString.toBoolean
   val targetTermUsingSolr = Conf.prop.getOrDefault("targetTermUsingSolr", propDef.get("targetTermUsingSolr")).toString.toBoolean
 
@@ -174,7 +176,6 @@ object Conf extends java.io.Serializable{
   val partitionNumber = prop.getOrDefault("partitionNumber", propDef.get("partitionNumber")).toString.toInt
 
   val solrServerUrl = prop.getOrDefault("solrServerUrl", propDef.get("solrServerUrl")).toString
-  val lvgdir = prop.getOrDefault("lvgdir", propDef.get("lvgdir")).toString
   val posInclusive = prop.getOrDefault("posInclusive", propDef.get("posInclusive")).toString.split(" ").filter(_.trim.length>0).mkString(" ")
   val jdbcDriver = prop.getOrDefault("jdbcDriver", propDef.get("jdbcDriver")).toString
   val umlsLikehoodLimit = prop.getOrDefault("umlsLikehoodLimit", propDef.get("umlsLikehoodLimit")).toString.toDouble
