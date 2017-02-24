@@ -35,15 +35,6 @@ import org.apache.solr.common.util.ContentStreamBase
 import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
 
-import opennlp.tools.cmdline.BasicCmdLineTool
-import opennlp.tools.cmdline.CLI
-import opennlp.tools.cmdline.PerformanceMonitor
-import opennlp.tools.postag.POSModel
-import opennlp.tools.postag.POSSample
-import opennlp.tools.postag.POSTaggerME
-import opennlp.tools.tokenize.WhitespaceTokenizer
-import opennlp.tools.util.ObjectStream
-import opennlp.tools.util.PlainTextByLineStream
 import java.sql.{Statement, Connection, DriverManager, ResultSet}
 
 import org.apache.commons.csv._
@@ -354,7 +345,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       // skip first line
       execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
       i += 1
-      if (i%100 == 0)print(s"\b ${i} done.")
+      if (i%100 == 0)print(s"\ ${i} done.")
     }
     if (Conf.targetTermTblDropAndCreate)sqlUtilTemp.execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
     sqlUtilTemp.jdbcClose()

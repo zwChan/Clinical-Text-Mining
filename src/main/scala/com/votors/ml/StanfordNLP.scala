@@ -36,7 +36,6 @@ import com.votors.common.Utils._
 import com.votors.common._
 import com.votors.umls._
 import edu.stanford.nlp.io.EncodingPrintWriter.out
-import gov.nih.nlm.nls.lvg.Api.LvgCmdApi
 import opennlp.tools.chunker._
 import opennlp.tools.cmdline.parser.ParserTool
 import opennlp.tools.parser.{ParserFactory, ParserModel}

@@ -36,13 +36,16 @@
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
 2. Add the dependency package int `libs` directory to the project, see file ( docs/dependency-package.jpg),
-   and set the environment variable `CTM_ROOT_PATH` to be the root directory of the project.
+   and set the environment variable `CTM_ROOT_PATH` to be the root directory of the project. The program will
+   look for configuration file and other resource files (e.g. stopwords.txt) based on this root directory.
 3. **Prepare the UMLS data for test**. **(This step may take lots of time)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
    or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
    At the end, you will import the UMLS data into Mysql.
 4. Build index database for fuzzy matching.
-   Run the test function: com.votors.umls.UmlsTagger2Test.testBuildIndex2db, and it will create a index table from UMLS database
+   Run the test function: com.votors.umls.UmlsTagger2Test.testBuildIndex2db, or
+   run `rjava -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetTerm` in terminal.
+   and it will create a index table from UMLS database
 
 5. (Instead of using Mysql, use Solr for fuzzy matching. More complicated, not recommended)
    Then export the test data  using sql:
