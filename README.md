@@ -1,35 +1,26 @@
-# Clinical-Text-Mining
+# CHV terms recommendation
 
 ## Overview
 
- A project focuses on mining potential knowledge from clinical text, based on database [UMLS](https://www.nlm.nih.gov/research/umls/),
-   [StanfordNLP](http://nlp.stanford.edu/)/[OpenNLP](https://opennlp.apache.org/) and platform [Apcache Spark](http://spark.apache.org/).
- 
-## Features
-### General text processing
- We call it "general" because anytime given a text dataset, we have to transform the text into
- the form that we can process them, usually it can be a vector of words.
- Currently, we use Apache openNLP or StanfordNLP (based on the configuration; we recommend to use StanfordNLP to process the text,
- including sentence detection, tokenization and  Part-of-Speech parsing.
- We use Lexical Variant Generation (LVG) to convert the variant of a word to its basic form.
- We use a user-defined stop word list to filter out the meaningless words. Note that a term contains
- more than one word, we will filter out it if it begins or ends with a stop word.
+ A project focus on recommendation of CHV terms from social media, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
+   and platform [Apcache Spark](http://spark.apache.org/).
+ Conceptual idea is shwon in flowing figure.
+ ![Conceptual idea](https://raw.githubusercontent.com/henryhezhe2003/simiTerm/chv-term-recommendation/docs/figurs/conceptual.png)
 
-### Term identification (fuzzy matching)
- Term identification is a feature that given some texts and a list of term, we identify if the term 
- occurs in the text.
- To put it simply, Clinical-Text-Mining includes steps:
+- We first extract n-gram from Yahoo!Answers textual dataset (of course, you can
+ use any other textual dataset);
+- Second, identify the CHV terms using fuzzy matching method with UMLS database. We also call these terms as seed terms.
+   The other terms which do not match with any CHV term is considered as candidate terms.
+- Third, we use K-means algorithm to train a model from the identified CHV terms, and we get K centers for the model..
+- Fourth, we calculate the distance between a candidate term to all the K centers, and we choose the shortest distance
+  as the score to measure whether we should recommend a term as a CHV term. The smaller the score is, the more likely a candidate
+  term should considered as a CHV term.
 
- - For the list of tems, we do the same general process, also remove stop words, normalization and
-   resort the order of ther words in the terms, to get the basic form of the term, then store the result in Mysql (or solr)
- - For the texts, applay the general process mentioned above, then we obtain a vector of words for every
-   text also the syntax information of the text.  
- - We construct [N-gram](https://en.wikipedia.org/wiki/N-gram) from the vector of the texts and also 
-   find its basic for as above description, and then match the Ngram to check if it is found in the term list stored in Mysql (or solr).
- - For a N-gram, it may match more than one term in the list. We will give a similarity score based on
-   the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance), and we also collecting
-   other information about the term, such as the semantic type if it is a term in UMLS.
 
+ The workflow of the project is shown in following figure.
+ ![workflow](https://raw.githubusercontent.com/henryhezhe2003/simiTerm/chv-term-recommendation/docs/figurs/work-flow.png)
+
+ For more detail of the methodology, please read our paper.
 ## Prepare to run
 1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
    to use an IDE such as IDEA.  It is a maven project, so it should be easy to build it.
