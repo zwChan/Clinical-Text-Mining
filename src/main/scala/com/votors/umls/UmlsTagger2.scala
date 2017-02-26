@@ -113,7 +113,9 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
     str
   }
   def insertSql(tblName:String) = {
-    val str= s"insert into ${tblName} values ($id,'$cui','$aui','$sab','${descr.replaceAll("\'","\\\\'")}','$descr_norm','$descr_stemmed','$descr_sorted')"
+    val str= s"insert into ${tblName} values ($id,'$cui','$aui','$sab','" +
+      s"${descr.replaceAll("\\\\","\\\\\\\\").replaceAll("\'","\\\\'")}'" +  // ' and \ will cuase SQL error. so escape them
+      s",'$descr_norm','$descr_stemmed','$descr_sorted')"
     //println(str)
     str
   }
@@ -345,7 +347,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       // skip first line
       execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
       i += 1
-      if (i%100 == 0)print(s"\ ${i} done.")
+      if (i%100 == 0)print(s"\r ${i} done.")
     }
     if (Conf.targetTermTblDropAndCreate)sqlUtilTemp.execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
     sqlUtilTemp.jdbcClose()

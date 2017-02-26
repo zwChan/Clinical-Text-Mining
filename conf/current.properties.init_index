@@ -8,6 +8,6 @@ jdbcDriver=jdbc:mysql://127.0.0.1:3306/umls?user=root&password=root
 sourceTermTbl=umls.mrconso
 targetTermTbl=_target_term_
 targetTermTblDropAndCreate=false
-sourceTermQueryOption= 1=1 limit 1000
+sourceTermQueryOption= lat='ENG'
 # if true, using solr for matching a ngram with target terms, else using database query for matching
 targetTermUsingSolr=true
