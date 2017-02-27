@@ -35,13 +35,11 @@
    At the end, you will import the UMLS data into Mysql.
 4. Build index database for fuzzy matching.
    Run the test function: com.votors.umls.UmlsTagger2Test.testBuildIndex2db, or
-   run `rjava -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetTerm` in terminal.
+   run `java -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetTerm` in terminal.
    and it will create a index table from UMLS database
+5. Good luck and enjoy it!
 
-6. Good luck and enjoy it!
-
-## Run by projects
-### CHV paper
+## Run for CHV paper
 you can run the class `com.votors.ml.Clustering` in the IDEA directly. You probably need to set the maximum memory larger: -Xmx5000m
 or submit it to Spark cluster:
 ```
@@ -51,6 +49,7 @@ spark-submit --master spark://127.0.0.1:7077  --deploy-mode cluster --num-execut
  --driver-java-options=-DCTM_ROOT_PATH=/data/ra/Clinical-Text-Mining
  --files /data/ra/Clinical-Text-Mining/conf/default.properties,/data/ra/Clinical-Text-Mining/conf/current.properties
  /data/ra/Clinical-Text-Mining/target/Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar > result_yahoo_rank.txt 2>spark.log
+```
 
 ## Dependency
  - UMLS data
