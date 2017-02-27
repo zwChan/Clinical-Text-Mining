@@ -22,7 +22,7 @@
 
  For more detail of the methodology, please read our paper.
 ## Prepare to run
-1. Download this project use: `git clone https://github.com/zwChan/Clinical-Text-Mining.git`. I recommend
+1. Download this project use: `git clone https://github.com/henryhezhe2003/simiTerm.git`. I recommend
    to use an IDE such as IDEA.  It is a maven project, so it should be easy to build it.
    Add an environment variable `CTM_ROOT_PATH`, which indicates the root directory of the project. 
    The tool will find the configuration file and resource file in the project directory.
@@ -31,27 +31,13 @@
    look for configuration file and other resource files (e.g. stopwords.txt) based on this root directory.
 3. **Prepare the UMLS data for test**. **(This step may take lots of time)**
    You can follow the Sujit's post [Understanding UMLS](http://sujitpal.blogspot.com/2014/01/understanding-umls.html)
-   or the [docs of UMLM](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
+   or the [documentation of UMLS](http://www.nlm.nih.gov/research/umls/new_users/online_learning/OVR_001.html).
    At the end, you will import the UMLS data into Mysql.
 4. Build index database for fuzzy matching.
    Run the test function: com.votors.umls.UmlsTagger2Test.testBuildIndex2db, or
    run `rjava -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetTerm` in terminal.
    and it will create a index table from UMLS database
 
-5. (Instead of using Mysql, use Solr for fuzzy matching. More complicated, not recommended)
-   Then export the test data  using sql:
-   ```
-    select CUI, AUI, STR from MRCONSO
-        where LAT = 'ENG'
-        limit 10000  -- No limit if you want to use all the umls terms
-        into outfile 'your-path/first_10000.csv'
-        fields terminated by ','
-        enclosed by '"' lines
-        terminated by '\n';
-   ```
-   Configure the jdbc of you Mysql in configuration file (conf\default.properties), then
-   use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
-   
 6. Good luck and enjoy it!
 
 ## Run by projects
@@ -59,19 +45,16 @@
 you can run the class `com.votors.ml.Clustering` in the IDEA directly. You probably need to set the maximum memory larger: -Xmx5000m
 or submit it to Spark cluster:
 ```
-spark-submit --master spark://128.186.72.242:7077  --deploy-mode cluster --num-executors 9 --driver-memory 10g  --executor-memory 2048m
+spark-submit --master spark://127.0.0.1:7077  --deploy-mode cluster --num-executors 9 --driver-memory 10g  --executor-memory 2048m
  --executor-cores 1  --class com.votors.ml.Clustering  --conf 'spark.executor.extraJavaOptions=-DCTM_ROOT_PATH=/data/ra/Clinical-Text-Mining
  -cp /data/ra/stanford-corenlp-3.6.0-models.jar:/usr/bin/spark/spark-run/conf/:/usr/bin/spark/spark-run/lib/spark-assembly-1.6.0-hadoop2.6.0.jar:/usr/bin/spark/spark-run/lib/datanucleus-core-3.2.10.jar:/usr/bin/spark/spark-run/lib/datanucleus-rdbms-3.2.9.jar:/usr/bin/spark/spark-run/lib/datanucleus-api-jdo-3.2.6.jar'
  --driver-java-options=-DCTM_ROOT_PATH=/data/ra/Clinical-Text-Mining
  --files /data/ra/Clinical-Text-Mining/conf/default.properties,/data/ra/Clinical-Text-Mining/conf/current.properties
  /data/ra/Clinical-Text-Mining/target/Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar > result_yahoo_rank.txt 2>spark.log
-```
-### BIBM paper
-Run class `com.votors.umls.AnalyzeCT` in IDEA with parameter:
-pattern C:\fsu\ra\data\201601\split_criteria\ 1308_colorectal_trials_criteria_0413 criteriaWords cancer
 
 ## Dependency
  - UMLS data
+ - StanfordNLP
 
 ## Test Result
 
