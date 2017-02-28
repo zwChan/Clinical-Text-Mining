@@ -353,7 +353,7 @@ object Nlp {
     val topBow = if (Conf.bowTopNgram == 0) hPreNgram.size else Conf.bowTopNgram
     (if(Conf.bowUmlsOnly) hPreNgram.filter(kv=>kv._2.isUmlsTerm(true)) else {hPreNgram})
       .filter(_._2.tfAll >= Conf.bowTfFilter).map(kv=>(kv._1,kv._2.tfAll)).toSeq
-      .sortBy(g=>f"${Int.MaxValue-g._2}%10d"+g._1).take(topBow).zipWithIndex.map(kv=>(kv._1._1,(kv._2,kv._1._2))).toMap
+      .sortBy(g=>Ngram.sortNgramByTfAndKey(g._2,g._1)).take(topBow).zipWithIndex.map(kv=>(kv._1._1,(kv._2,kv._1._2))).toMap
   }
 
   def generateNgramStage2(sentence: Seq[Sentence],
