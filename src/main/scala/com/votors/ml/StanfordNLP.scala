@@ -84,37 +84,7 @@ object StanfordNLP {
     val pipeline: StanfordCoreNLP = new StanfordCoreNLP(props)
     pipeline
   }
-  var  pipeline:StanfordCoreNLP = null
   var pipelineLemma:StanfordCoreNLP = null
-
-  def findPattern(text: String) = {
-    if (pipeline == null) pipeline =init(false)
-    val retList = new ArrayBuffer[(CoreMap,Seq[CTPattern],Seq[MMResult])]()
-    // we split using semicolon first, because stanfordNlp doesnot treat semicolon as a delimiter.
-    text.split(";").filter(_.trim.length>0).foreach(sent=>{
-      val document: Annotation = new Annotation(sent)
-      pipeline.annotate(document)
-      val sentences = document.get(classOf[SentencesAnnotation])
-      var sentId = 0
-      for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
-        sentId += 1  // sentence id is a index in the criteria
-        val retPatterns = ParseSentence(sentence,sentId).getPattern()
-        // get metamap result, associating the result with our result in the same pattern
-        val mmRets = MMApi.process(PTBTokenizer.ptb2Text(sentence.get(classOf[TextAnnotation])),sentId)
-        compareCuiResult(mmRets,retPatterns)
-        //if (retPatterns.size > 0) {
-          //retPatterns.foreach(_.metamapList.appendAll(mmRets.iterator()))
-          retList.append((sentence,retPatterns, mmRets))
-        //} else {
-          //retList.append((sentence, null.asInstanceOf[Seq[CTPattern]))
-        //}
-      }
-    })
-    retList.filter(_._2 != null).foreach(p=>{
-      println(s"findPattern: ${p._1.get(classOf[TextAnnotation])}, ${p._2.toString}")
-    })
-    retList
-  }
 
   /**
     * Give a string, output its lemma format string
@@ -133,54 +103,6 @@ object StanfordNLP {
       (text,pos,lemma)
     })
     lemmas
-  }
-
-
-  def compareCuiResult(metaMap:Seq[MMResult], ours: Seq[CTPattern]) = {
-    for (pt <- ours) {
-      pt.ner2groups.foreach(_.cuis.foreach(s=>{
-        //s.matchDesc.clear()
-        for (mm <- metaMap) {
-          var newMatchFlag = 0
-          if (mm.cui.equals(s.cui)) {
-            mm.matchType |= 1
-            s.matchType |= 1
-            newMatchFlag |= 1
-          }
-          if (Utils.strSimilarity(mm.orgStr, s.orgStr) >= Conf.umlsLikehoodLimit / 100.0) {
-            mm.matchType |= 2
-            s.matchType |= 2
-            newMatchFlag |= 2
-          }
-          // one term contain another term
-          if (mm.orgStr.toLowerCase.contains(s.orgStr.toLowerCase) && !s.orgStr.toLowerCase.contains(mm.orgStr.toLowerCase)) {
-            s.matchType |= 4  // mine is contain by metamap's
-            //s.matchType |= 4
-            //newMatchFlag |= 4
-          }
-          // one term contain another term
-          if (!mm.orgStr.toLowerCase.contains(s.orgStr.toLowerCase) && s.orgStr.toLowerCase.contains(mm.orgStr.toLowerCase)) {
-            //mm.matchType |= 4
-            mm.matchType |= 4
-            //newMatchFlag |= 4
-          }
-
-          if (newMatchFlag == 3) {
-            s.matchDesc.append(s"{${mm.shortDesc}}#")
-            mm.matchDesc.append(s"{${s.shortDesc}}#")
-          } else if (newMatchFlag == 2) {
-            s.matchDesc.append(s"[${mm.shortDesc}]#")
-            mm.matchDesc.append(s"[${s.shortDesc}]#")
-          } else if (newMatchFlag >= 1) {
-            s.matchDesc.append(s"(${mm.shortDesc})#")
-            mm.matchDesc.append(s"(${s.shortDesc})#")
-          }else {
-            s.matchDesc.append(s"${mm.shortDesc}#")
-            mm.matchDesc.append(s"${s.shortDesc}#")
-          }
-        }
-      }))
-    }
   }
 
   def main (args: Array[String]): Unit= {
