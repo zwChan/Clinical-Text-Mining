@@ -120,7 +120,11 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
     str
   }
   def createIndexSql(tblName:String) = {
-    val str=s"CREATE INDEX PIndex ON ${tblName} ( cui,descr (32),descr_norm (32),descr_sorted (32),descr_stemmed (32) );"
+    val str = s"CREATE INDEX idx_cui ON ${tblName} ( cui ) using hash;" +
+      s"CREATE INDEX idx_descr ON ${tblName} ( descr (32) ) using hash;" +
+      s"CREATE INDEX idx_norm ON ${tblName} ( descr_norm (32)) using hash;" +
+      s"CREATE INDEX idx_sorted ON ${tblName} ( descr_sorted (32)) using hash;" +
+      s"CREATE INDEX idx_stemmed ON ${tblName} ( descr_stemmed (32) ) using hash;"
     println("\n" + str)
     str
   }
@@ -349,7 +353,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       i += 1
       if (i%100 == 0)print(s"\r ${i} done.")
     }
-    if (Conf.targetTermTblDropAndCreate)sqlUtilTemp.execUpdate(emptyTerm.createIndexSql( Conf.targetTermTbl))
+    if (Conf.targetTermTblDropAndCreate)emptyTerm.createIndexSql( Conf.targetTermTbl).split(";").foreach(execUpdate(_))
     sqlUtilTemp.jdbcClose()
   }
   ///////////// phrase munging methods //////////////
@@ -503,7 +507,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
     // construct query. boost different score to stress fields.
     val query = s"select * from ${Conf.targetTermTbl} where descr='%s'or descr_norm='%s'or descr_sorted='%s'or descr_stemmed='%s';"
-      .format(phrase, phraseNorm, phraseSorted, phraseStemmed)
+      .format(phrase.replaceAll("\\\\","\\\\\\\\").replaceAll("\'","\\\\'"), phraseNorm, phraseSorted, phraseStemmed)
     trace(DEBUG, query)
     val rsp = execQuery(query)
     val suggs = new ArrayBuffer[Suggestion]()
@@ -523,6 +527,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
       suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase))
     }
+    //println(suggs)
     suggs.toArray.sortBy(s => 1 - s.score) // Decrease
   }
 

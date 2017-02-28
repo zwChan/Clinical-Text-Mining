@@ -776,7 +776,7 @@ object Clustering {
     val ngramShown = if (Conf.showOrgNgramNum>0){
       rddGramVectorAll.filter(kv => {
         Conf.showOrgNgramOfN.contains(kv._1.n) && Ngram.ShowOrgNgramOfPosRegex.matcher(kv._1.posString).matches() && Ngram.ShowOrgNgramOfTextRegex.matcher(kv._1.text).matches()
-      }).takeSample(false,Conf.showOrgNgramNum,Seed).sortBy(_._1.tfAll * -1)
+      }).takeSample(false,Conf.showOrgNgramNum,Seed).sortBy(kv=>Ngram.sortNgramByTfAndKey(kv._1.tfAll,kv._1.key))
     } else null
     if (Conf.showOrgNgramNum>0)println(s"original ngram: ngramShown count is ${ngramShown.size}")
     val fw = if (Conf.saveNgram2file.length > 0) new FileWriter(Conf.saveNgram2file,false) else null

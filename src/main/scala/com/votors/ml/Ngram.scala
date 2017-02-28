@@ -466,6 +466,7 @@ object Ngram {
     })
   }
   def getKey(text:String,posString:String) = s"${text} (${posString})"
+  def sortNgramByTfAndKey(tf:Long, key:String) = f"${Long.MaxValue-tf}%16d" + key
   /**
    * gram is sentence.tokens[start, end)
    * pos tag see: http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
