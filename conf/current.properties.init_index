@@ -1,13 +1,14 @@
 #  ############# UMLS term matching configuration #####################3
 #  # jdbcDriver is the database url that uses for extern info for a term in UMLS. e.g. selecting TUI by CUI from the table MRSTY.
 #  # for now, table mrstr is neccessary
-jdbcDriver=jdbc:mysql://127.0.0.1:3306/umls?user=root&password=root
+jdbcDriver=jdbc:mysql://127.0.0.1:3306/umls?useServerPrepStmts=false&rewriteBatchedStatements=true&user=root&password=root
 
 ################################# use for target umls terms ######################
 #target term info in database
 sourceTermTbl=umls.mrconso
 targetTermTbl=_target_term_
-targetTermTblDropAndCreate=false
-sourceTermQueryOption= lat='ENG'
+targetTermTblDropAndCreate=true
+# 'a' and 'b' represent the self-join mrconso table.
+sourceTermQueryOption= a.lat='ENG' and b.lat='ENG' limit 100
 # if true, using solr for matching a ngram with target terms, else using database query for matching
-targetTermUsingSolr=true
+targetTermUsingSolr=false

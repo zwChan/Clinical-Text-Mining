@@ -1,6 +1,7 @@
 package com.votors.umls
 
 import java.io.{File, FileReader, FileWriter, PrintWriter}
+import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 
@@ -216,7 +217,7 @@ class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}[${c.styIgnored.mkString(",")}]><${c.method}><${c.tags}>").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}(${c.preferStr})<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}[${c.styIgnored.mkString(",")}]><${c.method}><${c.tags}>").mkString(";")});"
       }else{
         s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})"
       }
@@ -325,7 +326,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
      * General get cui by a string and filter.
      */
   def getCui(str: String, reduceBySty:Boolean=true): Array[Suggestion] = {
-      var suggustions = UmlsTagger2.tagger.select(str,true,true)
+      var suggustions = UmlsTagger2.tagger.select(str,true,false)
         .filter(s=>{
         var flag = s.score >= Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
         s.stys.filter(tui=> Conf.semanticType.indexOf(tui) >=0 )
@@ -339,12 +340,21 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           (sty,cuiCopy)
         })
       }).groupBy(_._1).map(kv=>{
-        // choose the smallest cui for key (cui,tui)
-        val tmp = kv._2.sortBy(_._2.cui)
+        // choose the highest score and smallest cui for key (cui,tui)
+        val tmp = kv._2.sortBy(v=>f"${Int.MaxValue - v._2.score.toInt}%10d${v._2.cui}")
         val firstKv = tmp(0)
-        val sugg = firstKv._2
-        if (sugg.stys.indexOf(firstKv._1)<0)sugg.stys.append(firstKv._1)
-        sugg
+        val s = firstKv._2
+        if (s.stys.indexOf(firstKv._1)<0)s.stys.append(firstKv._1)
+/*        val suggs = new ArrayBuffer[Suggestion]
+        suggs.append(s)
+        // add all cui with the highest score to return list
+        for ((sty,cui) <- tmp if cui.score >= s.score) {
+          if (s.stys.indexOf(firstKv._1)<0)s.stys.append(sty)  // collect all sty to the first cui, and then dispatch to all cui
+          suggs.append(cui)
+        }
+        for (sty <- s.stys; cui <- suggs) if (cui.stys.indexOf(sty) < 0) cui.stys.append(sty)
+        suggs*/
+        s
       }).toArray
 
       if (Conf.analyzNonUmlsTerm && suggustions.size <= 0 && !Nlp.checkStopword(str,true) && !str.matches(Conf.cuiStringFilterRegex)) {
@@ -356,42 +366,58 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       suggustions
     }
 
+  /**
+    * first there is a semantic type preferring table. Based on this table,
+    * We choose one term if a cui includes multiple terms;
+    * Then we choose one cui if there are multiple cui.
+    * @param suggustions
+    */
   def styPrefer(suggustions:Array[Suggestion]): Unit = {
     def IGNORED_NOT_IGNORED = 0
     def IGNORED_PREFER_IN_CUI = 1
     def IGNORED_PREFER_BW_CUI = 2
     def IGNORED_PICK_IN_CUI = 4
     def IGNORED_PICK_BW_CUI = 8
+    def IGNORED_LESS_SCORE = 16
 
     if (suggustions.size>1){
-          suggustions.foreach(s=>{
-        if (s.styIgnored.size < s.stys.size) s.styIgnored = Array.fill(s.stys.size)(IGNORED_NOT_IGNORED)
-        // prefer a semantic type for a cui
-        if (s.stys.size > 1) {
-          for (i <- Range(0 , s.stys.size); j <- Range(0, s.stys.size) if i != j) {
-            val prefer = UmlsTagger2.styPrefer.get((s.stys(i), s.stys(j)))
-            if (prefer.isDefined) {
-              if (s.stys(i).equals(prefer.get)) {
-                s.styIgnored(j) |= IGNORED_PREFER_IN_CUI
-              } else {
-                s.styIgnored(i) |= IGNORED_PREFER_IN_CUI
+      // group by cui and then choose one for each cui
+      suggustions.groupBy(_.cui).foreach(kv=> {
+        val stys = kv._2.flatMap(_.stys)
+        //add all sty fo this cui
+        for (sty<-stys; s<-kv._2)if (s.stys.indexOf(sty)<0)s.stys.append(sty)
+        val styIgnored = Array.fill(kv._2(0).stys.size)(IGNORED_NOT_IGNORED)
+        kv._2.foreach(s => {
+          // prefer a semantic type for a cui
+          s.styIgnored = styIgnored
+          if (s.stys.size > 1) {
+            for (i <- Range(0, s.stys.size); j <- Range(0, s.stys.size) if i != j) {
+              val prefer = UmlsTagger2.styPrefer.get((s.stys(i), s.stys(j)))
+              if (prefer.isDefined) {
+                if (s.stys(i).equals(prefer.get)) {
+                  styIgnored(j) |= IGNORED_PREFER_IN_CUI
+                } else {
+                  styIgnored(i) |= IGNORED_PREFER_IN_CUI
+                }
               }
             }
           }
-          // pick a semantic type in cui
-          var cnt = 0
-          for (i <- Range(0, s.styIgnored.size)) {
-            if (cnt > 0 && s.styIgnored(i) == IGNORED_NOT_IGNORED) {
-              s.styIgnored(i) |= IGNORED_PICK_IN_CUI
-            }
-            if (s.styIgnored(i) == IGNORED_NOT_IGNORED) cnt += 1
+        })
+        // if there is more than one IGNORED_NOT_IGNORED, keep the first only
+        var cnt = 0
+        for (i <- Range(0,styIgnored.size)) {
+          if (cnt == 0 && styIgnored(i) == IGNORED_NOT_IGNORED){
+            cnt += 1
+          }else{
+            if(styIgnored(i) == IGNORED_NOT_IGNORED) styIgnored(i) = IGNORED_PICK_IN_CUI
           }
         }
       })
-      // prefer a semantic type for a org_string
+
+      // prefer a cui among multiple cuis
       for (i <- Range(0, suggustions.size); j <- Range(0, suggustions.size) if i != j) {
-        val idx1 = suggustions(i).styIgnored.indexOf(0)
-        val idx2 = suggustions(j).styIgnored.indexOf(0)
+        val idx1 = suggustions(i).styIgnored.indexOf(IGNORED_NOT_IGNORED)
+        val idx2 = suggustions(j).styIgnored.indexOf(IGNORED_NOT_IGNORED)
         if (idx1 >= 0 && idx2 >= 0) {
           val prefer = UmlsTagger2.styPrefer.get((suggustions(i).stys(idx1), suggustions(j).stys(idx2)))
           if (prefer.isDefined) {
@@ -405,13 +431,13 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       }
       // pick a semantic type between cui
       var cnt = 0
-      for (s <- suggustions) {
-        for (i <- Range(0,s.styIgnored.size)) {
-          if (cnt > 0 && s.styIgnored(i) == IGNORED_NOT_IGNORED) {
-            s.styIgnored(i) |= IGNORED_PICK_BW_CUI
+      for (s <- suggustions.sortBy(v=>f"${Int.MaxValue - v.score.toInt}%10d${v.cui}")) {
+          val idx = s.styIgnored.indexOf(IGNORED_NOT_IGNORED)
+          if (cnt == 0 && idx >= 0) {
+            cnt += 1
+          }else{
+            if (idx >= 0) s.styIgnored(idx) |= IGNORED_PICK_BW_CUI
           }
-          if (s.styIgnored(i) == IGNORED_NOT_IGNORED) cnt += 1
-        }
       }
     }
   }
@@ -503,7 +529,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
           // the nestd 'string' should be shorter than the new 'string'
           val cui = suggs.sortBy(c=>StringUtils.getLevenshteinDistance(treeStr.toLowerCase, c.orgStr.toLowerCase).toFloat).head
           if (included && cui.orgStr != treeStr) {
-            val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, treeStr, cui.termId)
+            val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, treeStr, cui.preferStr, cui.termId)
             newCui.stys ++= cui.stys
             newCui.method = "partCui"
             newCui.nested = "nesting"
@@ -699,7 +725,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
    */
   def partCuiConjunction():Unit = {
     def addCui(str_conj:String, span_start:Int, span_end:Int, tags:String, cui:Suggestion, g:RegexGroup, term:Term=null): Unit ={
-      val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, str_conj, cui.termId)
+      val newCui = new Suggestion(cui.score, cui.descr, cui.cui, cui.aui, cui.sab, cui.NormDescr, str_conj,cui.preferStr, cui.termId)
       newCui.stys ++= cui.stys
       newCui.method = "partCui"
       newCui.nested = "nesting"
@@ -892,7 +918,8 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
   override def toString(): String = {
     val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${criteriaId}","${sentence.trim.replaceAll("\\\"","'")}""""
     if(markedType.size > 1 && markedType != "None")trace(INFO, "Get CTRow parsing result: " + str)
-    str.replace("\"","\\\"")
+    //str.replace("\"","\\\"")
+    str
   }
   def patternOutput(pattern: CTPattern, sent:String=null) = {
       val paternStr = if (pattern == null)
@@ -930,7 +957,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.zipWithIndex.foreach{case (sty,idx)=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           }}
         })
@@ -938,7 +965,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t0\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t0\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -955,7 +982,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tsty_ignored\tngram\torg_str\tcui_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
+      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tsty_ignored\tngram\torg_str\tcui_str\tprefer_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
     else
       ""
   }
@@ -974,10 +1001,13 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
 }
 
 
-
-
-
-
+/**
+  *
+  * @param csvFile
+  * @param outputFile
+  * @param externFile: the file that contains numerical variables or numerical operatiors. e.g. numeric_variables.csv
+  * @param externRetFile
+  */
 class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRetFile:String) {
   val STAG_HEAD=0;
   val STAG_INCLUDE=1

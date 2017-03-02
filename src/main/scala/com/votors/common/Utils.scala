@@ -159,6 +159,7 @@ object Conf extends java.io.Serializable{
   val targetTermUsingSolr = Conf.prop.getOrDefault("targetTermUsingSolr", propDef.get("targetTermUsingSolr")).toString.toBoolean
 
   val caseFactor = prop.getOrDefault("caseFactor", propDef.get("caseFactor")).toString.toFloat
+  val preferStrFactor = prop.getOrDefault("preferStrFactor", propDef.get("preferStrFactor")).toString.toFloat
   val ignoreNewLine = prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
   val partitionTfFilter = prop.getOrDefault("partitionTfFilter", propDef.get("partitionTfFilter")).toString.toInt
   val stag1TfFilter = prop.getOrDefault("stag1TfFilter", propDef.get("stag1TfFilter")).toString.toInt

@@ -48,7 +48,7 @@ import org.apache.commons.csv._
  * @param aui
  */
 case class Suggestion(val score: Float,
-                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="",var termId:Long=0) {
+                      val descr: String, val cui: String, val aui: String, val sab: String, val NormDescr: String="",val orgStr:String="",val preferStr:String = "",var termId:Long=0) {
   val stys = new mutable.ArrayBuffer[String]()  // semantic type for this cui
   var method = ""  // the method to find this cui
   var nested = "None" // if this cui has a parent noun phrase that is consider as a 'part matching cui': "None", "Nested", "nesting"
@@ -58,6 +58,7 @@ case class Suggestion(val score: Float,
   var matchType = 0; //match with metamap result: 1=same cui; 2= same orgStr; 3=1+2
   val matchDesc = new StringBuilder
   val ngram:Int= 1 + orgStr.count(_ == ' ') // # of words
+  // styIgnored should be shared by all sugustion with the same cui
   var styIgnored:Array[Int] = Array(0)  // 0: not ignored; 1: ignored by prefer rules; 2: ignore by random picking
 
   def isContainedBy(spanOther: IntPair) = {
@@ -72,7 +73,7 @@ case class Suggestion(val score: Float,
   def copy(str:String="") = {
     val newDescr = if (str.length == 0) descr else str
     val neworgStr = if (str.length == 0) orgStr else str
-    val s = new Suggestion(score,newDescr,cui,aui,sab,NormDescr,neworgStr)
+    val s = new Suggestion(score,newDescr,cui,aui,sab,NormDescr,neworgStr,preferStr)
     s.span.set(0,this.span.get(0))
     s.span.set(1,this.span.get(1))
     s.skipNum = this.skipNum
@@ -85,13 +86,13 @@ case class Suggestion(val score: Float,
 }
 
 case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val sab: String,
-                            val descr:String, val descr_norm:String, val descr_sorted:String, val descr_stemmed:String) {
+                            val descr:String, val descr_norm:String, val descr_sorted:String, val descr_stemmed:String, val preferStr:String="") {
   override
   def toString(): String = {
-    "%d,%s,%s,%s,%s,%s,%s,%s".format(id, cui, aui, sab, descr,descr_norm,descr_sorted,descr_stemmed)
+    "%d,%s,%s,%s,%s,%s,%s,%s,%s".format(id, cui, aui, sab, descr,descr_norm,descr_sorted,descr_stemmed,preferStr)
   }
   def getHead(): String = {
-    "id,cui,aui,sab,descr,descr_norm,descr_sorted,descr_stemmed"
+    "id,cui,aui,sab,descr,descr_norm,descr_sorted,descr_stemmed,perferStr"
   }
   def createTableSql(tblName:String) = {
     val str=s"create table if not exists ${tblName} (`id` bigint default 0," +
@@ -101,21 +102,16 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
       "`descr` text DEFAULT NULL," +
       "`descr_norm` text DEFAULT NULL," +
       "`descr_stemmed` text DEFAULT NULL," +
-      "`descr_sorted` text DEFAULT NULL)" +
-//      " INDEX idx_cui using hash (cui)," +
-//      " INDEX idx_aui using hash (aui)," +
-//      " INDEX idx_sab using hash (sab)," +
-//      " INDEX idx_sescr using hash (descr)," +
-//      " INDEX idx_stemmed using hash (stemmed)," +
-//      " INDEX idx_sorted using hash (sorted)"+
-      ""
+      "`descr_sorted` text DEFAULT NULL," +
+      "`preferStr` text DEFAULT NULL" +
+      ")"
     println(str)
     str
   }
   def insertSql(tblName:String) = {
     val str= s"insert into ${tblName} values ($id,'$cui','$aui','$sab','" +
       s"${descr.replaceAll("\\\\","\\\\\\\\").replaceAll("\'","\\\\'")}'" +  // ' and \ will cuase SQL error. so escape them
-      s",'$descr_norm','$descr_stemmed','$descr_sorted')"
+      s",'$descr_norm','$descr_stemmed','$descr_sorted', '${preferStr.replaceAll("\\\\","\\\\\\\\").replaceAll("\'","\\\\'")}')"
     //println(str)
     str
   }
@@ -124,7 +120,8 @@ case class TargetTermsIndex(val id: Long, val cui: String, val aui: String, val 
       s"CREATE INDEX idx_descr ON ${tblName} ( descr (32) ) using hash;" +
       s"CREATE INDEX idx_norm ON ${tblName} ( descr_norm (32)) using hash;" +
       s"CREATE INDEX idx_sorted ON ${tblName} ( descr_sorted (32)) using hash;" +
-      s"CREATE INDEX idx_stemmed ON ${tblName} ( descr_stemmed (32) ) using hash;"
+      s"CREATE INDEX idx_stemmed ON ${tblName} ( descr_stemmed (32) ) using hash;" +
+      s"CREATE INDEX idx_preferStr ON ${tblName} ( preferStr (32) ) using hash;"
     println("\n" + str)
     str
   }
@@ -202,8 +199,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param inputFile: csv format or table split file
    * @param outputFile:
    */
-  def buildIndexJson(inputFile: File,
-                     outputFile: File): Unit = {
+  def buildIndexJson(inputFile: String,
+                     outputFile: String): Unit = {
 
     implicit val codec = Codec("UTF-8")
     codec.onMalformedInput(CodingErrorAction.REPLACE)
@@ -218,7 +215,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     Source.fromFile(inputFile)
       .getLines()
       .foreach(line => {
-      val Array(cui, aui, sab, str) = line
+      val Array(cui, aui, sab, str,preferStr) = line
         .replace("\",\"", "\t")
         .replaceAll("\"", "")
         .replaceAll("\\\\", "")
@@ -240,6 +237,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         .append("\"descr_norm\":\"").append(strNorm).append("\",")
         .append("\"descr_sorted\":\"").append(strSorted).append("\",")
         .append("\"descr_stemmed\":\"").append(strStemmed).append("\"")
+        .append("\"preferStr\":\"").append(preferStr).append("\"")
         .append("}")
       writer.println(obuf.toString)
       i += 1
@@ -266,7 +264,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.close()
   }
 
-  def buildIndexCsv(inputFile: File,
+  /*def buildIndexCsv(inputFile: File,
                      outputFile: File): Unit = {
 
     implicit val codec = Codec("UTF-8")
@@ -321,7 +319,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.println("]")
     writer.flush()
     writer.close()
-  }
+  }*/
   def buildIndex2db(): Unit = {
     implicit val codec = Codec("UTF-8")
     codec.onMalformedInput(CodingErrorAction.REPLACE)
@@ -335,19 +333,21 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
     // construct query. boost different score to stress fields.
     val sqlUtilTemp = new SqlUtils(Conf.jdbcDriver.toString)
-    val query = s"select cui,aui,sab,str from ${Conf.sourceTermTbl} where ${Conf.sourceTermQueryOption} ;"
+    val query = s"select a.cui,a.aui,a.sab,a.str,b.str from ${Conf.sourceTermTbl} a, ${Conf.sourceTermTbl} b " +
+      s"where a.cui=b.cui and b.TS='P' and b.STT='PF' and b.ISPREF='Y' and ${Conf.sourceTermQueryOption} ;"
     println(query)
     val rsp = sqlUtilTemp.execQuery(query)
     var i = 0
     while(rsp.next()) {
-      val cui = rsp.getString("cui")
-      val aui = rsp.getString("aui")
-      val sab = rsp.getString("sab")
-      val str = rsp.getString("str")
+      val cui = rsp.getString("a.cui")
+      val aui = rsp.getString("a.aui")
+      val sab = rsp.getString("a.sab")
+      val str = rsp.getString("a.str")
+      val preferStr = rsp.getString("b.str")
 
       // the string in a Glossary is always considered as a sentence. No sentence detecting step.
       val (strNorm,strStemmed,strSorted) = deCompose(str)
-      val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed)
+      val targetTerm = TargetTermsIndex(i, cui, aui, sab, str, strNorm, strSorted, strStemmed,preferStr)
       // skip first line
       execUpdate(targetTerm.insertSql(Conf.targetTermTbl))
       i += 1
@@ -408,7 +408,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
   ///////////////// solr search methods //////////////
   /**
-   * Select all the result in solr.
+   * Select all the result in solr or database.
    * The input string has to be normalized(case/puntuation delete, stemed, sorted), then search in
    * solr. All the result from solr will be evaluated a score. The higher the score, the closer the
    * result relative to the input.
@@ -474,6 +474,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val descr_norm = sdoc.getFieldValue("descr_norm").asInstanceOf[String]
         val descr_sorted = sdoc.getFieldValue("descr_sorted").asInstanceOf[String]
         val descr_stemmed = sdoc.getFieldValue("descr_stemmed").asInstanceOf[String]
+        val preferStr = sdoc.getFieldValue("preferStr").asInstanceOf[String]
         trace(DEBUG,s"result from solr: $descr, $descr_norm, $descr_sorted, $descr_stemmed")
         val cui = sdoc.getFieldValue("cui").asInstanceOf[String]
         val aui = sdoc.getFieldValue("aui").asInstanceOf[String]
@@ -481,8 +482,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         val descrNorm = normalizeCasePunct(descr)
         val resultPos = getPos(descrNorm.split(" "),true).sorted.mkString("+")
         val score = computeScore(descr,
-          scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-        Suggestion(score, descr, cui, aui,sab,phraseSorted,phrase)
+          scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor,preferStr)
+        Suggestion(score, descr, cui, aui,sab,phraseSorted,phrase,preferStr)
       }).toArray.sortBy(s => 1 - s.score) // Decrease
       ret
     } else Array()
@@ -517,6 +518,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val descr_norm = rsp.getString("descr_norm")
       val descr_sorted = rsp.getString("descr_sorted")
       val descr_stemmed = rsp.getString("descr_stemmed")
+      val preferStr = rsp.getString("preferStr")
       trace(DEBUG,s"result from solr: $descr, $descr_norm, $descr_sorted, $descr_stemmed")
       val cui = rsp.getString("cui")
       val aui = rsp.getString("aui")
@@ -524,8 +526,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       val descrNorm = normalizeCasePunct(descr)
       val resultPos = getPos(descrNorm.split(" "),true).sorted.mkString("+")
       val score = computeScore(descr,
-        scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor)
-      suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase))
+        scala.collection.immutable.List(phrase, phraseNorm, phraseStemmed, phraseSorted, queryPos,resultPos), Conf.caseFactor,preferStr)
+      suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase,preferStr) )
     }
     //println(suggs)
     suggs.toArray.sortBy(s => 1 - s.score) // Decrease
@@ -545,11 +547,12 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @param caseFactor how much you care about case(lowcase/upcase), [0,,1],,
    * @return
    */
-  def computeScore(s: String, candidates: List[String], caseFactor: Float=0.0f): Float = {
+  def computeScore(s: String, candidates: List[String], caseFactor: Float=0.0f, preferStr:String): Float = {
     trace(DEBUG, s"computeScore(): ${s}, " + candidates.mkString("[",",","]"))
     val levels = scala.collection.immutable.List(100.0F, 90.0F, 80.0F, 80.0F, 0f, 0f)
     var candLevels = mutable.HashMap[String,  Float]()
     val posFlag = candidates(5) == candidates(4) //pos
+    val queryStr = candidates(0)
 
     val candidatesLevel = Array(
       (candidates(0),levels(0)),
@@ -573,10 +576,20 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     })
       .sortWith((a, b) => a._2 > b._2)
       .head
-    if (posFlag != true)
+
+    val maxlen = Math.max(queryStr.length(), preferStr.length()).toFloat
+    //val dist_case = StringUtils.getLevenshteinDistance(queryStr, preferStr).toFloat
+    val dist_no_case = StringUtils.getLevenshteinDistance(queryStr.toLowerCase, preferStr.toLowerCase).toFloat
+    val score_preferStr = 1.0F - (dist_no_case)/maxlen
+
+
+    val tmpScore  = if (posFlag != true)
       topscore._2 * 0.7f // pos are different, make a 30% penalty
     else
       topscore._2
+    // Add the factor of prefer string to the score
+    tmpScore * (1-Conf.preferStrFactor) + score_preferStr * 100 * Conf.preferStrFactor
+
   }
 
 
@@ -735,7 +748,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
           val gram = tokens.slice(idx,idx+n)
           val pos = getPos(gram)
           if (Conf.posInclusive.length == 0 || posContains(gram,Conf.posInclusive,pos)) {
-            select(gram.mkString(" ")) match {
+            select(gram.mkString(" "),true,false) match {
               case suggestions: Array[Suggestion] => {
                 retList :+= (gram.mkString(" "), suggestions)
               }
@@ -991,6 +1004,19 @@ object BuildTargetTerm {
     val tagger = new UmlsTagger2()
     tagger.buildIndex2db()
     println(s"target term is imported to table ${Conf.targetTermTbl} in Mysql")
+  }
+}
+
+object BuildTargetJson4solr {
+  def main(args: Array[String]):Unit = {
+    if (args.size <2) {
+      println("Usage: args: input-file output-file")
+      return
+    }
+    val tagger = new UmlsTagger2()
+    tagger.buildIndexJson(args(0),args(1))
+    println(s"target term is imported to table ${Conf.targetTermTbl} in Mysql")
+    return
   }
 }
 
