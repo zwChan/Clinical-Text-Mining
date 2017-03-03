@@ -67,6 +67,26 @@
 
 ## Run by projects
 ### CHV paper
+#### Overview
+
+ A project focus on recommendation of CHV terms from social media, based on dataset [UMLS](https://www.nlm.nih.gov/research/umls/)
+   and platform [Apcache Spark](http://spark.apache.org/). The analyzed dataset is Yahoo!Answers corpus about diabetes and cancer.
+ Conceptual idea is shwon in flowing figure.
+ ![Conceptual idea](docs/figurs/conceptual.png)
+
+#### Methodology introduction
+- We first extract n-gram from Yahoo!Answers textual dataset (of course, you can
+ use any other textual dataset);
+- Second, identify the CHV terms using fuzzy matching method with UMLS database. We also call these terms as seed terms.
+   The other terms which do not match with any CHV term is considered as candidate terms.
+- Third, we use K-means algorithm to train a model from the identified CHV terms, and we get K centers for the model..
+- Fourth, we calculate the distance between a candidate term to all the K centers, and we choose the shortest distance
+  as the score to measure whether we should recommend a term as a CHV term. The smaller the score is, the more likely a candidate
+  term should considered as a CHV term.
+
+ The workflow of the project is shown in following figure.
+ ![workflow](docs/figurs/work-flow.png)
+#### Run for the result
 you can run the class `com.votors.ml.Clustering` in the IDEA directly. You probably need to set the maximum memory larger: -Xmx5000m
 or submit it to Spark cluster:
 ```
@@ -77,14 +97,32 @@ spark-submit --master spark://128.186.72.242:7077  --deploy-mode cluster --num-e
  --files /data/ra/Clinical-Text-Mining/conf/default.properties,/data/ra/Clinical-Text-Mining/conf/current.properties
  /data/ra/Clinical-Text-Mining/target/Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar > result_yahoo_rank.txt 2>spark.log
 ```
-### BIBM paper
-Run class `com.votors.umls.AnalyzeCT` in IDEA with parameter:
+
+#### Result figures
+**Evaluation:**
+ ![Evaluation](/docs/figurs/evaluation_simiterm.png)
+
+**Human review result:**
+ ![human review](docs/figurs/figure8_human_review.png)
+
+### BIBM(2016) paper
+A project focuses on analyzing temporal context of clinical trials from [Clinicaltrials](https://clinicaltrials.gov/).
+
+#### Run for the result
+Run class `com.votors.umls.AnalyzeCT` in IDEA with parameter (you maybe have to look at the code a little bit):
 pattern C:\fsu\ra\data\201601\split_criteria\ 1308_colorectal_trials_criteria_0413 criteriaWords cancer
+
+#### Result figures
+**Semantic type distribution**
+ ![sty_distribution](/docs/figurs/sty_distribution.png)
+
+**Temporal context heatmap**
+ ![temporal_context_heatmap](/docs/figurs/cui_duration_heatmap3.png)
+
 
 ## Dependency
  - UMLS data
 
-## Test Result
 
 ## Contributor
   Anyone interested in the project is welcome!
