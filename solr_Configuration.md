@@ -1,4 +1,4 @@
-  It is tedious to configure Solr, that is why I change it to perform the matching task in Mysql. 
+  It is tedious to configure Solr, that is why I change it to perform the matching task in Mysql even it is slower.
   I do not recommend to use Solr except you has a strong consideration.
 
 4. **Download and Customize Solr** (only 4.6.1 is tested, later it will support solr 5.x)
@@ -31,6 +31,7 @@
         <field name="descr_norm" type="string" indexed="true" stored="true"/>
         <field name="descr_sorted" type="string" indexed="true" stored="true"/>
         <field name="descr_stemmed" type="string" indexed="true" stored="true"/>
+        <field name="preferStr" type="string" indexed="true" stored="true"/>
         <field name="descr_tagged" type="tag" indexed="true" stored="false"
              omitTermFreqAndPositions="true" omitNorms="true"/>
         <copyField source="descr_norm" dest="descr_tagged"/>
@@ -87,6 +88,7 @@
     cd solr-4.6.1\example\exampledocs
     java -Durl=http://localhost:8983/solr/update -Dtype=application/json \
       -jar post.jar ${your-path}/first_10000.csv
+
     curl "http://localhost:8983/solr/tag?build=true" (or you can run this url in a browser)
     ```
     

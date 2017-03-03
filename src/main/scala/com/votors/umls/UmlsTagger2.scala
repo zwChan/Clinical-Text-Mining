@@ -236,7 +236,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         .append("\"descr\":\"").append(str).append("\",")
         .append("\"descr_norm\":\"").append(strNorm).append("\",")
         .append("\"descr_sorted\":\"").append(strSorted).append("\",")
-        .append("\"descr_stemmed\":\"").append(strStemmed).append("\"")
+        .append("\"descr_stemmed\":\"").append(strStemmed).append("\",")
         .append("\"preferStr\":\"").append(preferStr).append("\"")
         .append("}")
       writer.println(obuf.toString)

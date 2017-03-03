@@ -47,11 +47,11 @@
    run `java -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetTerm` in terminal.
    and it will create a index table from UMLS database
 
-5. (Instead of using Mysql, use Solr for fuzzy matching. More complicated, not recommended)
+5. (Instead of using Mysql, use Solr for fuzzy matching. More complicated but faster, not recommended)
    Then export the test data  using sql:
    ```
-    select CUI, AUI, STR from MRCONSO
-        where LAT = 'ENG'
+    select a.cui,a.aui,a.sab,a.str,b.str from mrconso a, mrconso b
+    where a.cui=b.cui and b.TS='P' and b.STT='PF' and b.ISPREF='Y' and a.lat = 'ENG' and a.lat = 'ENG'
         limit 10000  -- No limit if you want to use all the umls terms
         into outfile 'your-path/first_10000.csv'
         fields terminated by ','
@@ -59,7 +59,9 @@
         terminated by '\n';
    ```
    Configure the jdbc of you Mysql in configuration file (conf\default.properties), then
-   use the test function `testBuildIndex2db()` in the project to import above csv file into Mysql.
+   run `java -cp Clinical-Text-Mining-0.0.1-SNAPSHOT-jar-with-dependencies.jar:/data/ra/stanford-corenlp-3.6.0-models.jar  com.votors.umls.BuildTargetJson4solr your-path/first_10000.csv your-path/first_10000.json`
+   in terminal.
+
    
 6. Good luck and enjoy it!
 
