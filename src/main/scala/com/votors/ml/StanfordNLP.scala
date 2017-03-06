@@ -194,9 +194,9 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "There are three GIRLS."
+    val text = "Life expectancy of >= 3 months"
     // create an empty Annotation just with the given text
-    //findPattern(text).foreach(_ => println(""))
+    findPattern(text).foreach(_ => println(""))
     //println(getPosLemma(text).mkString(" "))
     return
 

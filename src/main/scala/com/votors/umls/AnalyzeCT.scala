@@ -329,7 +329,9 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       var suggustions = UmlsTagger2.tagger.select(str,true,false)
         .filter(s=>{
         var flag = s.score >= Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
-        s.stys.filter(tui=> Conf.semanticType.indexOf(tui) >=0 )
+        val tmpStys = s.stys.filter(tui=> Conf.semanticType.indexOf(tui) >=0 )
+          s.stys.clear()
+          s.stys.appendAll(tmpStys)
         flag && (s.stys.size > 0)
       })
       if (reduceBySty) suggustions = suggustions.flatMap(s=>{
@@ -957,7 +959,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.zipWithIndex.foreach{case (sty,idx)=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${pattern.groupsString.replaceAll("\t",";")}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${if (Conf.showGroupDesc)pattern.groupsString.replaceAll("\t",";") else ""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           }}
         })

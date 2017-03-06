@@ -250,6 +250,7 @@ object Conf extends java.io.Serializable{
   var pcaDimension=prop.getOrDefault("pcaDimension", propDef.get("pcaDimension")).toString.toFloat
   val sampleRuns=prop.getOrDefault("sampleRuns", propDef.get("sampleRuns")).toString.toInt
   val showSentence=prop.getOrDefault("showSentence", propDef.get("showSentence")).toString.toBoolean
+  val showGroupDesc=prop.getOrDefault("showGroupDesc", propDef.get("showGroupDesc")).toString.toBoolean
   //val showTfAvgSdInCluster=prop.getOrDefault("showTfAvgSdInCluster", propDef.get("showTfAvgSdInCluster")).toString.toBoolean
   val showTfAvgSdInCluster=true
   val useStanfordNLP=prop.getOrDefault("useStanfordNLP", propDef.get("useStanfordNLP")).toString.toBoolean
