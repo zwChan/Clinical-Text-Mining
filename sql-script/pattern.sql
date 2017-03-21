@@ -100,6 +100,7 @@ CREATE TABLE cancer_cui (
 `skipNum` int(8),
 `cui` varchar(20),
 `sty` varchar(20),
+`sty_ignored` int(8),
 `ngram` int(8),
 `org_str` text,
 `cui_str` text,
@@ -115,6 +116,7 @@ CREATE TABLE cancer_cui (
 `sentence` text
 );
 
+create index idx_task on cancer_cui (task) using hash;
 create index idx_cui on cancer_cui (cui) using hash;
 create index idx_org_str on cancer_cui (org_str(32)) using hash;
 create index idx_tid on cancer_cui (tid);
@@ -123,6 +125,10 @@ create index idx_cid on cancer_cui (criteriaId);
 create index idx_termid on cancer_cui (termId);
 create index idx_sty2 on cancer_cui(sty) using hash;
 create index idx_nested2 on cancer_cui(nested) using hash;
+create index idx_pattern on cancer_cui(pattern);
+create index idx_monthstart on cancer_cui(monthstart);
+create index idx_monthend on cancer_cui(monthend);
+
 
 
 -- delete from cancer_cui where sty = 'T033'; -- 99002,104777,103562,103383,102505,104535
@@ -312,8 +318,32 @@ select cui, org_str,cui_str,score,matchDesc,sentence from cancer.cancer_cui wher
 select * from umls.mrconso where cui='C0004936';
 select * from umls.mrconso where str='luteinizing hormone-releasing hormone';
 
-select distinct(splitType) from cancer_cui;
+select sty_ignored, count(*) from cancer_cui_org group by sty_ignored;
 select duration,sentence from cancer_cui where duration = 0 ; -- and sentence like '% history of % after %';
+
+select org_str,cui,cui_str,preferStr,sty_ignored,score from cancer_cui_org;
+select distinct(sty) from cancer_cui_org;
+drop table cancer_cui_org;
+rename table cancer_cui to cancer_cui_org;
+create table cancer_cui select * from cancer_cui_org where sty_ignored=0;
+
+select count(*) from meta;
+
+
+SELECT V.monthstart,V.monthend,SUM(V.type='INCLUSION'), SUM(V.type='EXCLUSION') FROM cancer_cui V, meta T where V.cui='C0009429' group by V.monthstart,V.monthend order by monthstart,monthend;
+
+
+
+select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DISTINCT V.tid as tid FROM cancer_cui V, meta T where V.task = 'Lung_cancer' and V.cui='C0006826' and V.sty = 'T191' and  T.tid = V.tid and V.task = 'Lung_cancer'  and  ( 1=1 ) and  (1=1) and  (T.study_type LIKE '%%') and  (T.intervention_type LIKE '%%') and  (T.agency_type LIKE '%%') and  (T.gender LIKE '%%') and  (T.start_date LIKE '%%') and 1=1 and  (T.intervention_model LIKE '%%') and  (T.allocation LIKE '%%') and  (1=1) and  (1=1) and  (V.nested = 'None' or V.nested = 'nesting') ) D on C.tid=D.tid and C.task='Lung_cancer' and  (C.nested = 'None' or C.nested = 'nesting') group by C.cui,C.sty order by cnt desc limit 100;
+
+select C.cui,C.sty,C.org_str, count(*) as cnt from cancer_cui C join (SELECT DISTINCT V.tid as tid FROM cancer_cui V, meta T where V.task = 'Lung_cancer' and V.cui='C0006826' and V.sty = 'T191' and  T.tid = V.tid and V.task = 'Lung_cancer' ) D on C.tid=D.tid and C.task='Lung_cancer' and  (C.nested = 'None' or C.nested = 'nesting') group by C.cui,C.sty order by cnt desc limit 100;
+
+SELECT V.monthstart,V.monthend, count(distinct case V.type when 'INCLUSION' then V.tid else null end), SUM(V.type='EXCLUSION') FROM cancer_cui V, meta T  where V.cui='C0034619' group by V.monthstart,V.monthend order by monthstart,monthend;
+
+SELECT V.monthstart,V.monthend, count(V.type = 'INCLUSION' ), SUM(V.type='EXCLUSION') FROM cancer_cui V, meta T  where V.cui='C0034619' group by V.monthstart,V.monthend order by monthstart,monthend;
+
+select distinct sty from cancer_cui;
+select * from cancer_cui;
 
 
 

@@ -18,6 +18,7 @@ if (!require("d3heatmap")) {
 
 
 df <- read.csv("C:\\fsu\\ra\\UmlsTagger\\r\\data\\cui-duration-freq.csv", sep=",",colClasses = "character")
+#df <- read.csv("C:\\fsu\\ra\\data\\201601\\split_criteria\\cui-duration-freq.csv", sep=",",colClasses = "character")
 
 
 
