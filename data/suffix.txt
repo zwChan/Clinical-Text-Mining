@@ -156,7 +156,7 @@ phone
 physeal
 phyte
 polis
-s
+#s
 science
 scope
 script
@@ -167,7 +167,7 @@ some
 stan
 ster
 eth
-t
+#t
 th
 tion
 tome
@@ -190,4 +190,4 @@ ware
 ways
 wise
 wright
-y
+#y
