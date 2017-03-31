@@ -5,20 +5,19 @@ import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 import java.util.{Date, Properties}
 
-import com.votors.common.{SqlUtils, Conf}
+import com.votors.common.{Conf, SqlUtils}
 import com.votors.ml.{Clustering, Nlp}
 import edu.stanford.nlp.util.IntPair
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.io.Source
 import scala.io.Codec
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.lucene.analysis.Analyzer
 import org.apache.lucene.analysis.standard.StandardAnalyzer
@@ -34,8 +33,7 @@ import org.apache.solr.common.params.ModifiableSolrParams
 import org.apache.solr.common.util.ContentStreamBase
 import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
-
-import java.sql.{Statement, Connection, DriverManager, ResultSet}
+import java.sql.{Connection, DriverManager, ResultSet, Statement}
 
 import org.apache.commons.csv._
 

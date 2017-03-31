@@ -1552,7 +1552,7 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
    * @return
    */
   def getPattern() = {
-    val matched = ParseSentence.extractor.extractExpressions(sentence)
+    val matched:java.util.List[_ <:MatchedExpression] = ParseSentence.extractor.extractExpressions(sentence)
 
     // this is the parse tree of the current sentence
     val tree: Tree = sentence.get(classOf[TreeAnnotation])

@@ -30,7 +30,7 @@ import com.votors.common._
  * Created by Jason on 2015/11/9 0009.
  */
 
-class Clustering (sc: SparkContext) {
+class Clustering(sc: SparkContext) {
   var docsNum = 0L
   var trainNum = 0L
 //  var allNum = 0L
@@ -148,7 +148,7 @@ class Clustering (sc: SparkContext) {
         .filter(_.cvalue > Conf.stag2CvalueFilter)
       rddSent.unpersist()
       if(Conf.ngramSaveFile.trim.length>0) {
-        if (Conf.bagsOfWord) {
+        if (!Conf.bagsOfWord) {
           Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", rddNgram2.map(g=>{
             g.context.wordsInbags=null
             g
@@ -545,7 +545,7 @@ class Clustering (sc: SparkContext) {
    * @param model: the model of kmeans
    * @param rddRankVector_all:
    * @param ngramCntChvTest: the chv number in the test data
-   * 
+   *
    */
   def rank (k:Int,rankType: String, model: KMeansModel,rddRankVector_all:RDD[(Ngram, Vector)], ngramCntChvTest:Long,tfStat:Map[Int, (Int, Int, Long, Double)]) = {
     /**
@@ -561,8 +561,8 @@ class Clustering (sc: SparkContext) {
     }else { //"cvalue"
       rddRankVector_all.map(kv => (kv._1, (-2, 1.0/kv._1.cvalue))).sortBy(_._2._2).collect
     }
-    
-    
+
+
     var cnt = 0
     var cntUmls = 0
     var cntChvAll = 0

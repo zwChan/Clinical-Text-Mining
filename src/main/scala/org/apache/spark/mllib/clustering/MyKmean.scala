@@ -4,7 +4,7 @@ import org.apache.spark.broadcast.Broadcast
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.{SparkContext}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
