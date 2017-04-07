@@ -1551,7 +1551,11 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
    * The sentence is annotated before this method is call.
    * @return
    */
-  def getPattern() = {
+  def getPattern():ArrayBuffer[CTPattern] = {
+    val retList = new ArrayBuffer[CTPattern]()
+    if (Conf.MMonly){
+      return retList
+    }
     val matched:java.util.List[_ <:MatchedExpression] = ParseSentence.extractor.extractExpressions(sentence)
 
     // this is the parse tree of the current sentence
@@ -1572,7 +1576,6 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
 //      print(s"${t}:${ner}\n")
 //    }
 
-    val retList = new ArrayBuffer[CTPattern]()
     /* for every mached expressed, we collect the result information. */
     matched.iterator.foreach(m => {
       //println(s"keys of annotation: ${m.getValue}")

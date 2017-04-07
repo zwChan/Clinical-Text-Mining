@@ -267,6 +267,7 @@ object Conf extends java.io.Serializable{
   val MMhost = prop.getOrDefault("MMhost", propDef.get("MMhost")).toString.trim
   val MMport = prop.getOrDefault("MMport", propDef.get("MMport")).toString.trim
   val MMenable=prop.getOrDefault("MMenable", propDef.get("MMenable")).toString.toBoolean
+  val MMonly=prop.getOrDefault("MMonly", propDef.get("MMonly")).toString.toBoolean
   val MMscoreThreshold=prop.getOrDefault("MMscoreThreshold", propDef.get("MMscoreThreshold")).toString.toInt
 
   println("\n\ndefault properties:")
