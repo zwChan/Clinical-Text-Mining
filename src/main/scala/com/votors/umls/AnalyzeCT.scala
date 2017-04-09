@@ -991,12 +991,12 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
 
   def metamapOutputCui(writer:PrintWriter, mmResult: MMResult) = {
     val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${mmResult.sentId}\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(":")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${mmResult.pfName}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
+    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${mmResult.sentId}\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(",")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${mmResult.pfName}\t${mmResult.sourceSet.toArray.mkString(",")}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
     writer.println( str.replace("\"","\\\""))
 
   }
   def getMetamapTitle() = {
-    s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tneg\ttermId\tcui\tsty\tngram\torg_str\tcui_str\tpreferStr\tmethod\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
+    s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tneg\ttermId\tcui\tsty\tngram\torg_str\tcui_str\tpreferStr\tsab\tmethod\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
   }
 
 

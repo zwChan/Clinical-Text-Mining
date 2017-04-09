@@ -37,6 +37,7 @@ case class MMResult(cui:String, score:Int,orgStr:String,cuiStr:String,pfName:Str
     sb.append(cui + "|"
       + orgStr + "|"
       + cuiStr + "|"
+      + score + "|"
       + span + "|"
       + stySet.mkString(" ") + "|"
       + sourceSet.mkString(" ") + "|"
@@ -110,6 +111,6 @@ object MMApi {
 
   def main(args: Array[String]) {
     init()
-    process("No Clinical diagnosis of acne vulgaris. You suffer from diabetes.")
+    process("You suffer from lung cancer.")
   }
 }
