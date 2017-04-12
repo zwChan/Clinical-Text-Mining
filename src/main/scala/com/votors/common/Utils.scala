@@ -139,13 +139,24 @@ object Conf extends java.io.Serializable{
   // read current dir configuration first.
   if (new File("default.properties").exists()) {
     println(s"********* default.propertiest is found in current working directory ************")
-    prop.load(new FileInputStream("current.properties"))
     propDef.load(new FileInputStream("default.properties"))
   }else {
     println(s"********* default.propertiest is NOT found in current working directory, try ${rootDir}/conf/default.properties ************")
-    prop.load(new FileInputStream(s"${rootDir}/conf/current.properties"))
     propDef.load(new FileInputStream(s"${rootDir}/conf/default.properties"))
   }
+
+  private val currConfPath = sys.props.get("CURRENT_CONFIG_PATH").getOrElse(sys.env.getOrElse("CURRENT_CONFIG_PATH",null))
+  if (currConfPath != null && new File(currConfPath).exists()) {
+    println(s"********* current.propertiest is found in sys.props/env.get(CURRENT_CONFIG_PATH).get=${currConfPath} ************")
+    prop.load(new FileInputStream(currConfPath))
+  }else if (new File("current.properties").exists()) {
+    println(s"********* current.propertiest is found in current working directory ************")
+    prop.load(new FileInputStream("current.properties"))
+  }else {
+    println(s"********* current.propertiest is NOT found in current working directory, try ${rootDir}/conf/default.properties ************")
+    prop.load(new FileInputStream(s"${rootDir}/conf/current.properties"))
+  }
+
 
   val dbUrl = Conf.prop.getOrDefault("blogDbUrl", propDef.get("blogDbUrl")).toString
   val blogTbl = Conf.prop.getOrDefault("blogTbl", propDef.get("blogTbl")).toString

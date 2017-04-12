@@ -58,7 +58,8 @@ object MMApi {
   def process(terms: String, sentId:Int=0): Seq[MMResult] = {
     if (!Conf.MMenable) return Seq()
     init()
-    val resultList: util.List[Result] = api.processCitationsFromString(terms)
+    // the character \031 will cause metamap dead.
+    val resultList: util.List[Result] = api.processCitationsFromString(terms.replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]",""))
     val mmRets = new util.ArrayList[MMResult]()
     for (result <- resultList) {
       /** write result as: cui|score|semtypes|sources|utterance */
@@ -111,6 +112,6 @@ object MMApi {
 
   def main(args: Array[String]) {
     init()
-    process("You suffer from lung cancer.")
+    process("People who don\u0019t smoke but who breathe the smoke of others also have a higher risk of lung cancer.")
   }
 }

@@ -1120,7 +1120,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     records.drop(1).foreach(row => {
       //println(row)
       val tid = row.get(0)
-      val criteria = row.get(1)
+      val criteria = row.get(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]","")  // \031 will cause the metamap dead
 
       var stagFlag = STAG_HEAD
       var subTitle = ""
