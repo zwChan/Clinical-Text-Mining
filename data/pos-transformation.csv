@@ -1,0 +1,37 @@
+Number,Tag,Description,abbr.,,,distinct abbr.
+1,CC,Coordinating conjunction,C,,,C
+2,CD,Cardinal number,M,,,M
+3,DT,Determiner,D,,,D
+4,EX,Existential?there,E,,,E
+5,FW,Foreign word,F,,,F
+6,IN,Preposition or subordinating conjunction,P,,,P
+7,JJ,Adjective,A,,,A
+8,JJR,"Adjective, comparative",A,,,O
+9,JJS,"Adjective, superlative",A,,,N
+10,LS,List item marker,O,,,U
+11,MD,Modal,O,,,R
+12,NN,"Noun, singular or mass",N,,,T
+13,NNS,"Noun, plural",N,,,V
+14,NNP,"Proper noun, singular",N,,,G
+15,NNPS,"Proper noun, plural",N,,,B
+16,PDT,Predeterminer,D,,,
+17,POS,Possessive ending,O,,,
+18,PRP,Personal pronoun,U,,,
+19,PRP$,Possessive pronoun,U,,,
+20,RB,Adverb,R,,,
+21,RBR,"Adverb, comparative",R,,,
+22,RBS,"Adverb, superlative",R,,,
+23,RP,Particle,O,,,
+24,SYM,Symbol,O,,,
+25,TO,to,T,,,
+26,UH,Interjection,O,,,
+27,VB,"Verb, base form",V,,,
+28,VBD,"Verb, past tense",V,,,
+29,VBG,"Verb, gerund or present participle",G,,,
+30,VBN,"Verb, past participle",B,,,
+31,VBP,"Verb, non-3rd person singular present",V,,,
+32,VBZ,"Verb, 3rd person singular present",V,,,
+33,WDT,Wh-determiner,D,,,
+34,WP,Wh-pronoun,U,,,
+35,WP$,Possessive wh-pronoun,U,,,
+36,WRB,Wh-adverb,R,,,
