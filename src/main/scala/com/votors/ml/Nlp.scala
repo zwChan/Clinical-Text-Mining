@@ -553,8 +553,12 @@ object Nlp {
       "P" // preposition or a conjunction that introduces a subordinate clause, e.g., although, because.
     else if (pos == "RB"|pos == "RBR"|pos == "RBS"| pos=="WRB")
       "R" // Adverb
-    else if (pos == "VB"|pos == "VBD"|pos == "VBG"|pos=="VBN"|pos=="VBP"|pos=="VBZ")
+    else if (pos == "VB"|pos == "VBD"| pos=="VBP"|pos=="VBZ")
       "V" // verb
+    else if (pos == "VBG")
+      "G"
+    else if (pos == "VBN")
+      "B"
     else if (pos == "TO")
       "T" // to
     else if ("DT" ==pos|"PDT"==pos|"WDT"==pos)
