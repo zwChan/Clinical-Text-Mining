@@ -171,7 +171,11 @@ object Conf extends java.io.Serializable{
 
   val caseFactor = prop.getOrDefault("caseFactor", propDef.get("caseFactor")).toString.toFloat
   val preferStrFactor = prop.getOrDefault("preferStrFactor", propDef.get("preferStrFactor")).toString.toFloat
-  val ignoreNewLine = prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
+  //  #not used for now
+  //  #Should we take the newline as the end of a sentence? or just ignore the newline?
+  //  #  1: replace with space; 2: replace with '.'; 0: do nothing
+  //  ignoreNewLine=2
+  val ignoreNewLine = 2 // prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
   val partitionTfFilter = prop.getOrDefault("partitionTfFilter", propDef.get("partitionTfFilter")).toString.toInt
   val stag1TfFilter = prop.getOrDefault("stag1TfFilter", propDef.get("stag1TfFilter")).toString.toInt
   val stag1CvalueFilter = prop.getOrDefault("stag1CvalueFilter", propDef.get("stag1CvalueFilter")).toString.toDouble
@@ -271,6 +275,8 @@ object Conf extends java.io.Serializable{
   val useDependencyTree=prop.getOrDefault("useDependencyTree", propDef.get("useDependencyTree")).toString.toBoolean
   val analyzNonUmlsTerm=prop.getOrDefault("analyzNonUmlsTerm", propDef.get("analyzNonUmlsTerm")).toString.toBoolean
   var sentenceLenMax=prop.getOrDefault("sentenceLenMax", propDef.get("sentenceLenMax")).toString.toInt
+  var textBlockDelimiter=prop.getOrDefault("textBlockDelimiter", propDef.get("textBlockDelimiter")).toString.trim
+  var textBlockDelimiterSpecialEnable=prop.getOrDefault("textBlockDelimiterSpecialEnable", propDef.get("textBlockDelimiterSpecialEnable")).toString.toBoolean
   val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
   val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
   val outputNoCuiSentence=prop.getOrDefault("outputNoCuiSentence", propDef.get("outputNoCuiSentence")).toString.toBoolean

@@ -916,6 +916,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
   val patternList = new ArrayBuffer[(CoreMap, Seq[CTPattern], Seq[MMResult])]()
   var subTitle = "None"
   var splitType = "#"
+  var threadId = ""
 
   override def toString(): String = {
     val str = f""""${tid.trim}","${criteriaType.trim}","${markedType}","${depth}","${cui}","${cuiStr}","${criteriaId}","${sentence.trim.replaceAll("\\\"","'")}""""
@@ -959,7 +960,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           hasCui = true
           cui.stys.zipWithIndex.foreach{case (sty,idx)=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${if (Conf.showGroupDesc)pattern.groupsString.replaceAll("\t",";") else ""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+            val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${this.threadId}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${if (Conf.showGroupDesc)pattern.groupsString.replaceAll("\t",";") else ""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
             writer.println( str.replace("\"","\\\""))
           }}
         })
@@ -967,7 +968,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
       // there is no cui found in this sentence
       if (!hasCui && Conf.outputNoCuiSentence) {
         val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t0\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
+        val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${this.threadId}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${pattern.ner2groups(0).name}\t${0}\t${0}\t${"None"}\t${"None"}\t0\t${0}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
         writer.println( str.replace("\"","\\\""))
       }
     }
@@ -984,19 +985,19 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
     else if (jobType == "pattern")
       s"tid\ttype\tcriteriaId\tsubTitle\tsentence\t${CTPattern.getTitle}"
     else if (jobType == "cui")
-      s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tsty_ignored\tngram\torg_str\tcui_str\tprefer_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
+      s"task\ttid\tthreadId\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tpattern\tdurStart\tdurEnd\tmonthStart\tmonthEnd\tdurStr\tneg\tnegAheadKey\tgroup\ttermId\tskipNum\tcui\tsty\tsty_ignored\tngram\torg_str\tcui_str\tprefer_str\tmethod\tnested\ttags\tscore\tmatchType\tmatchDesc\tgroupDesc\tsentLen\tsentence"
     else
       ""
   }
 
   def metamapOutputCui(writer:PrintWriter, mmResult: MMResult) = {
     val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
-    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${mmResult.sentId}\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(",")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${mmResult.pfName}\t${mmResult.sourceSet.toArray.mkString(",")}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
+    val str = s"${AnalyzeCT.taskName}\t${tid.trim}\t${this.threadId}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${mmResult.sentId}\t${mmResult.neg}\t${0}\t${mmResult.cui}\t${mmResult.stySet.toArray.mkString(",")}\t${mmResult.orgStr.count(_==' ')+1}\t${mmResult.orgStr}\t${mmResult.cuiStr}\t${mmResult.pfName}\t${mmResult.sourceSet.toArray.mkString(",")}\t${"metamap"}\t${mmResult.score}\t${mmResult.matchType}\t${mmResult.matchDesc}\t${mmResult.sent.count(_ == ' ')+1}\t${mmResult.sent}"
     writer.println( str.replace("\"","\\\""))
 
   }
   def getMetamapTitle() = {
-    s"task\ttid\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tneg\ttermId\tcui\tsty\tngram\torg_str\tcui_str\tpreferStr\tsab\tmethod\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
+    s"task\ttid\tthreadId\ttype\ttypeDetail\tcriteriaId\tsplitType\tsentId\tneg\ttermId\tcui\tsty\tngram\torg_str\tcui_str\tpreferStr\tsab\tmethod\tscore\tmatchType\tmatchDesc\tsentLen\tsentence"
   }
 
 
@@ -1010,7 +1011,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
   * @param externFile: the file that contains numerical variables or numerical operatiors. e.g. numeric_variables.csv
   * @param externRetFile
   */
-class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRetFile:String) {
+class AnalyzeCT(csvFile: String, outputFile:String, externFile:String=null, externRetFile:String=null) {
   val STAG_HEAD=0;
   val STAG_INCLUDE=1
   val STAG_EXCLUDE=2
@@ -1034,28 +1035,30 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
 
   var isNumericInit = false
   def initNumericReg() = {
-    if (!isNumericInit){
+    if (!isNumericInit) {
       isNumericInit = true
-      val in = new FileReader(externFile)
-      CSVFormat.DEFAULT
-      //.withDelimiter(' ')
-      .parse(in)
-      .iterator()
-      .filter(_.size()>=2)
-      .foreach(r => {
-        r.size()
-        val name = r.get(0)
-        val reg = r.get(1).toLowerCase()
-        // Note: you can not use 'word boundary' to reg that with operation character beginning or ending
-        val reg2 =
-          if (name.contains("(op)")) {
-            ".*(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ").*"
-          }else{
-            ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
-          }
-        //println(s"${name}\t${reg2}")
-        numericReg.append((name,reg2))
-      })
+      if (externFile != null) {
+        val in = new FileReader(externFile)
+        CSVFormat.DEFAULT
+          //.withDelimiter(' ')
+          .parse(in)
+          .iterator()
+          .filter(_.size() >= 2)
+          .foreach(r => {
+            r.size()
+            val name = r.get(0)
+            val reg = r.get(1).toLowerCase()
+            // Note: you can not use 'word boundary' to reg that with operation character beginning or ending
+            val reg2 =
+              if (name.contains("(op)")) {
+                ".*(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ").*"
+              } else {
+                ".*\\b(" + reg.replaceAll("xxx","""\\S*\\d+\\S*""") + ")\\b.*"
+              }
+            //println(s"${name}\t${reg2}")
+            numericReg.append((name, reg2))
+          })
+      }
     }
   }
 
@@ -1066,21 +1069,23 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
   val keywords = new ArrayBuffer[(String,String,String,String)]()
   var isKeywordInit = false
   def initKeyword() = {
-    if (!isKeywordInit){
+    if (!isKeywordInit) {
       isKeywordInit = true
-      var root = ""
-      Source.fromFile(externRetFile).getLines()
-        .foreach(line => {
-          val tokens = line.split(",", 3)
-          if (tokens.size >= 3 && tokens(0) == "#") {
-            root = tokens(2)
-          } else if (tokens.size >= 3) {
-            val kw = tokens(2).toLowerCase()
-            val cui = tokens(1)
-            val depth = tokens(0)
-            keywords.append((root,depth,cui,kw))
-          }
-      })
+      if (externRetFile != null) {
+        var root = ""
+        Source.fromFile(externRetFile).getLines()
+          .foreach(line => {
+            val tokens = line.split(",", 3)
+            if (tokens.size >= 3 && tokens(0) == "#") {
+              root = tokens(2)
+            } else if (tokens.size >= 3) {
+              val kw = tokens(2).toLowerCase()
+              val cui = tokens(1)
+              val depth = tokens(0)
+              keywords.append((root, depth, cui, kw))
+            }
+          })
+      }
     }
   }
 
@@ -1120,45 +1125,52 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     records.drop(1).foreach(row => {
       //println(row)
       val tid = row.get(0)
+      val threadId = if (row.size > 2) row.get(2) else ""
       val criteria = row.get(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]","")  // \031 will cause the metamap dead
 
       var stagFlag = STAG_HEAD
       var subTitle = ""
       var splitType = "#"
       // split a block of text into 'sentences' base on our rule, recursively. This 's sentence can't be split by StanfordNLP
-      val sentences_tmp = criteria.split("#|\\n").flatMap(input=> {
+      val sentences_tmp = criteria.split(Conf.textBlockDelimiter).flatMap(input=> {
         val sents_result = new ArrayBuffer[String] // the final sentence
         val sents_process = new mutable.Queue[String] // the sentence to be splited
-        sents_process.enqueue(input)
-        var maxRecursive = 100 // some extremely special case make a dead loop. I have fix several, but may be some left
+        if (Conf.textBlockDelimiterSpecialEnable) {
+          sents_process.enqueue(input)
+          var maxRecursive = 100 // some extremely special case make a dead loop. I have fix several, but may be some left
           while (sents_process.size > 0 && maxRecursive > 0) {
-            maxRecursive -= 1 // " - No", this example makes a dead loop.
+            maxRecursive -= 1
+            // " - No", this example makes a dead loop.
             val s = sents_process.dequeue()
             // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
             if (s.count(_ == ':') >= 3) {
               splitType = ":"
-              s.split(":").foreach(v=>sents_process.enqueue(v.trim))
+              s.split(":").foreach(v => sents_process.enqueue(v.trim))
             } else if (s.split(" - ").size >= 3) {
               splitType = "-"
-              s.split(" - ").foreach(v=>sents_process.enqueue(v.trim))
+              s.split(" - ").foreach(v => sents_process.enqueue(v.trim))
             } else if ( /*s.split("\\s").count(_=="No") >= 1 && */ s.split("\\s").lastIndexOf("No") > 0) {
               // some sentences without any punctuation to separate
               splitType = "No"
-              s.split("(?=\\sNo\\s)").foreach(v=>sents_process.enqueue(v.trim))
+              s.split("(?=\\sNo\\s)").foreach(v => sents_process.enqueue(v.trim))
             } else if ( /*s.split("\\s").count(_=="At") >= 1 && */ s.split("\\s").lastIndexOf("At") > 1) {
               // some sentences without any punctuation to separate
               splitType = "At"
-              s.split("(?=\\sAt\\s)").foreach(v=>sents_process.enqueue(v.trim))
+              s.split("(?=\\sAt\\s)").foreach(v => sents_process.enqueue(v.trim))
             } else if ( /*s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3*/ s.split("\\s").lastIndexOf("Or") > 3 || s.split("\\s").lastIndexOf("OR") > 3) {
               // some sentences without any punctuation to separate
               splitType = "Or"
-              s.split("Or|OR").foreach(v=>sents_process.enqueue(v.trim))
+              s.split("Or|OR").foreach(v => sents_process.enqueue(v.trim))
             } else {
               sents_result.append(s)
             }
+          }
+        }else{
+          sents_result.append(input)
         }
         sents_result
       })
+
       sentences_tmp.filter(_.trim.size > 2).foreach(sent_org =>{
         val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*","") // the punctuation at the beginning of a sentence
 
@@ -1227,6 +1239,7 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
         criteriaId += 1
         ctRow.splitType = splitType
         ctRow.criteriaId = criteriaId
+        ctRow.threadId = threadId
         // cache the sentence, it will be use as the sub-title of the next sentence
         if (hasSubTitle(sent_org)){
           ctRow.subTitle = subTitle
@@ -1270,6 +1283,152 @@ class AnalyzeCT(csvFile: String, outputFile:String, externFile:String, externRet
     in.close()
 
   }
+
+
+
+  def spilitSentence(): Unit = {
+    var writer = new PrintWriter(new FileWriter(outputFile))
+    val in = new FileReader(csvFile)
+    val records = CSVFormat.DEFAULT
+      .withRecordSeparator("\"")
+      .withDelimiter(',')
+      .withSkipHeaderRecord(true)
+      .withEscape('\\')
+      .parse(in)
+      .iterator()
+
+    writer.println("TID,Section,Criteria")
+    // for each row of csv file
+    var criteriaId = 0
+    records.drop(1).foreach(row => {
+      //println(row)
+      val tid = row.get(0)
+      val criteria = row.get(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]", "") // \031 will cause the metamap dead
+
+      var stagFlag = STAG_HEAD
+      var subTitle = ""
+      var splitType = "#"
+      // split a block of text into 'sentences' base on our rule, recursively. This 's sentence can't be split by StanfordNLP
+      val sentences_tmp = criteria.split("#|\\n").flatMap(input => {
+        val sents_result = new ArrayBuffer[String]
+        // the final sentence
+        val sents_process = new mutable.Queue[String] // the sentence to be splited
+        sents_process.enqueue(input)
+        var maxRecursive = 100 // some extremely special case make a dead loop. I have fix several, but may be some left
+        while (sents_process.size > 0 && maxRecursive > 0) {
+          maxRecursive -= 1
+          // " - No", this example makes a dead loop.
+          val s = sents_process.dequeue()
+          // if there is more than tow ':' in a sentence, we should split it using ':', cuz some clinical trails use ':' as separate symbol.
+          if (s.count(_ == ':') >= 3) {
+            splitType = ":"
+            s.split(":").foreach(v => sents_process.enqueue(v.trim))
+          } else if (s.split(" - ").size >= 3) {
+            splitType = "-"
+            s.split(" - ").foreach(v => sents_process.enqueue(v.trim))
+          } else if ( /*s.split("\\s").count(_=="No") >= 1 && */ s.split("\\s").lastIndexOf("No") > 0) {
+            // some sentences without any punctuation to separate
+            splitType = "No"
+            s.split("(?=\\sNo\\s)").foreach(v => sents_process.enqueue(v.trim))
+          } else if ( /*s.split("\\s").count(_=="At") >= 1 && */ s.split("\\s").lastIndexOf("At") > 1) {
+            // some sentences without any punctuation to separate
+            splitType = "At"
+            s.split("(?=\\sAt\\s)").foreach(v => sents_process.enqueue(v.trim))
+          } else if ( /*s.split("\\s").count(s=> s.equals("OR") || s.equals("Or")) >= 3*/ s.split("\\s").lastIndexOf("Or") > 3 || s.split("\\s").lastIndexOf("OR") > 3) {
+            // some sentences without any punctuation to separate
+            splitType = "Or"
+            s.split("Or|OR").foreach(v => sents_process.enqueue(v.trim))
+          } else {
+            sents_result.append(s)
+          }
+        }
+        sents_result
+      })
+      sentences_tmp.filter(_.trim.size > 2).foreach(sent_org => {
+        val sent = sent_org.trim.replaceAll("^[\\p{Punct}\\s]*", "") // the punctuation at the beginning of a sentence
+
+        /**
+          * a inner function to identify the head of the criteria
+          *  1. start with the head
+          *  2. include with 'head' and following by ':'
+          *  2. include the head as a whole word and end with ':'
+          *
+          * @param sent
+          * @param head head to match, need to upcase
+          */
+        // start with the head;
+        def head_match(sent: String, head: String): Boolean = {
+          return (sent.toUpperCase.startsWith(s"${head}")
+            || sent.toUpperCase.matches(s".*\\b${head}\\b:.*")
+            || sent.toUpperCase.matches(s".*\\b${head}\\b.*:"))
+        }
+
+        val ctRow =
+          if (stagFlag != STAG_INCLUDE && head_match(sent, "INCLUSION CRITERIA")) {
+            stagFlag = STAG_INCLUDE
+            CTRow(tid, TYPE_INCLUDE_HEAD, sent)
+          } else if (stagFlag != STAG_EXCLUDE && (head_match(sent, "EXCLUSION CRITERIA") || head_match(sent, "NON-INCLUSION CRITERIA"))) {
+            stagFlag = STAG_EXCLUDE
+            CTRow(tid, TYPE_EXCLUDE_HEAD, sent)
+          } else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_DISEASE_CH && head_match(sent, "DISEASE CHARACTERISTICS")) {
+            stagFlag = STAG_DISEASE_CH
+            CTRow(tid, TYPE_DISEASE_CH, sent)
+          } else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_PATIENT_CH && head_match(sent, "PATIENT CHARACTERISTICS")) {
+            stagFlag = STAG_PATIENT_CH
+            CTRow(tid, TYPE_PATIENT_CH, sent)
+          } else if (stagFlag != STAG_INCLUDE && stagFlag != STAG_EXCLUDE && stagFlag != STAG_PRIOR_CH && head_match(sent, "PRIOR CONCURRENT THERAPY")) {
+            stagFlag = STAG_PRIOR_CH
+            CTRow(tid, TYPE_PRIOR_CH, sent)
+          } else if (stagFlag == STAG_HEAD && head_match(sent, "INCLUSION AND EXCLUSION CRITERIA")) {
+            stagFlag = STAG_BOTH
+            CTRow(tid, TYPE_BOTH_HEAD, sent)
+          } else {
+            stagFlag match {
+              case STAG_HEAD => {
+                CTRow(tid, TYPE_HEAD, sent)
+              }
+              case STAG_BOTH => {
+                CTRow(tid, TYPE_BOTH, sent)
+              }
+              case STAG_INCLUDE => {
+                CTRow(tid, TYPE_INCLUDE, sent)
+              }
+              case STAG_EXCLUDE => {
+                CTRow(tid, TYPE_EXCLUDE, sent)
+              }
+              case STAG_DISEASE_CH => {
+                CTRow(tid, TYPE_DISEASE_CH, sent)
+              }
+              case STAG_PATIENT_CH => {
+                CTRow(tid, TYPE_PATIENT_CH, sent)
+              }
+              case STAG_PRIOR_CH => {
+                CTRow(tid, TYPE_PRIOR_CH, sent)
+              }
+              case _ =>
+                CTRow(tid, "None", sent)
+            }
+          }
+
+        //criteria id is the index in a clinical trial
+        criteriaId += 1
+        ctRow.splitType = splitType
+        ctRow.criteriaId = criteriaId
+        // cache the sentence, it will be use as the sub-title of the next sentence
+        if (hasSubTitle(sent_org)) {
+          ctRow.subTitle = subTitle
+        } else {
+          subTitle = sent
+        }
+        writer.println(s"""${ctRow.tid},${ctRow.criteriaType},"${ctRow.sentence.replace("\"","\\\"")}"""")
+        writer.flush()
+      })
+
+    })
+    writer.close()
+    in.close()
+  }
+
 
   // detect normal key words
   def detectQuantity(ctRow: CTRow, writer:PrintWriter) = {
@@ -1642,6 +1801,8 @@ object AnalyzeCT {
     ct.analyzeFile(AnalyzeCT.jobType)
   }
 
+
+
   /**
    * arg 1: dir
    * arg 2: file to be parsed, no ext; separated with ',', end with '/' or '\'; (ext is csv)
@@ -1682,4 +1843,17 @@ object AnalyzeCT {
 
 
   }
+}
+
+object SplitCT {
+
+  def main(avgs: Array[String]) = {
+    if (avgs.size < 2) {
+      println(s"invalid inputs, should be: input-csv-file output-file")
+      sys.exit(1)
+    }
+    val ct = new AnalyzeCT(avgs(0), avgs(1))
+    ct.spilitSentence()
+  }
+
 }
