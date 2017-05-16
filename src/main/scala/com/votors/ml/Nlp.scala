@@ -280,11 +280,12 @@ object Nlp {
     //segment the target into sentences
     var sentId = 0
     val sents = Nlp.getSent(text_tmp)
-    sents.filter(_.length > 0).map(sent => {
+    // a sentence should be at least 10 characters to contain useful information.
+    sents.filter(_.trim.length > 10).map(sent => {
       val sent_tmp = new Sentence()
       sent_tmp.sentId = sentId
       sent_tmp.blogId = blogId
-      sent_tmp.words = Nlp.getToken(sent)
+      sent_tmp.words = Nlp.getToken(sent.trim)
       sent_tmp.tokenSt = Array.fill(sent_tmp.words.length)(new TokenState())
       var tokenIdx = -1
       sent_tmp.tokens = sent_tmp.words.map(t => {

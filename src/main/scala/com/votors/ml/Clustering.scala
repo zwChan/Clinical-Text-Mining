@@ -48,7 +48,7 @@ class Clustering(sc: SparkContext) {
     val blogIds = new ArrayBuffer[Long]()
     while (ret.next()) blogIds.append(ret.getLong(1))
     sqlUtil.jdbcClose()
-    docsNum = blogIds.size
+    //docsNum = blogIds.size
     sc.parallelize(blogIds, parallelism)
   }
 
@@ -70,6 +70,15 @@ class Clustering(sc: SparkContext) {
       sqlUtil.jdbcClose()
       texts
     }).map(text=>Nlp.textPreprocess(text._1,text._2))
+  }
+
+  def getTextRddFromDir(dir:String):RDD[(Long,String)] = {
+    sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
+      val filename = kv._1
+      val text = kv._2
+      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1))
+      docList
+    }).zipWithUniqueId().map(kv=>(kv._2,kv._1))
   }
 
   def getSentRdd(textRdd: RDD[(Long, String)])  = {
@@ -105,9 +114,14 @@ class Clustering(sc: SparkContext) {
 
   def getTrainNgramRdd():RDD[Ngram] = {
     if (Conf.clusteringFromFile == false) {
-      val rdd = this.getBlogIdRdd(Conf.partitionNumber)
-      val rddText = this.getBlogTextRdd(rdd)
+      val rddText = if (Conf.textFromDirectory) {
+        this.getTextRddFromDir(Conf.textDirectory)
+      }else{
+        val rdd = this.getBlogIdRdd(Conf.partitionNumber)
+        this.getBlogTextRdd(rdd)
+      }
       val rddSent = this.getSentRdd(rddText).persist()
+      this.docsNum = rddText.count()
       val docNumber = this.docsNum
       val rddNgram = this.getNgramRdd(rddSent, Conf.partitionTfFilter)
         .map(gram => (gram.key, gram))

@@ -196,6 +196,7 @@ object Conf extends java.io.Serializable{
   val jdbcDriver = prop.getOrDefault("jdbcDriver", propDef.get("jdbcDriver")).toString
   val umlsLikehoodLimit = prop.getOrDefault("umlsLikehoodLimit", propDef.get("umlsLikehoodLimit")).toString.toDouble
   val WinLen = prop.getOrDefault("WinLen", propDef.get("WinLen")).toString.toInt
+  val ngramN = prop.getOrDefault("ngramN", propDef.get("ngramN")).toString.toInt
   val delimiter = prop.getOrDefault("delimiter", propDef.get("delimiter")).toString.trim
   val stopwordMatchType = prop.getOrDefault("stopwordMatchType", propDef.get("stopwordMatchType")).toString.toInt
   val stopwordRegex = prop.getOrDefault("stopwordRegex", propDef.get("stopwordRegex")).toString.trim
@@ -206,6 +207,8 @@ object Conf extends java.io.Serializable{
 
   val ngramSaveFile = prop.getOrDefault("ngramSaveFile", propDef.get("ngramSaveFile")).toString.trim
   val clusteringFromFile = prop.getOrDefault("clusteringFromFile", propDef.get("clusteringFromFile")).toString.toBoolean
+  val textFromDirectory = prop.getOrDefault("textFromDirectory", propDef.get("textFromDirectory")).toString.toBoolean
+  val textDirectory = prop.getOrDefault("textDirectory", propDef.get("textDirectory")).toString.trim
 
   val runKmeans=prop.getOrDefault("runKmeans", propDef.get("runKmeans")).toString.toBoolean
   val k_start=prop.getOrDefault("k_start", propDef.get("k_start")).toString.toInt

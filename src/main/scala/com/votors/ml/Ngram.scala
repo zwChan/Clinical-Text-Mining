@@ -439,7 +439,7 @@ case class KV[K,V](val k:K, val v:V) {
 
 object Ngram {
   final val WinLen = Conf.WinLen       // windown lenght for calculate ngram contex
-  final val N = 5
+  final val N = Conf.ngramN
   final val Delimiter = Pattern.compile(Conf.delimiter)   // the char using as delimiter of a Ngram of token, may be ,//;/:/"/!/?
   final val CaptFirst = Pattern.compile("[A-Z].*")  // first char has to be uppercase
   final val CaptAll = Pattern.compile("[^a-z]+")  // no lowercase, may be digital or other characters

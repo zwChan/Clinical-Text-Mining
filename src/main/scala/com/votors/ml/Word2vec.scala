@@ -20,7 +20,7 @@ class Word2vec(sc: SparkContext, dir: String) {
     sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
       val filename = kv._1
       val text = kv._2
-      val docList = text.split("</doc>").map(_.split("\n",2)).filter(_.size>=2).map(text=>text(1))
+      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1))
       docList
     })
   }
