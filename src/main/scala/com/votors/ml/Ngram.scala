@@ -399,7 +399,7 @@ class Sentence extends java.io.Serializable {
   var blogId = 0L
   var sentId = 0
   var words: Array[String] = null      // original words in the sentence. nothing is filtered.
-  var tokens: Array[String] = null     // Token from openNlp
+  var tokens: Array[String] = null     // Token from stanford nlp. Normalized
   var tokenSt: Array[TokenState] = null // the special status of the token. e.g. if it is a delimiter
   var Pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
   //@transient val ngrams= new ArrayBuffer[Ngram]()

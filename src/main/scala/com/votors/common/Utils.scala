@@ -153,7 +153,7 @@ object Conf extends java.io.Serializable{
     println(s"********* current.propertiest is found in current working directory ************")
     prop.load(new FileInputStream("current.properties"))
   }else {
-    println(s"********* current.propertiest is NOT found in current working directory, try ${rootDir}/conf/default.properties ************")
+    println(s"********* current.propertiest is NOT found in current working directory, try ${rootDir}/conf/current.properties ************")
     prop.load(new FileInputStream(s"${rootDir}/conf/current.properties"))
   }
 

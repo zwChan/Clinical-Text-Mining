@@ -232,7 +232,7 @@
     <dependency>
       <groupId>edu.stanford.nlp</groupId>
       <artifactId>stanford-corenlp</artifactId>
-      <version>3.6.0</version>
+      <version>3.7.0</version>
       <!--<scope>system</scope>-->
       <!--<systemPath>C:/fsu/ra/stanfordnlp/CoreNLP/javanlp-core.jar</systemPath>-->
     </dependency>

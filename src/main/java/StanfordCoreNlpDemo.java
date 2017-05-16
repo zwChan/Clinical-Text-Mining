@@ -1,22 +1,18 @@
-import edu.stanford.nlp.hcoref.CorefCoreAnnotations;
-import edu.stanford.nlp.hcoref.data.CorefChain;
-import edu.stanford.nlp.io.IOUtils;
-import edu.stanford.nlp.ling.CoreAnnotations;
-import edu.stanford.nlp.ling.CoreLabel;
-import edu.stanford.nlp.pipeline.Annotation;
-import edu.stanford.nlp.pipeline.StanfordCoreNLP;
+
+import java.io.*;
+import java.util.*;
+
+import edu.stanford.nlp.coref.CorefCoreAnnotations;
+
+import edu.stanford.nlp.coref.data.CorefChain;
+import edu.stanford.nlp.io.*;
+import edu.stanford.nlp.ling.*;
+import edu.stanford.nlp.pipeline.*;
 import edu.stanford.nlp.semgraph.SemanticGraph;
 import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations;
 import edu.stanford.nlp.sentiment.SentimentCoreAnnotations;
-import edu.stanford.nlp.trees.Tree;
-import edu.stanford.nlp.trees.TreeCoreAnnotations;
-import edu.stanford.nlp.util.CoreMap;
-
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import edu.stanford.nlp.trees.*;
+import edu.stanford.nlp.util.*;
 
 /** This class demonstrates building and using a Stanford CoreNLP pipeline. */
 public class StanfordCoreNlpDemo {
@@ -92,7 +88,6 @@ public class StanfordCoreNlpDemo {
         out.println(token.toShorterString());
       }
       Tree tree = sentence.get(TreeCoreAnnotations.TreeAnnotation.class);
-
       out.println();
       out.println("The first sentence parse tree is:");
       tree.pennPrint(out);
@@ -109,7 +104,7 @@ public class StanfordCoreNlpDemo {
       // Both sentence and token offsets start at 1!
       out.println("Coreference information");
       Map<Integer, CorefChain> corefChains =
-          annotation.get(CorefCoreAnnotations.CorefChainAnnotation.class);
+              annotation.get(CorefCoreAnnotations.CorefChainAnnotation.class);
       if (corefChains == null) { return; }
       for (Map.Entry<Integer,CorefChain> entry: corefChains.entrySet()) {
         out.println("Chain " + entry.getKey());
