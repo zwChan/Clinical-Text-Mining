@@ -217,9 +217,9 @@ class RegexGroup(var name:String, var preGroup:RegexGroup = null) {
     val termStr = terms.values.map(t=>t.getModifiers.map(_.value).mkString(" ") + " " + t.head.value).mkString(";")
     if (name.contains("CUI_")) {
       val cuiBuff = if (cuis.size > 0){
-        s"[${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}(${c.preferStr})<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}[${c.styIgnored.mkString(",")}]><${c.method}><${c.tags}>").mkString(";")});"
+        s"[${tokens.map(_.get(classOf[OriginalTextAnnotation])).mkString(" ")}(${logic})]=(${cuis.map(c=>s"${c.cui}:${c.descr}(${c.preferStr})<${PTBTokenizer.ptb2Text(c.orgStr)}> ${c.method} ${c.nested}<${c.stys.mkString(",")}[${c.styIgnored.mkString(",")}]><${c.method}><${c.tags}>").mkString(";")});"
       }else{
-        s"${tokens.map(_.get(classOf[TextAnnotation])).mkString(" ")}(${logic})"
+        s"${tokens.map(_.get(classOf[OriginalTextAnnotation])).mkString(" ")}(${logic})"
       }
       s"${name}\t[${span}]:${cuiBuff}:(${termStr})"
     }else if (name.contains("DURATION")) {

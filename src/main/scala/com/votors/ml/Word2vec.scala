@@ -20,8 +20,19 @@ class Word2vec(sc: SparkContext, dir: String) {
     sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
       val filename = kv._1
       val text = kv._2
-      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1))
+      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]",""))
       docList
+    })
+  }
+
+  /**
+    * (text) => (word, pso, lemma)
+    * @param textRdd
+    * @return
+    */
+  def getPosLemmaRdd(textRdd: RDD[String]) = {
+    textRdd.flatMap(text=>{
+      StanfordNLP.getPosLemma(text).map(t=>(t._1, Nlp.posTransform(t._2), t._3))
     })
   }
 
@@ -52,7 +63,8 @@ object Word2vec {
     Trace.filter = Conf.debugFilterNgram
 
     val word2vec = new Word2vec(sc, dir=args(0))
-    word2vec.getTextRdd().collect.foreach(println(_))
+
+    word2vec.getPosLemmaRdd(word2vec.getTextRdd()).collect.foreach(println(_))
 
     sc.stop()
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())/1000+" ###")

@@ -65,7 +65,7 @@ import org.apache.commons.csv._
  *
  */
 @SerialVersionUID(-4956580178369639181L)
-class Ngram (var text: String) extends java.io.Serializable{
+class Ngram (val text: String) extends java.io.Serializable{
   var id = -1                // identify of this gram  - looks like useless. forget it.
   var textOrg=""
   var isTrain: Boolean = false  // if this gram is chosen as trainning data

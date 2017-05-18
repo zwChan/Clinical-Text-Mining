@@ -67,6 +67,8 @@ object StanfordNLP {
     val props:Properties = new Properties()
     if (isLemmaOnlsy) {
       props.setProperty("annotators", "tokenize, ssplit, pos, lemma")
+      props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
+      props.setProperty("tokenize.options",Conf.tokenize_options)
     } else {
       props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
 
@@ -75,7 +77,10 @@ object StanfordNLP {
       props.setProperty("ner.applyNumericClassifiers", "true")
       props.setProperty("ner.sutime.includeRange", "true")
       props.setProperty("ner.sutime.markTimeRanges", "true")
-      props.setProperty("sutime.binders", "0");
+      props.setProperty("sutime.binders", "0")
+      props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
+      props.setProperty("tokenize.options",Conf.tokenize_options)
+
       //    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
       //    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
     }
@@ -94,7 +99,7 @@ object StanfordNLP {
       pipeline.annotate(document)
       val sentences = document.get(classOf[SentencesAnnotation])
       var sentId = 0
-      for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
+      for( sentence <- sentences.iterator() if sentence.get(classOf[OriginalTextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
         sentId += 1  // sentence id is a index in the criteria
         val retPatterns = ParseSentence(sentence,sentId).getPattern()
         // get metamap result, associating the result with our result in the same pattern
@@ -119,18 +124,45 @@ object StanfordNLP {
     * @param str input string
     *  return: (text, pos, lemma)
     */
-  def getPosLemma(str: String) = {
-    if (pipelineLemma == null) pipelineLemma =init(true)
+  def getPosLemmaRaw(str: String) = {
+    if (pipelineLemma == null) pipelineLemma =init(isLemmaOnlsy = true)
     val document: Annotation = new Annotation(str)
     pipelineLemma.annotate(document)
+    document
+  }
+  def getPosLemma(str: String) = {
+    val document = getPosLemmaRaw(str)
     val tokens = document.get(classOf[TokensAnnotation])
     val lemmas = tokens.iterator().map(t=>{
       val lemma = t.get(classOf[LemmaAnnotation])
-      val text = PTBTokenizer.ptb2Text(t.get(classOf[TextAnnotation]))
+      val text = PTBTokenizer.ptb2Text(t.get(classOf[OriginalTextAnnotation]))
       val pos = t.get(classOf[PartOfSpeechAnnotation])
       (text,pos,lemma)
     })
-    lemmas
+    lemmas.toArray
+  }
+
+  /**
+    * (string) => (sentence1, sentence2, ...)
+    * (sentence) => ( (token, pos, lemma), (token2, pos2, lemma2), ... )
+    *  This API is used to make sure we only parse once of a block of text to perform setence segmentation,
+    *  pos tagger, lemma.
+    * @param str
+    * @return
+    */
+  def getPosLemmaBySentence(str: String) = {
+    val document = getPosLemmaRaw(str)
+    val tokens = document.get(classOf[SentencesAnnotation])
+    val lemmas = tokens.iterator().map(sent=>{
+      val tokens = sent.get(classOf[TokensAnnotation])
+      tokens.iterator().map(t=> {
+        val lemma = t.get(classOf[LemmaAnnotation])
+        val text = PTBTokenizer.ptb2Text(t.get(classOf[OriginalTextAnnotation]))
+        val pos = t.get(classOf[PartOfSpeechAnnotation])
+        (text, pos, lemma)
+      }).toArray
+    })
+    lemmas.toArray
   }
 
 

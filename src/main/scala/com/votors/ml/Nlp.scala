@@ -67,7 +67,7 @@ object Nlp {
   val sentModlePath = s"${modelRoot}/en-sent.bin"
 
   // get a new tokenizorFactor based on the new options
-  val tokenizerFactory = PTBTokenizerFactory.newPTBTokenizerFactory(new WordTokenFactory(), Conf.stanfordTokenizerOption)
+  val tokenizerFactory = PTBTokenizerFactory.newPTBTokenizerFactory(new WordTokenFactory(), Conf.tokenize_options)
 
   //get pos after case/punctuation delete(input)?  // XXX: This may be not a corret approach!
   var sentDetector:SentenceDetectorME = null
@@ -168,6 +168,7 @@ object Nlp {
   def getTokenPosLemma(str: String) = {
     StanfordNLP.getPosLemma(str)
   }
+  def getTokenPosLemmaBySentence(str: String) = StanfordNLP.getPosLemmaBySentence(str)
   /**
    * 1. replace all punctuation to space
    * 2. replace all continuous space to one space
@@ -201,7 +202,11 @@ object Nlp {
     //println(s"norm: $str\t$ret")
     ret
   }
-
+  // token delimitor: all the characters are delimiter or whitespace.
+  def isTokenDelimiter(str: String) = {
+    Ngram.Delimiter.matcher(str).replaceAll("").trim.size == 0 ||
+    punctPattern.matcher(str).replaceAll("").trim.size == 0
+  }
   var prefixs = new ArrayBuffer[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/prefix.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
@@ -279,26 +284,27 @@ object Nlp {
     val text_tmp = text
     //segment the target into sentences
     var sentId = 0
-    val sents = Nlp.getSent(text_tmp)
+    val sents = Nlp.getTokenPosLemmaBySentence(text_tmp)
     // a sentence should be at least 10 characters to contain useful information.
-    sents.filter(_.trim.length > 10).map(sent => {
+    sents.filter(_.length > 0).map(sent => {
       val sent_tmp = new Sentence()
       sent_tmp.sentId = sentId
       sent_tmp.blogId = blogId
-      sent_tmp.words = Nlp.getToken(sent.trim)
+      sent_tmp.words = sent.map(_._1).toArray
       sent_tmp.tokenSt = Array.fill(sent_tmp.words.length)(new TokenState())
       var tokenIdx = -1
-      sent_tmp.tokens = sent_tmp.words.map(t => {
-        tokenIdx += 1; Nlp.normalizeAll(t, sent_tmp.tokenSt(tokenIdx))
+      sent_tmp.tokens = sent.map(_._3).toArray
+      sent_tmp.words.zipWithIndex.map(ti => {
+        sent_tmp.tokenSt(ti._2).delimiter = Nlp.isTokenDelimiter(ti._1)
       })
-      sent_tmp.Pos = Nlp.getPos(sent_tmp.words,true)
+      sent_tmp.Pos = sent.map(t=>Nlp.posTransform(t._2)).toArray
       //sent_tmp.chunk = Nlp.getChunk(sent_tmp.words, sent_tmp.pos)
       //sent_tmp.parser = Nlp.getParser(sent_tmp.words)
 
       if (hSents != null) hSents.put((blogId, sentId), sent_tmp)
       sentId += 1
       sent_tmp
-    })
+    }).toArray
   }
   def generateNgram(sentence: Seq[Sentence], gramId: AtomicInteger, hNgrams: mutable.LinkedHashMap[String,Ngram], maxN: Int = Ngram.N): Unit = {
     sentence.foreach(sent => {
@@ -314,7 +320,7 @@ object Nlp {
           Range(0, maxN).foreach(n => {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
-                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
+                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").toLowerCase.trim()
                 val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
                   // check if the gram is valid. e.g. stop words
@@ -385,7 +391,7 @@ object Nlp {
           Range(0, ngram).foreach(n => {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
               if (sent.tokenSt(pos + n).delimiter == false) {
-                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").trim()
+                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").toLowerCase.trim()
                 val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 val pre_gram = hPreNgram.getOrElse(key,null)
                 if ( (sent.tokens(pos + n).length > 0 && pre_gram != null) ) {
@@ -525,6 +531,7 @@ object Nlp {
     })
   }
 
+
   /**
    * When the gram is create, we get some useful info from the sentence.
    * gram is sentence.tokens[start, end)
@@ -574,6 +581,8 @@ object Nlp {
       "U" // pronoun
     else if (pos == "CC")
       "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.
+    else if (punctPattern.matcher(pos).matches())
+      "X" // keep the input if it is a punctuation
     else
       "O" // others
   }

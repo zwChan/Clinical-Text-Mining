@@ -59,7 +59,7 @@ object TermIdentify {
         val hNgrams = mutable.LinkedHashMap[String,Ngram]()
         val sents = Nlp.generateSentence(cnt, rec.get(head("display_name")), null)
         val gramId = new AtomicInteger()
-        Nlp.generateNgram(sents.toSeq, gramId, hNgrams, Conf.ngramN)
+        Nlp.generateNgram(sents.toSeq, gramId, hNgrams)
 
         hNgrams.foreach(kv=>{
           val key = kv._1

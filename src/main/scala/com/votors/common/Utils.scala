@@ -272,7 +272,7 @@ object Conf extends java.io.Serializable{
   //val showTfAvgSdInCluster=prop.getOrDefault("showTfAvgSdInCluster", propDef.get("showTfAvgSdInCluster")).toString.toBoolean
   val showTfAvgSdInCluster=true
   val useStanfordNLP=prop.getOrDefault("useStanfordNLP", propDef.get("useStanfordNLP")).toString.toBoolean
-  val stanfordTokenizerOption=prop.getOrDefault("stanfordTokenizerOption", propDef.get("stanfordTokenizerOption")).toString
+  val tokenize_options=prop.getOrDefault("tokenize_options", propDef.get("tokenize_options")).toString
   val stanfordTaggerOption=prop.getOrDefault("stanfordTaggerOption", propDef.get("stanfordTaggerOption")).toString
   val stanfordPatternFile=prop.getOrDefault("stanfordPatternFile", propDef.get("stanfordPatternFile")).toString
   val useDependencyTree=prop.getOrDefault("useDependencyTree", propDef.get("useDependencyTree")).toString.toBoolean
@@ -281,6 +281,7 @@ object Conf extends java.io.Serializable{
   var textBlockDelimiter=prop.getOrDefault("textBlockDelimiter", propDef.get("textBlockDelimiter")).toString.trim
   var textBlockDelimiterSpecialEnable=prop.getOrDefault("textBlockDelimiterSpecialEnable", propDef.get("textBlockDelimiterSpecialEnable")).toString.toBoolean
   val partUmlsTermMatch=prop.getOrDefault("partUmlsTermMatch", propDef.get("partUmlsTermMatch")).toString.toBoolean
+  val ssplit_newlineIsSentenceBreak=prop.getOrDefault("ssplit_newlineIsSentenceBreak", propDef.get("ssplit_newlineIsSentenceBreak")).toString
   val outputNormalizedText=prop.getOrDefault("outputNormalizedText", propDef.get("outputNormalizedText")).toString.toBoolean
   val outputNoCuiSentence=prop.getOrDefault("outputNoCuiSentence", propDef.get("outputNoCuiSentence")).toString.toBoolean
   val MMoptions = prop.getOrDefault("MMoptions", propDef.get("MMoptions")).toString.trim

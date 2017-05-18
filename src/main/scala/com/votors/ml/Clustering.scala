@@ -76,7 +76,7 @@ class Clustering(sc: SparkContext) {
     sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
       val filename = kv._1
       val text = kv._2
-      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1))
+      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]",""))  /* \031 will cause the metamap dead*/
       docList
     }).zipWithUniqueId().map(kv=>(kv._2,kv._1))
   }
@@ -84,7 +84,7 @@ class Clustering(sc: SparkContext) {
   def getSentRdd(textRdd: RDD[(Long, String)])  = {
     val ret = textRdd.mapPartitions(itr => {
       println(s"getSentRdd ***")
-      val sents = for (blog <- itr) yield Nlp.generateSentence(blog._1,blog._2,null)
+      val sents = for (blog <- itr) yield Nlp.generateSentence(blog._1,blog._2.replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]",""),null)
       sents
     })
     ret
@@ -120,8 +120,8 @@ class Clustering(sc: SparkContext) {
         val rdd = this.getBlogIdRdd(Conf.partitionNumber)
         this.getBlogTextRdd(rdd)
       }
-      val rddSent = this.getSentRdd(rddText).persist()
       this.docsNum = rddText.count()
+      val rddSent = this.getSentRdd(rddText).persist()
       val docNumber = this.docsNum
       val rddNgram = this.getNgramRdd(rddSent, Conf.partitionTfFilter)
         .map(gram => (gram.key, gram))

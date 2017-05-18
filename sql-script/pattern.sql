@@ -47,6 +47,7 @@ drop table cancer_mm_cui;
 CREATE TABLE cancer_mm_cui (
 `task` varchar(30),
 `tid` varchar(30),
+`threadId` varchar(256),
 `type` varchar(50),
 `typeDetail` varchar(50),
 `criteriaId` int(20),
@@ -60,6 +61,7 @@ CREATE TABLE cancer_mm_cui (
 `org_str` text,
 `cui_str` text,
 `preferStr` text,
+`sab` varchar(100),
 `method` varchar(20),
 `score` int,
 `matchType` int,
@@ -70,6 +72,7 @@ CREATE TABLE cancer_mm_cui (
 create index idx_cui on cancer_mm_cui (cui) using hash;
 create index idx_org_str on cancer_mm_cui (org_str(32)) using hash;
 create index idx_tid on cancer_mm_cui (tid);
+create index idx_threadId on cancer_mm_cui (threadId);
 create index idx_sid on cancer_mm_cui (sentId);
 create index idx_cid on cancer_mm_cui (criteriaId);
 create index idx_termid on cancer_mm_cui (termId);

@@ -42,9 +42,9 @@ load data local infile '/tmp/alldeaf_HealthFitness_08_20_2015_Final.txt' into ta
 load data local infile '/tmp/autism_health_Final.txt' into table dataset_autism fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
 
 
-select distinct PostID,Content from dataset_deaf
+select distinct PostID,Content,threadNumber from dataset_deaf
 	into outfile '/tmp/deaf_dataset.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
-select distinct PostID,Content from dataset_autism
+select distinct PostID,Content,link from dataset_autism
 	into outfile '/tmp/autism_dataset.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
 
 select distinct tui from umls.mrsty;
