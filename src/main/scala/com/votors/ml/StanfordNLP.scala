@@ -62,13 +62,14 @@ object StanfordNLP {
 
   def isNoun(pos: String) = pos.startsWith("N")
 
-  def init(isLemmaOnlsy:Boolean=false) = {
+  def init(isLemmaOnly:Boolean=false) = {
     // creates a StanfordCoreNLP object, with POS tagging, lemmatization, NER, parsing, and coreference resolution
     val props:Properties = new Properties()
-    if (isLemmaOnlsy) {
+    if (isLemmaOnly) {
       props.setProperty("annotators", "tokenize, ssplit, pos, lemma")
       props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
       props.setProperty("tokenize.options",Conf.tokenize_options)
+      props.setProperty("pos.maxlen",Conf.sentenceLenMax.toString)
     } else {
       props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
 
@@ -80,6 +81,9 @@ object StanfordNLP {
       props.setProperty("sutime.binders", "0")
       props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
       props.setProperty("tokenize.options",Conf.tokenize_options)
+      props.setProperty("pos.maxlen",Conf.sentenceLenMax.toString)
+      props.setProperty("parser.maxlen",Conf.sentenceLenMax.toString)
+
 
       //    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
       //    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
@@ -99,7 +103,7 @@ object StanfordNLP {
       pipeline.annotate(document)
       val sentences = document.get(classOf[SentencesAnnotation])
       var sentId = 0
-      for( sentence <- sentences.iterator() if sentence.get(classOf[OriginalTextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
+      for( sentence <- sentences.iterator() if sentence.get(classOf[TextAnnotation]).count(_ == ' ') <= Conf.sentenceLenMax) {
         sentId += 1  // sentence id is a index in the criteria
         val retPatterns = ParseSentence(sentence,sentId).getPattern()
         // get metamap result, associating the result with our result in the same pattern
@@ -125,7 +129,7 @@ object StanfordNLP {
     *  return: (text, pos, lemma)
     */
   def getPosLemmaRaw(str: String) = {
-    if (pipelineLemma == null) pipelineLemma =init(isLemmaOnlsy = true)
+    if (pipelineLemma == null) pipelineLemma =init(isLemmaOnly = true)
     val document: Annotation = new Annotation(str)
     pipelineLemma.annotate(document)
     document
@@ -137,7 +141,7 @@ object StanfordNLP {
       val lemma = t.get(classOf[LemmaAnnotation])
       val text = PTBTokenizer.ptb2Text(t.get(classOf[OriginalTextAnnotation]))
       val pos = t.get(classOf[PartOfSpeechAnnotation])
-      (text,pos,lemma)
+      (text,if(pos==null) "" else pos, if(lemma==null) text else lemma)
     })
     lemmas.toArray
   }
@@ -224,10 +228,10 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "history of diabetes more than 3 months after surgery."
+    val text = "A dependency parser analyzes the grammatical structure of a sentence, establishing relationships between \"head\" words and words which modify those heads."
     // create an empty Annotation just with the given text
-    findPattern(text).foreach(_ => println(""))
-    //println(getPosLemma(text).mkString(" "))
+    //findPattern(text).foreach(_ => println(""))
+    println(getPosLemma(text).mkString("\n"))
     return
 
   }

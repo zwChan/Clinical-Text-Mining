@@ -121,6 +121,7 @@ class Clustering(sc: SparkContext) {
         this.getBlogTextRdd(rdd)
       }
       this.docsNum = rddText.count()
+      println(s"### doc number is ${this.docsNum} ###")
       val rddSent = this.getSentRdd(rddText).persist()
       val docNumber = this.docsNum
       val rddNgram = this.getNgramRdd(rddSent, Conf.partitionTfFilter)
