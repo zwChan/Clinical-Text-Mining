@@ -143,7 +143,7 @@ object StanfordNLP {
       val pos = t.get(classOf[PartOfSpeechAnnotation])
       (text,if(pos==null) "" else pos, if(lemma==null) text else lemma)
     })
-    lemmas.toArray
+    lemmas
   }
 
   /**
@@ -228,10 +228,12 @@ object StanfordNLP {
     //val text = "Prior adjuvant therapy, including 5-FU, is allowed if it has been more than 12 months since the last treatment."
     //val text = "No history of myocardial infarction or severe unstable angina within the past 6 months."
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
-    val text = "A dependency parser analyzes the grammatical structure of a sentence, establishing relationships between \"head\" words and words which modify those heads."
+    val text = "A dependency parser of diabetes analyzes the grammatical structure of a sentence, establishing relationships between \"head\" words and words which modify those heads of diabetes. " + "diabetes is hard to be cued."
     // create an empty Annotation just with the given text
-    //findPattern(text).foreach(_ => println(""))
-    println(getPosLemma(text).mkString("\n"))
+    findPattern(text).foreach(_ => println(""))
+    //println(getPosLemma(text).mkString("\n"))
+
+    MyCache.close()
     return
 
   }

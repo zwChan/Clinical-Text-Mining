@@ -5,7 +5,7 @@ import java.nio.charset.CodingErrorAction
 import java.util.regex.Pattern
 import java.util.{Date, Properties}
 
-import com.votors.common.{Conf, SqlUtils}
+import com.votors.common.{MyCache, Conf, SqlUtils}
 import com.votors.ml.{Clustering, Nlp}
 import edu.stanford.nlp.util.IntPair
 import opennlp.tools.sentdetect.{SentenceDetectorME, SentenceModel}
@@ -168,7 +168,7 @@ case class TagRow(val blogid: String, val target: String, val umlsFlag: Boolean,
 class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=Conf.rootDir) {
 
   val solrServer = new HttpSolrServer(solrServerUrl)
-  val cache_suggestions = new mutable.HashMap[String,Array[Suggestion]]()
+//  val cache_suggestions = new mutable.HashMap[String,Array[Suggestion]]()
 
   /**
    *  load SemGroups.txt. The format of the file is "Semantic Group Abbrev|Semantic Group Name|TUI|Full Semantic Type Name"
@@ -416,16 +416,16 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    */
   def select(phrase: String, isGetSty:Boolean=true, firstCuiOnly:Boolean=false): Array[Suggestion] = {
     //val time = System.currentTimeMillis()
-    var cach = cache_suggestions.get(phrase)
-    var ret = if (cach.isEmpty) {
+    var cache = MyCache.get(phrase)
+    var ret = if (cache.isEmpty) {
       val got_cui = if (Conf.targetTermUsingSolr)
         select_solr(phrase.replaceAll("\'", "\\\\'"))
       else
         select_db(phrase.replaceAll("\'", "\\\\'"))
-      cache_suggestions.put(phrase,got_cui)
+      MyCache.put(phrase,got_cui)
       got_cui
     }else{
-      cach.get
+      cache.get.asInstanceOf[Array[Suggestion]]
     }
     //println("umls select used time (ms):" + (System.currentTimeMillis()-time))
     //println(s"select: ${phrase}, number ${ret.size}")

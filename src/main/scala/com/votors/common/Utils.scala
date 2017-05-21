@@ -1,17 +1,21 @@
 package com.votors.common
 
 import java.io._
+import java.net.InetSocketAddress
 import java.sql.{Connection, DriverManager, ResultSet, Statement}
 import java.util.{Date, Properties, Random}
 
 import edu.stanford.nlp.util
 import edu.stanford.nlp.util.IntPair
+import net.spy.memcached.MemcachedClient
 import org.apache.commons.csv.{CSVFormat, CSVRecord}
 import org.apache.commons.lang3.StringUtils
+import org.ehcache.{Cache, CacheManager}
+import org.ehcache.config.builders.{CacheConfigurationBuilder, CacheManagerBuilder, ResourcePoolsBuilder}
 import org.joda.time.{DateTime, Duration, Period}
 
 import scala.collection.mutable.ListBuffer
-import scala.collection.JavaConversions.asScalaIterator
+import scala.collection.JavaConversions._
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -192,6 +196,8 @@ object Conf extends java.io.Serializable{
   val partitionNumber = prop.getOrDefault("partitionNumber", propDef.get("partitionNumber")).toString.toInt
 
   val solrServerUrl = prop.getOrDefault("solrServerUrl", propDef.get("solrServerUrl")).toString
+  val memcached = prop.getOrDefault("memcached", propDef.get("memcached")).toString
+  val ehCacheEntities = prop.getOrDefault("ehCacheEntities", propDef.get("ehCacheEntities")).toString.toInt
   val posInclusive = prop.getOrDefault("posInclusive", propDef.get("posInclusive")).toString.split(" ").filter(_.trim.length>0).mkString(" ")
   val jdbcDriver = prop.getOrDefault("jdbcDriver", propDef.get("jdbcDriver")).toString
   val umlsLikehoodLimit = prop.getOrDefault("umlsLikehoodLimit", propDef.get("umlsLikehoodLimit")).toString.toDouble
@@ -370,6 +376,49 @@ object TimeX {
         println(s"*** TimeX: parse duration fail. error: ${e}")
         new Duration(-1)
       }
+    }
+  }
+}
+
+object MyCache {
+  val isMemcached = Conf.memcached.trim.length > 10
+  var ehCache: Cache[String, AnyRef] = null
+  var memcacheClient:MemcachedClient = null
+  var cacheManager:CacheManager = null
+  init()
+  def init() = {
+    if (isMemcached) {
+      val servers = Conf.memcached.split(",").filter(_.size>10).map(s=>new InetSocketAddress(s.split(":")(0), s.split(":")(1).toInt))
+      memcacheClient = new MemcachedClient(servers:_*)
+    }else{
+      cacheManager = CacheManagerBuilder.newCacheManagerBuilder().build(true)
+      ehCache = cacheManager.createCache("myCache",
+        CacheConfigurationBuilder.newCacheConfigurationBuilder(classOf[String], classOf[AnyRef],
+          ResourcePoolsBuilder.heap(Conf.ehCacheEntities)).build())
+    }
+  }
+  def get(key: String):Option[AnyRef] = {
+    val v = if (isMemcached) {
+      memcacheClient.get(key.replace(" ","_"))
+    }else {
+      ehCache.get(key)
+    }
+    Option(v)
+  }
+  def put(key: String, value: AnyRef, expire: Int=60*10):Unit = {
+    if (isMemcached) {
+      memcacheClient.add(key.replace(" ","_"),expire,value)
+    }else{
+      ehCache.put(key, value)
+    }
+  }
+  def close() = {
+    if (memcacheClient != null) {
+      memcacheClient.shutdown()
+    }
+    if (ehCache != null) {
+      ehCache.clear()
+      cacheManager.close()
     }
   }
 }
