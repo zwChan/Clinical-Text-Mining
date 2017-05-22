@@ -4,11 +4,12 @@ import java.io.FileWriter
 import java.util.Date
 import java.util.regex.{Matcher, Pattern}
 
-import com.votors.common.Conf
+import com.votors.common.{Conf, MyCache}
 import com.votors.common.Utils.Trace
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 import scala.io.Source
 import scala.reflect.io.File
@@ -16,12 +17,12 @@ import scala.reflect.io.File
 /**
   * Created by Jason on 2017/5/3 0003.
   */
-class Word2vec(@transient sc: SparkContext, dir: String) extends Serializable{
+class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializable{
   /**
     * get text from files of directory (fileName -> (text of doc in wikipedia)
     */
   def getTextRdd():RDD[(String)] = {
-    sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
+    val docRdd = sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
       val filename = kv._1
       val text = kv._2
       println(filename)
@@ -30,6 +31,11 @@ class Word2vec(@transient sc: SparkContext, dir: String) extends Serializable{
       val docList = getDocFromFile(text.lines).map(_._3.toString)
       docList
     })
+    if (Conf.repartitionForce){
+      docRdd.repartition(Conf.partitionNumber)
+    }else{
+      docRdd
+    }
   }
   //string => iterator (id, title, doc)
   def getDocFromFile(lines: Iterator[String]) = getDocFromFileAll(lines).filter(_ != null)
@@ -39,7 +45,7 @@ class Word2vec(@transient sc: SparkContext, dir: String) extends Serializable{
     var id = ""
     var title = ""
     for (l <- lines if l.trim.size > 0) yield {
-      val line = l.trim
+      val line = Nlp.illegalChar.matcher(l.trim).replaceAll("")
       if (line.startsWith(Word2vec.docStartStr) && (startMatcher = Word2vec.docStart.matcher(line)) != null && startMatcher.matches()) {
         doc = new StringBuilder
         id = startMatcher.group(1)
@@ -85,7 +91,6 @@ class Word2vec(@transient sc: SparkContext, dir: String) extends Serializable{
 }
 
 object Word2vec {
-  val illegalChar = Pattern.compile("[^\\p{Graph}\\x20\\t\\r\\n]")
   val docStartStr = "<doc id="
   val docEndStr = "</doc>"
   val docStart = Pattern.compile("^<doc id=\"(\\d+)\".+ title=\"(.+)\">$")
@@ -107,6 +112,7 @@ object Word2vec {
     }else{
       mainSingle(args)
     }
+    MyCache.close()
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())/1000+" ###")
   }
   def mainSingle(args: Array[String]): Unit = {
@@ -145,7 +151,7 @@ object Word2vec {
     val tokenFile = new FileWriter(args(2))
     val normFile = new FileWriter(args(3))
 
-    val docRdd = word2vec.getTextRdd().persist()
+    val docRdd = word2vec.getTextRdd().persist(StorageLevel.DISK_ONLY)
     val docNum = docRdd.count()
     println(s"### doc number is $docNum, partition number is ${docRdd.getNumPartitions} ###")
     word2vec.getPosLemmaRdd(docRdd).collect.foreach(t=>{

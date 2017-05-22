@@ -14,16 +14,13 @@ import java.util.{Date, Properties}
 
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
-
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import com.votors.common.Utils._
 import com.votors.common.Utils.Trace._
-
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors}
-
 import org.apache.spark.mllib.clustering._
-
 import com.votors.common._
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -73,12 +70,8 @@ class Clustering(sc: SparkContext) {
   }
 
   def getTextRddFromDir(dir:String):RDD[(Long,String)] = {
-    sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
-      val filename = kv._1
-      val text = kv._2
-      val docList = text.split("</doc>").map(_.trim.split("\n",2)).filter(_.size>=2).map(text=>text(1).replaceAll("[^\\p{Graph}\\x20\\t\\r\\n]",""))  /* \031 will cause the metamap dead*/
-      docList
-    }).zipWithUniqueId().map(kv=>(kv._2,kv._1))
+    val word2vec = new Word2vec(sc,dir)
+      word2vec.getTextRdd().zipWithUniqueId().map(kv=>(kv._2,kv._1))
   }
 
   def getSentRdd(textRdd: RDD[(Long, String)])  = {
@@ -122,7 +115,7 @@ class Clustering(sc: SparkContext) {
       }
       this.docsNum = rddText.count()
       println(s"### doc number is ${this.docsNum} ###")
-      val rddSent = this.getSentRdd(rddText).persist()
+      val rddSent = this.getSentRdd(rddText).persist(StorageLevel.DISK_ONLY)
       val docNumber = this.docsNum
       val rddNgram = this.getNgramRdd(rddSent, Conf.partitionTfFilter)
         .map(gram => (gram.key, gram))
@@ -831,6 +824,7 @@ object Clustering {
     })
 
     sc.stop()
+    MyCache.close()
     println("*******result is ******************")
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())/1000+" ###")
   }

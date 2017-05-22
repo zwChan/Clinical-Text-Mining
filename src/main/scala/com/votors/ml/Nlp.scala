@@ -55,6 +55,7 @@ object Nlp {
   val spacePattern = Pattern.compile("\\s+")
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
   final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
+  final val illegalChar = Pattern.compile("[^\\p{Graph}\\x20\\t\\r\\n]")
 
   // (ngram-key, index-in-array-ordered-by-frequency)
   var wordsInbags: Map[String,(Int,Long)] = null
@@ -291,11 +292,11 @@ object Nlp {
       sent_tmp.sentId = sentId
       sent_tmp.blogId = blogId
       sent_tmp.words = sent.map(_._1).toArray
-      sent_tmp.tokenSt = Array.fill(sent_tmp.words.length)(new TokenState())
+      sent_tmp.tokenSt = Array.fill(sent_tmp.words.length)(false)
       var tokenIdx = -1
       sent_tmp.tokens = sent.map(_._3).toArray
       sent_tmp.words.zipWithIndex.map(ti => {
-        sent_tmp.tokenSt(ti._2).delimiter = Nlp.isTokenDelimiter(ti._1)
+        sent_tmp.tokenSt(ti._2) = Nlp.isTokenDelimiter(ti._1)
       })
       sent_tmp.Pos = sent.map(t=>Nlp.posTransform(t._2)).toArray
       //sent_tmp.chunk = Nlp.getChunk(sent_tmp.words, sent_tmp.pos)
@@ -319,7 +320,7 @@ object Nlp {
           var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
           Range(0, maxN).foreach(n => {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
-              if (sent.tokenSt(pos + n).delimiter == false) {
+              if (sent.tokenSt(pos + n) == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").toLowerCase.trim()
                 val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
@@ -390,7 +391,7 @@ object Nlp {
           var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
           Range(0, ngram).foreach(n => {
             if (pos + n < sent.tokens.length && !hitDelimiter) {
-              if (sent.tokenSt(pos + n).delimiter == false) {
+              if (sent.tokenSt(pos + n) == false) {
                 val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").toLowerCase.trim()
                 val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
                 val pre_gram = hPreNgram.getOrElse(key,null)

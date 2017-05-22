@@ -194,6 +194,7 @@ object Conf extends java.io.Serializable{
 
   val sparkMaster = prop.getOrDefault("sparkMaster", propDef.get("sparkMaster")).toString.trim
   val partitionNumber = prop.getOrDefault("partitionNumber", propDef.get("partitionNumber")).toString.toInt
+  val repartitionForce = prop.getOrDefault("repartitionForce", propDef.get("repartitionForce")).toString.toBoolean
 
   val solrServerUrl = prop.getOrDefault("solrServerUrl", propDef.get("solrServerUrl")).toString
   val memcached = prop.getOrDefault("memcached", propDef.get("memcached")).toString
@@ -203,6 +204,7 @@ object Conf extends java.io.Serializable{
   val umlsLikehoodLimit = prop.getOrDefault("umlsLikehoodLimit", propDef.get("umlsLikehoodLimit")).toString.toDouble
   val WinLen = prop.getOrDefault("WinLen", propDef.get("WinLen")).toString.toInt
   val ngramN = prop.getOrDefault("ngramN", propDef.get("ngramN")).toString.toInt
+  val ngramKeepSentence = prop.getOrDefault("ngramKeepSentence", propDef.get("ngramKeepSentence")).toString.toBoolean
   val delimiter = prop.getOrDefault("delimiter", propDef.get("delimiter")).toString.trim
   val stopwordMatchType = prop.getOrDefault("stopwordMatchType", propDef.get("stopwordMatchType")).toString.toInt
   val stopwordRegex = prop.getOrDefault("stopwordRegex", propDef.get("stopwordRegex")).toString.trim

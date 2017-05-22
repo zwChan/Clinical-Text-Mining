@@ -217,7 +217,7 @@ class Ngram (val text: String) extends java.io.Serializable{
    */
   def updateOnCreated(sentence: Sentence, start: Int, end: Int) = {
     textOrg = sentence.words.slice(start,end).mkString(" ")
-    sent = sentence.words
+    sent = if (Conf.ngramKeepSentence)sentence.words else Array()
     indexOfSent = start
     // update the pos pattern syntax of the gram.
     val gramPos = Array() ++ sentence.Pos.slice(start, end)
@@ -400,7 +400,7 @@ class Sentence extends java.io.Serializable {
   var sentId = 0
   var words: Array[String] = null      // original words in the sentence. nothing is filtered.
   var tokens: Array[String] = null     // Token from stanford nlp. Normalized
-  var tokenSt: Array[TokenState] = null // the special status of the token. e.g. if it is a delimiter
+  var tokenSt: Array[Boolean] = null // the special status of the token. e.g. if it is a delimiter
   var Pos :Array[String] = null        // see http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
   //@transient val ngrams= new ArrayBuffer[Ngram]()
   //var chunk:Array[opennlp.tools.util.Span] = null
