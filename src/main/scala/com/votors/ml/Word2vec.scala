@@ -1,6 +1,7 @@
 package com.votors.ml
 
 import java.io.FileWriter
+import java.lang.Thread
 import java.util.Date
 import java.util.regex.{Matcher, Pattern}
 
@@ -11,6 +12,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
+import scala.collection.mutable
 import scala.io.Source
 import scala.reflect.io.File
 
@@ -73,9 +75,9 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
   }
   def getPosLemma(text: String) = {
       // print the title of the article
-    println(if (text.lines.hasNext) text.lines.next + s" ${System.currentTimeMillis()/1000%10000}")
-//    ("a","b")::Nil
-    StanfordNLP.getPosLemma(text).map(t=>{
+    val startTime = System.currentTimeMillis()
+    //Thread.sleep(1000)
+    val ret = StanfordNLP.getPosLemma(text).map(t=>{
       if (t._1 == "\n")
         ("\n", "\n")
       else if (Nlp.isTokenDelimiter(t._1))
@@ -87,6 +89,9 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
         (word, norm)
       }
     })
+    if (text.lines.hasNext)
+      println(s" ${System.currentTimeMillis()/1000%100000}\t${System.currentTimeMillis()-startTime}\t${text.lines.next}")
+    ret
   }
 }
 
@@ -98,7 +103,7 @@ object Word2vec {
   val newLine = Pattern.compile("\\n")
   def main(args:Array[String]): Unit = {
     println(args.mkString("\t"))
-    if (args.size < 4) {
+    if (args.size < 5) {
       println(s"Input parameters: [spark|no] [path of input file] [path of output token file] [output norm file")
       sys.exit(1)
     }
@@ -119,6 +124,7 @@ object Word2vec {
     val word2vec = new Word2vec(null, dir=args(1))
     val tokenFile = new FileWriter(args(2))
     val normFile = new FileWriter(args(3))
+    val outFile = new FileWriter(args(4))
 
     val lines = Source.fromFile(args(1)).getLines()
     var docNum = 0
@@ -150,18 +156,46 @@ object Word2vec {
     val word2vec = new Word2vec(sc, dir=args(1))
     val tokenFile = new FileWriter(args(2))
     val normFile = new FileWriter(args(3))
+    val outFile = new FileWriter(args(4))
 
     val docRdd = word2vec.getTextRdd().persist(StorageLevel.DISK_ONLY)
     val docNum = docRdd.count()
     println(s"### doc number is $docNum, partition number is ${docRdd.getNumPartitions} ###")
-    word2vec.getPosLemmaRdd(docRdd).collect.foreach(t=>{
+    val tokenRdd = word2vec.getPosLemmaRdd(docRdd).persist(StorageLevel.DISK_ONLY)
+    docRdd.unpersist()
+    val tokenCnt = tokenRdd.count()
+    val cntPos = mutable.HashMap[Char,Int]()
+    val cntToken = mutable.HashMap[String,Int]()
+    val cntLemma = mutable.HashMap[String,Int]()
+    tokenRdd.toLocalIterator.foreach(t=>{
       tokenFile.append(t._1 + " ")
       normFile.append(t._2 + " ")
+      if (t._1.length > 2) {
+        val key = t._2.charAt(t._2.length - 1)
+        cntPos.update(key, cntPos.getOrElse(key, 0) + 1)
+        cntToken.update(t._1, cntToken.getOrElse(t._1, 0) + 1)
+        cntLemma.update(t._2, cntLemma.getOrElse(t._2, 0) + 1)
+      }
+    })
+    outFile.append(s"token number is ${tokenCnt}\n")
+    outFile.append(s"doc number is ${docNum}\n")
+    outFile.append("# stat of pos:\n")
+    cntPos.foreach(kv=>{
+      outFile.append(s"${kv._1}\t${kv._2}\n")
+    })
+    outFile.append("# stat of token:\n")
+    cntToken.foreach(kv=>{
+      outFile.append(s"${kv._1}\t${kv._2}\n")
+    })
+    outFile.append("# stat of lemma:\n")
+    cntLemma.foreach(kv=>{
+      outFile.append(s"${kv._1}\t${kv._2}\n")
     })
     tokenFile.append("\n")
     normFile.append("\n")
     tokenFile.close()
     normFile.close()
+    outFile.close()
     sc.stop()
   }
 

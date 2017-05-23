@@ -181,6 +181,9 @@ object Conf extends java.io.Serializable{
   //  ignoreNewLine=2
   val ignoreNewLine = 2 // prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
   val partitionTfFilter = prop.getOrDefault("partitionTfFilter", propDef.get("partitionTfFilter")).toString.toInt
+  val partitionReduceStartPoint = prop.getOrDefault("partitionReduceStartPoint", propDef.get("partitionReduceStartPoint")).toString.toInt
+  val partitionReduceStartStep = prop.getOrDefault("partitionReduceStartStep", propDef.get("partitionReduceStartStep")).toString.toInt
+  val partitionReduceFraction = prop.getOrDefault("partitionReduceFraction", propDef.get("partitionReduceFraction")).toString.toFloat
   val stag1TfFilter = prop.getOrDefault("stag1TfFilter", propDef.get("stag1TfFilter")).toString.toInt
   val stag1CvalueFilter = prop.getOrDefault("stag1CvalueFilter", propDef.get("stag1CvalueFilter")).toString.toDouble
   val stag2TfFilter = prop.getOrDefault("stag2TfFilter", propDef.get("stag2TfFilter")).toString.toInt

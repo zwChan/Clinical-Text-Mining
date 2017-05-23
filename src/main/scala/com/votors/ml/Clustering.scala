@@ -84,18 +84,52 @@ class Clustering(sc: SparkContext) {
   }
 
   def getNgramRdd(sentRdd: RDD[Array[Sentence]], tfFilterInPartition:Int=3, firstStageNgram: Broadcast[mutable.HashMap[String, Ngram]]=null): RDD[Ngram]= {
+
     val ret = sentRdd.mapPartitions(itr => {
+      // reduce key only apply to first stage. to reduce the rare word.
+      var removeCnt = 0
+      def reduceNgramItr(hNgrams: mutable.LinkedHashMap[String,Ngram], threashold: Int) = {
+        hNgrams.keySet.foreach(key=>{
+          if (hNgrams(key).tfAll <= threashold) {
+            hNgrams.remove(key)
+            removeCnt += 1
+          }
+        })
+        removeCnt
+      }
+      def reduceNgram(hNgrams: mutable.LinkedHashMap[String,Ngram], preNgramSize: Int) = {
+        var threashold = 0
+        var removeCnt = 0
+        while(removeCnt < Conf.partitionReduceFraction * Conf.partitionReduceStartStep) {
+          threashold += 1
+          removeCnt += reduceNgramItr(hNgrams,threashold)
+        }
+        println(s"reduceNgram: remove ${removeCnt} at threashold ${threashold}, current ngram ${hNgrams.size}")
+        hNgrams.size
+      }
       println(s"getNgramRdd ***")
       val hNgrams = new mutable.LinkedHashMap[String,Ngram]()
       val gramId = new AtomicInteger()
 //      val hPreNgram =  firstStageNgram.value
+      var startTime = System.currentTimeMillis()
+      var ngramSize = 0
       itr.foreach(sents => {
         gramId.set(0)
         if (firstStageNgram == null) {
           Nlp.generateNgram(sents, gramId, hNgrams)
+          if (hNgrams.size > Conf.partitionReduceStartPoint && hNgrams.size - ngramSize > Conf.partitionReduceStartStep) {
+            reduceNgram(hNgrams, ngramSize)
+          }
         }else{
           Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram.value)
         }
+        // print some info for tracking
+        if ((System.currentTimeMillis - startTime)/1000 > 10) {
+          println(s"current gram count is: ${hNgrams.size}")
+          startTime = System.currentTimeMillis()
+        }
+        // reduce vocabulary
+
       })
       val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
       trace(INFO,s"grams number before reduce (in this partition) > ${tfFilterInPartition} is ${sNgrams.size}")
@@ -125,7 +159,7 @@ class Clustering(sc: SparkContext) {
         .filter(_.tfAll > Conf.stag1TfFilter)
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
         .filter(t=>t.cvalue > Conf.stag1CvalueFilter && t.umlsScore._1 > Conf.stag2UmlsScoreFilter && t.umlsScore._2 > Conf.stag2ChvScoreFilter)
-      //.persist()
+        .persist(StorageLevel.DISK_ONLY)
 
       //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
       //println(s"number of gram is ${rddNgram.count}")
@@ -138,7 +172,8 @@ class Clustering(sc: SparkContext) {
       else if (Conf.topCvalueNgram > 0)
         firstStageRet ++= rddNgram.sortBy(_.cvalue * -1).take(Conf.topCvalueNgram).map(gram => (gram.key, gram))
       else
-        firstStageRet ++= rddNgram.collect().map(gram => (gram.key, gram))
+        firstStageRet ++= rddNgram.toLocalIterator.map(gram => (gram.key, gram))
+      rddNgram.unpersist()
 
       //firstStageRet.foreach(println)
       Nlp.wordsInbags = Nlp.sortBowKey(firstStageRet)  // Note that the driver process and the work process are separated
