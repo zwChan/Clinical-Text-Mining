@@ -85,7 +85,7 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
       else {
         val word = t._1.toLowerCase()
         val pos  = Nlp.posTransform(t._2)
-        val norm = s"${t._3.toLowerCase}|${pos}"
+        val norm = s"${pos}|${t._3.toLowerCase}"
         (word, norm)
       }
     })

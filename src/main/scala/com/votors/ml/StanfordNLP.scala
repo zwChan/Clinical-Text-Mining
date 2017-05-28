@@ -67,27 +67,21 @@ object StanfordNLP {
     val props:Properties = new Properties()
     if (isLemmaOnly) {
       props.setProperty("annotators", "tokenize, ssplit, pos, lemma")
-      props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
-      props.setProperty("tokenize.options",Conf.tokenize_options)
-      props.setProperty("pos.maxlen",Conf.sentenceLenMax.toString)
     } else {
-      props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner,parse,depparse")
-
-      //    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
-      props.setProperty("ner.useSUTime", "true")
-      props.setProperty("ner.applyNumericClassifiers", "true")
-      props.setProperty("ner.sutime.includeRange", "true")
-      props.setProperty("ner.sutime.markTimeRanges", "true")
-      props.setProperty("sutime.binders", "0")
-      props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
-      props.setProperty("tokenize.options",Conf.tokenize_options)
-      props.setProperty("pos.maxlen",Conf.sentenceLenMax.toString)
-      props.setProperty("parser.maxlen",Conf.sentenceLenMax.toString)
-
-
-      //    props.setProperty("customAnnotatorClass.tokensregex", "edu.stanford.nlp.pipeline.TokensRegexAnnotator")
-      //    props.setProperty("tokensregexdemo.rules", Conf.stanfordPatternFile)
+      props.setProperty("annotators", "tokenize, ssplit" /*Conf.stanfordAnnotators*/)
     }
+
+    //    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
+    props.setProperty("ner.useSUTime", "true")
+    props.setProperty("ner.applyNumericClassifiers", "true")
+    props.setProperty("ner.sutime.includeRange", "true")
+    props.setProperty("ner.sutime.markTimeRanges", "true")
+    props.setProperty("sutime.binders", "0")
+    props.setProperty("ssplit.newlineIsSentenceBreak", Conf.ssplit_newlineIsSentenceBreak)
+    props.setProperty("tokenize.options",Conf.tokenize_options)
+    props.setProperty("pos.maxlen",Conf.sentenceLenMax.toString)
+    props.setProperty("parser.maxlen",Conf.sentenceLenMax.toString)
+
     val pipeline: StanfordCoreNLP = new StanfordCoreNLP(props)
     pipeline
   }

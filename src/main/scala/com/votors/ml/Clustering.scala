@@ -87,10 +87,11 @@ class Clustering(sc: SparkContext) {
 
     val ret = sentRdd.mapPartitions(itr => {
       // reduce key only apply to first stage. to reduce the rare word.
-      var removeCnt = 0
       def reduceNgramItr(hNgrams: mutable.LinkedHashMap[String,Ngram], threashold: Int) = {
-        hNgrams.keySet.foreach(key=>{
-          if (hNgrams(key).tfAll <= threashold) {
+        var removeCnt = 0
+        hNgrams.keysIterator.toList.foreach(key=>{
+          // don't remove too much ...
+          if (hNgrams(key).tfAll <= threashold && removeCnt < Conf.partitionReduceStartStep) {
             hNgrams.remove(key)
             removeCnt += 1
           }
@@ -113,19 +114,23 @@ class Clustering(sc: SparkContext) {
 //      val hPreNgram =  firstStageNgram.value
       var startTime = System.currentTimeMillis()
       var ngramSize = 0
+      var wordCnt = 0
       itr.foreach(sents => {
         gramId.set(0)
+        wordCnt += sents.map(_.words.size).sum
         if (firstStageNgram == null) {
           Nlp.generateNgram(sents, gramId, hNgrams)
+          // if add more than Conf.partitionReduceStartStep ngram, start reduce ngram
           if (hNgrams.size > Conf.partitionReduceStartPoint && hNgrams.size - ngramSize > Conf.partitionReduceStartStep) {
             reduceNgram(hNgrams, ngramSize)
+            ngramSize = hNgrams.size
           }
         }else{
           Nlp.generateNgramStage2(sents,gramId,hNgrams,firstStageNgram.value)
         }
         // print some info for tracking
         if ((System.currentTimeMillis - startTime)/1000 > 10) {
-          println(s"current gram count is: ${hNgrams.size}")
+          println(s"current gram count is: ${hNgrams.size}, read words: ${wordCnt}")
           startTime = System.currentTimeMillis()
         }
         // reduce vocabulary
@@ -160,6 +165,8 @@ class Clustering(sc: SparkContext) {
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
         .filter(t=>t.cvalue > Conf.stag1CvalueFilter && t.umlsScore._1 > Conf.stag2UmlsScoreFilter && t.umlsScore._2 > Conf.stag2ChvScoreFilter)
         .persist(StorageLevel.DISK_ONLY)
+      val ngramCnt = rddNgram.count()  // only to parallel all task
+      println(s"number of ngram for stage 1 is ${ngramCnt}")
 
       //rddNgram.foreach(gram => println(f"${gram.tfdf}%.2f\t${log2(gram.cvalue+1)}%.2f\t${gram}"))
       //println(s"number of gram is ${rddNgram.count}")

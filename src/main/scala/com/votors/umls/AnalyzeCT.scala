@@ -1796,8 +1796,8 @@ object AnalyzeCT {
   def doAnaly(dir:String, f: String, externFile:String): Unit = {
     val ct = new AnalyzeCT(s"${dir}${f}.csv",
       s"${dir}${f}_ret.csv",
-      s"${dir}${externFile}.txt",
-      s"${dir}${externFile}_ret.txt")
+      if (externFile != "null") s"${dir}${externFile}.txt" else null ,
+      if (externFile != "null") s"${dir}${externFile}_ret.txt" else null)
     ct.analyzeFile(AnalyzeCT.jobType)
   }
 
@@ -1825,9 +1825,10 @@ object AnalyzeCT {
 //    doGetKeywords("T2DM_05_14_random300","criteriaWords")
     println("the input args are:\n" + avgs.mkString("\n"))
     if (avgs.size < 4) {
-      println(s"invalid inputs, should be: prepare|parse dir file1,file2... extern-file")
+      println(s"invalid inputs, should be: prepare|parse|prepare dir file1,file2... extern-file")
       sys.exit(1)
     }
+    val startTime = System.currentTimeMillis()
     jobType = avgs(0)
     val dir = avgs(1)
     val iFiles = avgs(2).split(",")
@@ -1840,6 +1841,7 @@ object AnalyzeCT {
       println(s"processing: ${f}")
       if (jobType != "prepare")doAnaly(dir, f, extFile)
     })
+    println(s"### Used time ${(System.currentTimeMillis()-startTime)}")
 
 
   }
@@ -1852,7 +1854,9 @@ object SplitCT {
       println(s"invalid inputs, should be: input-csv-file output-file")
       sys.exit(1)
     }
+    val startTime = System.currentTimeMillis()
     val ct = new AnalyzeCT(avgs(0), avgs(1))
+    println(s"### Used time ${(System.currentTimeMillis()-startTime)}")
     ct.spilitSentence()
   }
 

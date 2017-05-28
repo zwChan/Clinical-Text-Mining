@@ -283,6 +283,7 @@ object Conf extends java.io.Serializable{
   //val showTfAvgSdInCluster=prop.getOrDefault("showTfAvgSdInCluster", propDef.get("showTfAvgSdInCluster")).toString.toBoolean
   val showTfAvgSdInCluster=true
   val useStanfordNLP=prop.getOrDefault("useStanfordNLP", propDef.get("useStanfordNLP")).toString.toBoolean
+  val stanfordAnnotators=prop.getOrDefault("stanfordAnnotators", propDef.get("stanfordAnnotators")).toString
   val tokenize_options=prop.getOrDefault("tokenize_options", propDef.get("tokenize_options")).toString
   val stanfordTaggerOption=prop.getOrDefault("stanfordTaggerOption", propDef.get("stanfordTaggerOption")).toString
   val stanfordPatternFile=prop.getOrDefault("stanfordPatternFile", propDef.get("stanfordPatternFile")).toString

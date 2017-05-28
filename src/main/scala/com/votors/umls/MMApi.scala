@@ -112,6 +112,14 @@ object MMApi {
 
   def main(args: Array[String]) {
     init()
+    var startTime = System.currentTimeMillis()
     process("People who don\u0019t smoke but who breathe the smoke of others also have a higher risk of lung cancer.")
+    println(System.currentTimeMillis() - startTime)
+    startTime = System.currentTimeMillis()
+    process("People who don\u0019t smoke but who breathe the smoke of others also have a higher risk of lung cancer.")
+    println(System.currentTimeMillis() - startTime)
+    startTime = System.currentTimeMillis()
+    process("My focus is on the code in word2vec.c for training the skip-gram architecture with negative sampling, so for now I have ignored the CBOW and Hierarchical Softmax code. I also haven't looked much at the testing code.\n\nBecause the code supports both models and both training approaches, I highly recommended viewing the code in an editor which allows you to collapse code blocks. The training code is much more readable when you hide the implementations that you aren't interested in..")
+    println(System.currentTimeMillis() - startTime)
   }
 }
