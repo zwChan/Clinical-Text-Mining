@@ -13,3 +13,5 @@ update test_term_umls t set synonym = (select GROUP_CONCAT(distinct s.descr SEPA
 
 
 select * from umls._target_term_ where cui='C2349972';
+
+

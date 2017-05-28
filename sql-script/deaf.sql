@@ -62,5 +62,20 @@ alter table deaf_metamap add column sab varchar(100) after preferStr;
 
 select task, count(*)/count(distinct tid), count(distinct tid) from deaf_metamap group by task ;
 select * from deaf_metamap where task = 'autism';
+delete from deaf_metamap where sab='CHV' and sentLen > 51;
+
+select count(*) from deaf_metamap where sab = 'SNOMEDCT_US'; -- 1077473
+select count(*) from deaf_metamap_no_thread_id where sab = 'SNOMEDCT_US'; -- 1140048
+
+select count(*) from deaf_metamap where sab = 'SNOMEDCT_US' and task='deaf'; -- 475902
+select count(*) from deaf_metamap_no_thread_id where sab = 'SNOMEDCT_US' and task='deaf'; -- 494458
+
+select count(*) from deaf_metamap where sab = 'SNOMEDCT_US' and task='austim'; -- 475902
+select count(*) from deaf_metamap_no_thread_id where sab = 'SNOMEDCT_US' and task='austim'; -- 494458
+
+select count(*) from deaf_metamap where sentLen > 51 and sab='SNOMEDCT_US'; -- 0
+select count(*) from deaf_metamap where sentLen > 51 and sab='CHV'; -- 76004
+select sentLen,count(*) from deaf_metamap where sab='SNOMEDCT_US' group by sentLen;
+select sentLen,count(*) from deaf_metamap where sab='CHV' group by sentLen;
 
 
