@@ -136,7 +136,7 @@ class Clustering(sc: SparkContext) {
         // reduce vocabulary
 
       })
-      val sNgrams = hNgrams.values.toSeq.filter(_.tfAll>tfFilterInPartition)
+      val sNgrams = hNgrams.values.toSeq.filter(_.tfFilter(tfFilterInPartition))
       trace(INFO,s"grams number before reduce (in this partition) > ${tfFilterInPartition} is ${sNgrams.size}")
       sNgrams.foreach(_.getNestInfo(sNgrams))
       sNgrams.iterator
@@ -161,7 +161,7 @@ class Clustering(sc: SparkContext) {
         .reduceByKey(_ + _)
         //.sortByKey()
         .map(_._2)
-        .filter(_.tfAll > Conf.stag1TfFilter)
+        .filter(_.tfFilter(Conf.stag1TfFilter))
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, false))
         .filter(t=>t.cvalue > Conf.stag1CvalueFilter && t.umlsScore._1 > Conf.stag2UmlsScoreFilter && t.umlsScore._2 > Conf.stag2ChvScoreFilter)
         .persist(StorageLevel.DISK_ONLY)
@@ -193,7 +193,7 @@ class Clustering(sc: SparkContext) {
         .reduceByKey(_ + _)
         //.sortByKey()
         .map(_._2)
-        .filter(_.tfAll > Conf.stag2TfFilter)
+        .filter(_.tfFilter( Conf.stag2TfFilter))
         .mapPartitions(itr => Ngram.updateAfterReduce(itr, docNumber, true))
         .filter(_.cvalue > Conf.stag2CvalueFilter)
       rddSent.unpersist()
@@ -223,7 +223,7 @@ class Clustering(sc: SparkContext) {
       if (Conf.bagsOfWord) {
         Nlp.wordsInbags = Utils.readObjectFromFile(Conf.ngramSaveFile + ".bow.index")
         ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile).filter(v => {
-          !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
+          !v.text.matches(Conf.stopwordRegex) && v.tfFilter(Conf.stag2TfFilter)
         })
         ngrams.foreach(g=>if(Conf.bowDialogSetOne){
            val index = Nlp.wordsInbags.getOrElse(g.key,(-1,0L))
@@ -231,7 +231,7 @@ class Clustering(sc: SparkContext) {
          })
       }else{
         ngrams = Utils.readObjectFromFile[Array[Ngram]](Conf.ngramSaveFile+".no_bow").filter(v => {
-          !v.text.matches(Conf.stopwordRegex) && v.tfAll > Conf.stag2TfFilter
+          !v.text.matches(Conf.stopwordRegex) && v.tfFilter(Conf.stag2TfFilter)
         })
       }
      /* Utils.writeObjectToFile(Conf.ngramSaveFile + ".no_bow", ngrams.map(g=>{

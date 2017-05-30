@@ -180,6 +180,7 @@ object Conf extends java.io.Serializable{
   //  #  1: replace with space; 2: replace with '.'; 0: do nothing
   //  ignoreNewLine=2
   val ignoreNewLine = 2 // prop.getOrDefault("ignoreNewLine", propDef.get("ignoreNewLine")).toString.toInt
+  val preferLongTermTfRatio = prop.getOrDefault("preferLongTermTfRatio", propDef.get("preferLongTermTfRatio")).toString.toFloat
   val partitionTfFilter = prop.getOrDefault("partitionTfFilter", propDef.get("partitionTfFilter")).toString.toInt
   val partitionReduceStartPoint = prop.getOrDefault("partitionReduceStartPoint", propDef.get("partitionReduceStartPoint")).toString.toInt
   val partitionReduceStartStep = prop.getOrDefault("partitionReduceStartStep", propDef.get("partitionReduceStartStep")).toString.toInt

@@ -254,6 +254,15 @@ class Ngram (val text: String) extends java.io.Serializable{
     this
   }
 
+  /* Longer term could be preferred*/
+  def tfFilter(th: Int): Boolean = {
+    if (this.tfAll >= th)
+      return true
+    if (this.n > 1 && this.n >= th * Conf.preferLongTermTfRatio) {
+        return true
+    }
+    return false
+  }
 
   def getNestInfo(hNgram: Seq[Ngram]): Ngram = {
     val Ta = new ArrayBuffer[Ngram]()
