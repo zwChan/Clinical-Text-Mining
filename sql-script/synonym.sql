@@ -6,12 +6,17 @@ cui varchar(10),
 synonym text
 );
 
+create table wiki_ngram like chv.cancer_ngram;
+
+rename table socialqa.wiki_ngram to synonym.wiki_ngram;
+
 set group_concat_max_len=10240;
 select * from test_term_umls;
 -- synonym with at most 3 words
 update test_term_umls t set synonym = (select GROUP_CONCAT(distinct s.descr SEPARATOR  '|' ) from umls._target_term_ s where cui=t.cui and (length(descr)-length(replace(descr,' ', '')))<= 2);
 
 
-select * from umls._target_term_ where cui='C2349972';
+select * from umls._target_term_ where cui='C0439234';
+select * from umls.mrconso where cui='C0439234';
 
 
