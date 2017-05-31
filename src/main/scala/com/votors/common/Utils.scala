@@ -202,6 +202,7 @@ object Conf extends java.io.Serializable{
 
   val solrServerUrl = prop.getOrDefault("solrServerUrl", propDef.get("solrServerUrl")).toString
   val memcached = prop.getOrDefault("memcached", propDef.get("memcached")).toString
+  val defaultExpireTime = prop.getOrDefault("defaultExpireTime", propDef.get("defaultExpireTime")).toString.toInt
   val ehCacheEntities = prop.getOrDefault("ehCacheEntities", propDef.get("ehCacheEntities")).toString.toInt
   val posInclusive = prop.getOrDefault("posInclusive", propDef.get("posInclusive")).toString.split(" ").filter(_.trim.length>0).mkString(" ")
   val jdbcDriver = prop.getOrDefault("jdbcDriver", propDef.get("jdbcDriver")).toString
@@ -243,7 +244,7 @@ object Conf extends java.io.Serializable{
     (afw(0), if(afw.size<2)1.0 else afw(1).toDouble)
   })
   //  val useUmlsContextFeature=prop.getOrDefault("useUmlsContextFeature", propDef.get("useUmlsContextFeature")).toString.toBoolean
-  val semanticType=prop.getOrDefault("semanticType", propDef.get("semanticType")).toString.trim.split(",")
+  val semanticType=prop.getOrDefault("semanticType", propDef.get("semanticType")).toString.trim.split(",").filter(_.length>0)
   val sabFilter=prop.getOrDefault("sabFilter", propDef.get("sabFilter")).toString.trim
   val posInWindown=prop.getOrDefault("posInWindown", propDef.get("posInWindown")).toString.trim
   val normalizeFeature=prop.getOrDefault("normalizeFeature", propDef.get("normalizeFeature")).toString.toBoolean
@@ -412,7 +413,7 @@ object MyCache {
     }
     Option(v)
   }
-  def put(key: String, value: AnyRef, expire: Int=60*10):Unit = {
+  def put(key: String, value: AnyRef, expire: Int=Conf.defaultExpireTime):Unit = {
     if (isMemcached) {
       memcacheClient.add(key.replace(" ","_"),expire,value)
     }else{
