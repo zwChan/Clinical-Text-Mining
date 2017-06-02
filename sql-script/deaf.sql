@@ -37,6 +37,7 @@ create table noncui like cancer.noncui;
 create table deaf_metamap like cancer.cancer_metamap_cui;
 -- drop table forum_metamap;
 create table forum_metamap like deaf_metamap;
+create table qa8000_metamap like deaf_metamap;
 
 load data local infile '/tmp/alldeaf_HealthFitness_08_20_2015_Final.txt' into table dataset_deaf fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
 load data local infile '/tmp/autism_health_Final.txt' into table dataset_autism fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
@@ -78,4 +79,4 @@ select count(*) from deaf_metamap where sentLen > 51 and sab='CHV'; -- 76004
 select sentLen,count(*) from deaf_metamap where sab='SNOMEDCT_US' group by sentLen;
 select sentLen,count(*) from deaf_metamap where sab='CHV' group by sentLen;
 
-
+select count(*) from qa8000_metamap;

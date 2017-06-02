@@ -9,6 +9,13 @@ create table health_answers_for_8000_questions as (select a.qid,a.content,a.rati
 select * from socialqa.qdataH;
 select count(*) from `health_questions_random_8000`;
 
+-- pick 8000 question and answer.
+set group_concat_max_len=1024000;
+select q.qid, replace(group_concat(q.content,'\n',a.content),'\r','') 
+	from `health_questions_random_8000` q, `health_answers_for_8000_questions` a 
+		where a.qid=q.qid group by qid
+	into outfile '/tmp/socialqa_8000.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
+
 -- split all answers into multiple files.
 select  id, replace(concat(subject, ' ', content,' ',chosenanswer),'\r','') from socialqa.qdataH 
     where id > 3822256/4*0 and id <= 3822256/4*1
