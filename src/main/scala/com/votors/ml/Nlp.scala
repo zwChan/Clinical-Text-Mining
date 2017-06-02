@@ -228,7 +228,7 @@ object Nlp {
   val stopwords = new mutable.TreeSet[String]()
   for (line <- scala.io.Source.fromFile(s"${modelRoot}/stopwords.txt").getLines()) {
     if (line.trim.length > 0 && !line.trim.startsWith("#"))
-      stopwords.add(Nlp.getToken(line).map(t =>{Nlp.normalizeAll(t)}).mkString(" ").trim)
+      stopwords.add(line.trim)
   }
 
   /**
