@@ -59,6 +59,12 @@ case class Suggestion(val score: Float,
   // styIgnored should be shared by all sugustion with the same cui
   var styIgnored:Array[Int] = Array(0)  // 0: not ignored; 1: ignored by prefer rules; 2: ignore by random picking
 
+  def score4sort = {
+    if (Conf.sabPrefer.size > 1 && this.sab.matches(Conf.sabPrefer))
+      this.score * 1.1f
+    else
+      this.score
+  }
   def isContainedBy(spanOther: IntPair) = {
     (spanOther.get(0)<=span.get(0) && spanOther.get(1)>=span.get(1))
   }
@@ -432,7 +438,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     ret = ret.filter(s=>s.sab.matches(Conf.sabFilter) && !s.NormDescr.matches(Conf.cuiStringFilterRegex))   //filter by sab and regex
     // for the same cui, we only return the highest score record. (there may be several records (e.g.diferent aui))
     if (firstCuiOnly) ret = ret.groupBy(_.cui).map(kv=>{
-      val cuis=kv._2.sortBy(_.score*(-1.0));
+      val cuis=kv._2.sortBy(c=>{c.score4sort * (-1.0f) // reverse order
+      })
       cuis(0)
     }).toArray  //for each cui, return ther first entry only
 
@@ -445,7 +452,9 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         if (suggestion.stys.indexOf(tui)<0)suggestion.stys.append(tui)
       }
     })
-    ret.sortBy(_.score*(-1.0))  //desc
+    ret = ret.sortBy(c=>{c.score4sort * (-1.0f) // reverse order
+    })  //desc
+    ret
   }
   def select_solr(phrase: String): Array[Suggestion] = {
 //    val phraseNorm = normalizeCasePunct(phrase)
@@ -530,7 +539,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
       suggs.append(Suggestion(score, descr, cui, aui,sab,descr_sorted,phrase,preferStr) )
     }
     //println(suggs)
-    suggs.toArray.sortBy(s => 1 - s.score) // Decrease
+    suggs.toArray.sortBy(s => 1 - s.score) // Decrease // use the real score, not score4sort, since this result will be cache.
   }
 
 
@@ -774,9 +783,9 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return ((umlsScore,chvScore,umlsCui,chvCui), semanticTypeArray)
    */
   def getUmlsScore(currTag: String, getStysOp:String="fetch"): ((Double,Double,Suggestion,Suggestion),Array[Boolean]) = {
-    var umlsScore = 0.0
+    var umlsScore4sort = 0.0
     var umlsSugg:Suggestion = null
-    var chvScore = 0.0
+    var chvScore4sort = 0.0
     var chvSugg:Suggestion = null
     var stys:Array[Boolean] = null
 
@@ -802,13 +811,13 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
             // filter out the cui that is not contained  in the configured list.
             if (hitSemanticType || !getStysOp.equals("filter")) {
               if (suggestion.sab.contains("CHV")) {
-                if (suggestion.score > chvScore) {
-                  chvScore = suggestion.score
+                if (suggestion.score4sort > chvScore4sort) {
+                  chvScore4sort = suggestion.score4sort
                   chvSugg = suggestion
                 }
               }
-              if (suggestion.score > umlsScore) {
-                umlsScore = suggestion.score
+              if (suggestion.score4sort > umlsScore4sort) {
+                umlsScore4sort = suggestion.score4sort
                 umlsSugg = suggestion
               }
             }
@@ -816,6 +825,8 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
         }
       }
     }
+    val umlsScore = if (umlsSugg != null) umlsSugg.score else 0.0
+    val chvScore = if (chvSugg != null) chvSugg.score else 0.0
     ((umlsScore,chvScore,umlsSugg,chvSugg), stys)
   }
 

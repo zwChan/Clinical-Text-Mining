@@ -258,7 +258,7 @@ class Ngram (val text: String) extends java.io.Serializable{
   def tfFilter(th: Int): Boolean = {
     if (this.tfAll >= th)
       return true
-    if (this.n > 1 && this.n >= th * Conf.preferLongTermTfRatio) {
+    if (this.n > 1 && this.tfAll >= th * Conf.preferLongTermTfRatio) {
         return true
     }
     return false

@@ -343,7 +343,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
         })
       }).groupBy(_._1).map(kv=>{
         // choose the highest score and smallest cui for key (cui,tui)
-        val tmp = kv._2.sortBy(v=>f"${Int.MaxValue - v._2.score.toInt}%10d${v._2.cui}")
+        val tmp = kv._2.sortBy(v=>f"${Int.MaxValue - v._2.score4sort.toInt}%10d${v._2.cui}")
         val firstKv = tmp(0)
         val s = firstKv._2
         if (s.stys.indexOf(firstKv._1)<0)s.stys.append(firstKv._1)
@@ -433,7 +433,7 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
       }
       // pick a semantic type between cui
       var cnt = 0
-      for (s <- suggustions.sortBy(v=>f"${Int.MaxValue - v.score.toInt}%10d${v.cui}")) {
+      for (s <- suggustions.sortBy(v=>f"${Int.MaxValue - v.score4sort.toInt}%10d${v.cui}")) {
           val idx = s.styIgnored.indexOf(IGNORED_NOT_IGNORED)
           if (cnt == 0 && idx >= 0) {
             cnt += 1
