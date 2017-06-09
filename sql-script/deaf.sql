@@ -79,4 +79,5 @@ select count(*) from deaf_metamap where sentLen > 51 and sab='CHV'; -- 76004
 select sentLen,count(*) from deaf_metamap where sab='SNOMEDCT_US' group by sentLen;
 select sentLen,count(*) from deaf_metamap where sab='CHV' group by sentLen;
 
-select count(*) from qa8000_metamap;
+select * from qa8000_metamap;
+select * from umls.mrconso where cui = 'C1258068';
