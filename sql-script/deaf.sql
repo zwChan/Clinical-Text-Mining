@@ -81,3 +81,23 @@ select sentLen,count(*) from deaf_metamap where sab='CHV' group by sentLen;
 
 select * from qa8000_metamap;
 select * from umls.mrconso where cui = 'C1258068';
+
+create index task on deaf_metamap_excluding_sty_distinct_sentences(task);
+create index sab on deaf_metamap_excluding_sty_distinct_sentences(sab);
+create index cui_str on deaf_metamap_excluding_sty_distinct_sentences(cui_str(10));
+
+create index task on qa8000_metamap_excluding_sty_distinct_sentences(task);
+create index sab on qa8000_metamap_excluding_sty_distinct_sentences(sab);
+create index cui_str on qa8000_metamap_excluding_sty_distinct_sentences(cui_str(10));
+
+
+
+
+select count(*)
+from (cancer_cui_uniq
+select D.threadID, D.tid, D.sentence, D.cui, D.org_str, D.cui_str
+	from deaf.deaf_metamap_excluding_sty_distinct_sentences D
+	where D.task='autism' and D.sab ='SNOMEDCT_US'
+		and not exists (
+			select * from deaf.deaf_metamap_excluding_sty_distinct_sentences B where B.task='autism' and B.sab ='CHV' and D.cui_str = B.cui_str)
+		) as A;

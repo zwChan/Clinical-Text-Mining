@@ -23,6 +23,8 @@ update test_term_umls t set synonym = (select GROUP_CONCAT(distinct s.str SEPARA
 select * from umls._target_term_ where cui='C0439234';
 select * from umls.mrconso where cui='C0439234';
 select count(*) from  wiki_ngram;
-select * from test_term_umls where length(synonym) >1;
+select * from test_term_umls 
+	into outfile '/tmp/freq_term.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
 
 select distinct sab from umls.mrconso;
+

@@ -15,6 +15,21 @@ select q.qid, replace(group_concat(q.content,'\n',a.content),'\r','')
 	from `health_questions_random_8000` q, `health_answers_for_8000_questions` a 
 		where a.qid=q.qid group by qid
 	into outfile '/tmp/socialqa_8000.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
+select q.qid,q.content, q.userid
+	from `health_questions_random_8000` q
+    union all 
+    select a.qid,a.content,a.userid 
+    from `health_answers_for_8000_questions` a 
+	into outfile '/tmp/socialqa_8000_uid.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
+
+
+select U.userid, count(*) as cnt from 
+	(select userid from health_questions_random_8000 
+		union all
+	 select userid from health_answers_for_8000_questions ) as U
+       group by U.userid 
+       order by cnt desc;
+select userid,count(*) as cnt from health_answers_for_8000_questions group by userid order by cnt desc;
 
 -- split all answers into multiple files.
 select  id, replace(concat(subject, ' ', content,' ',chosenanswer),'\r','') from socialqa.qdataH 
