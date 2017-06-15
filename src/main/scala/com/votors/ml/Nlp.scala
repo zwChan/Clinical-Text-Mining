@@ -582,6 +582,8 @@ object Nlp {
       "U" // pronoun
     else if (pos == "CC")
       "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.
+    else if (pos == "UH")
+      "W" // interjection
     else if (pos == "X")
       "X" // if the sentence is too long, stanford nlp will return 'X', meaning no parsing.
     else if (punctPattern.matcher(pos).matches())

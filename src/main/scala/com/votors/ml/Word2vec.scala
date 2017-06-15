@@ -23,6 +23,8 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
   /**
     * get text from files of directory (fileName -> (text of doc in wikipedia)
     */
+  final val ignoreTag = Pattern.compile("<.{0,30}?>")
+  final val urlReg = Pattern.compile("(http|ftp|https)://([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])?")
   def getTextRdd():RDD[(String)] = {
     val docRdd = sc.wholeTextFiles(dir, Conf.partitionNumber).flatMap(kv=>{
       val filename = kv._1
@@ -47,7 +49,7 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
     var id = ""
     var title = ""
     for (l <- lines if l.trim.size > 0) yield {
-      val line = Nlp.illegalChar.matcher(l.trim).replaceAll("")
+      val line = Nlp.illegalChar.matcher(l.trim).replaceAll(" ")
       if (line.startsWith(Word2vec.docStartStr) && (startMatcher = Word2vec.docStart.matcher(line)) != null && startMatcher.matches()) {
         doc = new StringBuilder
         id = startMatcher.group(1)
@@ -58,7 +60,9 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
         doc = null
         (id, title, doc_ret)
       }else{
-        doc.append(line + "\n")
+        val line_doc = this.ignoreTag.matcher(line).replaceAll("")
+        //val line_doc = this.urlReg.matcher(line).replaceAll("U#R#L")
+        doc.append(line_doc + "\n")
         null
       }
     }
