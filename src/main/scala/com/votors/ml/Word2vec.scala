@@ -190,15 +190,15 @@ object Word2vec {
     outFile.append(s"token number is ${tokenCnt}\n")
     outFile.append(s"doc number is ${docNum}\n")
     outFile.append("# stat of pos:\n")
-    cntPos.foreach(kv=>{
+    cntPos.toArray.sortBy(_._2 * -1).foreach(kv=>{
       outFile.append(s"${kv._1}\t${kv._2}\n")
     })
     outFile.append("# stat of token:\n")
-    cntToken.foreach(kv=>{
+    cntToken.toArray.sortBy(_._2 * -1).foreach(kv=>{
       outFile.append(s"${kv._1}\t${kv._2}\n")
     })
     outFile.append("# stat of lemma:\n")
-    cntLemma.foreach(kv=>{
+    cntLemma.toArray.sortBy(_._2 * -1).foreach(kv=>{
       outFile.append(s"${kv._1}\t${kv._2}\n")
     })
     tokenFile.append("\n")
