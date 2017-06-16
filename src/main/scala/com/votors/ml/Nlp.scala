@@ -55,7 +55,7 @@ object Nlp {
   val spacePattern = Pattern.compile("\\s+")
   final val StopwordRegex = Pattern.compile(Conf.stopwordRegex)
   final val PosFilterRegex = Conf.posFilterRegex.map(Pattern.compile(_))
-  final val illegalChar = Pattern.compile("[^\\p{Graph}\\x20\\t\\r\\n]")
+  final val illegalChar = Pattern.compile("[^\\p{Graph}\\x20\\t\\r\\n]|[^\\x00-\\x7f]")
 
   // (ngram-key, index-in-array-ordered-by-frequency)
   var wordsInbags: Map[String,(Int,Long)] = null
