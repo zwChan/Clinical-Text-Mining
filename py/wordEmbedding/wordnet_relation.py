@@ -12,6 +12,7 @@ L = wn.lemma
 print(sys.argv)
 if len(sys.argv) < 5:
     print("Usage: [input_file.csv] [output_file] [wordset_file] [stanfordNlp3.7_path]")
+    exit(1)
 input_file = sys.argv[1]
 output_file = sys.argv[2]
 wordset_file = sys.argv[3]
@@ -87,8 +88,9 @@ def get_siblings(term,pos='n'):
 word_set = set()
 
 ## matches:
-# 1. (.*) all string within parenthesis; # FIXME test only by now
-rSpecial = re.compile(r"\(.*\)|[^a-zA-Z0-9- ]|- |- |\b-\b")
+# 1. (.*) all string within parenthesis; "\N" is the null value for mysql. # FIXME test only by now
+rSpecial4name = re.compile(r"\s\(.*\)")
+rSpecial4umls = re.compile(r"\(.*\)|[^a-zA-Z0-9-_ ]|- |- |\b-\b")
 with open(input_file, 'rb') as csvfile:
     with open(output_file, 'w+') as of:
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
@@ -98,13 +100,13 @@ with open(input_file, 'rb') as csvfile:
             if len(row) < 1: continue
             word = row[0]
             print("\n### word: %s" % word)
-            word_norm = rSpecial.sub('',word).strip().replace(' ','_')
+            word_norm = rSpecial4name.sub('',word).strip().replace(' ','_')
             word_set.add(word_norm)
             cui = '' if len(row) < 2 else  row[1]
             synUmls = [] if len(row) < 3 else  row[2].split(r'|')
             synUmlsSet = set()
             for s in synUmls:
-                s2 = '_'.join(lemma(rSpecial.sub('',s).lower().strip()))
+                s2 = '_'.join(lemma(rSpecial4umls.sub('',s.replace(r'\N','')).lower().strip())) # \N is null in mysql
                 synUmlsSet.add(s2)
             print synUmlsSet
             synWnSet = get_synonyms(word_norm)
