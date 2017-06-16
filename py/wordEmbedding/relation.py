@@ -142,12 +142,13 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
 
 if len(sys.argv) < 4:
     print("Usage: [model-file] [vocab-file] [input-file]")
+    exit(1)
 model = sys.argv[1]
-model = r'C:\fsu\class\thesis\token.txt.bin'
+# model = r'C:\fsu\class\thesis\token.txt.bin'
 vocFile=sys.argv[2]
-vocFile = r'C:\fsu\class\thesis\token.txt.voc'
-infile = sys.argv[3]
-qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
+# vocFile = r'C:\fsu\class\thesis\token.txt.voc'
+qfile = sys.argv[3]
+# qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True,encoding='ascii', unicode_errors='ignore')
 # wv.most_similar_cosmul(['king','women'],['man'])
 # wv.accuracy(qfile)
