@@ -172,10 +172,16 @@ object Word2vec {
     val cntToken = mutable.HashMap[String,Int]()
     val cntLemma = mutable.HashMap[String,Int]()
     tokenRdd.toLocalIterator.foreach(t=>{
-      tokenFile.append(t._1 + " ")
+      val temp = t._2.split("\\|")
+
+      val pos,lemma = if (temp.size > 1) (temp(0),temp(1)) else ("X",t._1)
+      if (pos == 'N' || pos == "A")
+        tokenFile.append(lemma + " ") // for adjactive and noun, use lemma
+      else
+        tokenFile.append(t._1 + " ")
       normFile.append(t._2 + " ")
       if (t._1.length > 2) {
-        val key = t._2.charAt(t._2.length - 1)
+        val key = t._2.charAt(0)
         cntPos.update(key, cntPos.getOrElse(key, 0) + 1)
         cntToken.update(t._1, cntToken.getOrElse(t._1, 0) + 1)
         cntLemma.update(t._2, cntLemma.getOrElse(t._2, 0) + 1)
