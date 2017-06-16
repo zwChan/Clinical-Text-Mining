@@ -10,6 +10,9 @@ create table wiki_ngram like chv.cancer_ngram;
 
 rename table socialqa.wiki_ngram to synonym.wiki_ngram;
 
+load data local infile '/data/ra/wikidata/wiki.ngram.words' into table wiki_ngram fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
+
+
 set group_concat_max_len=10240;
 select * from test_term_umls;
 -- synonym with at most 3 words

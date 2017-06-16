@@ -91,6 +91,12 @@ create index sab on qa8000_metamap_excluding_sty_distinct_sentences(sab);
 create index cui_str on qa8000_metamap_excluding_sty_distinct_sentences(cui_str(10));
 
 
+create table qa8000 like qa8000_metamap;
+ALTER TABLE `deaf`.`qa8000` 
+CHANGE COLUMN `threadId` `userId` VARCHAR(256) NULL DEFAULT NULL ;
+rename table qa8000_metamap to qa8000_metamap_without_userid;
+rename table qa8000 to qa8000_metamap;
+
 
 
 select count(*)
