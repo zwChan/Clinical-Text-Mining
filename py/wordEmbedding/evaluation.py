@@ -16,15 +16,16 @@ class EvaluateAnalogy:
         self.sections = sections
 
     def __str__(self):
-        ret = "section\taccuracy\tcorrect\incorrect"
+        ret = "section\taccuracy\tcorrect\tincorrect\n"
         for section in self.sections:
             if len(section['correct'])+len(section['incorrect']) > 0:
-                ret += "%s\t%0.2f%%\t%d\t%d" \
+                ret += "%s\t%0.2f%%\t%d\t%d\n" \
                        % (section['section'],100.0*len(section['correct'])/(len(section['correct'])+len(section['incorrect'])), len(section['correct']), len(section['incorrect']))
         correct = sum(len(s['correct']) for s in analogyList)
         incorrect = sum(len(s['incorrect']) for s in analogyList)
-        ret += "%s\t%0.2f%%\t%d\t%d" \
+        ret += "%s\t%0.2f%%\t%d\t%d\n" \
             % ('total',100.0*correct/(correct+incorrect), correct, incorrect)
+        return ret
 
 class EvaluateRelation:
     """
@@ -33,6 +34,7 @@ class EvaluateRelation:
     def __init__(self,termList, topn=10):
         if len(termList) == 0:
             print("No term found.")
+            self.termList = []
             return
         self.termList = termList
         self.topn = topn
@@ -55,6 +57,7 @@ class EvaluateRelation:
         return ret
 
     def evaluate(self):
+        if len(self.termList) == 0: return
         for term in self.termList:
             for i,rels in enumerate(term.relValue):
                 if i <= term.NormIndex: continue  # skip term name and term norm
@@ -67,6 +70,7 @@ class EvaluateRelation:
                 self.hit_cnt[i] += len(term.relHit[i])
 
     def __str__(self):
+        if len(self.termList) == 0: return ""
         ret = 'Evaluation:\t%s\n' % ('\t'.join([str(i) for i in self.relName[self.NormIndex+1:]]))
         ret += "cnt:\t%s\n" % ('\t'.join([str(i) for i in self.cnt[self.NormIndex+1:]]))
         ret += "cnt_term:\t%s\n" % ('\t'.join([str(i) for i in self.cnt_term[self.NormIndex+1:]]))
@@ -82,6 +86,7 @@ class EvaluateRelation:
         return ret
 
     def PrintHitList(self):
+        if len(self.termList) == 0: return
         print('\t'.join(self.relName))
         for t in self.termList:
             print(t)
@@ -199,7 +204,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
             if section:
                 sections.append(section)
                 self.log_accuracy(section)
-                print("")
+                print("", file=sys.stderr)
             section = {'section': line.lstrip(': ').strip(), 'correct': [], 'incorrect': []}
         else:
             if sample > 0 and random.random() > sample: continue  # sample question, for test only
@@ -253,7 +258,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
 
 # --------------------------------------------------------------------------------
 if len(sys.argv) < 5:
-    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file]",file=sys.stderr)
+    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [sample(test)]",file=sys.stderr)
     exit(1)
 model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
@@ -262,8 +267,8 @@ vocFile=sys.argv[2]
 analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 relfile = sys.argv[4]
-topn = 10 if len(sys.argv) >=5 else int(sys.argv[5])
-sample = 0 if len(sys.argv) >=6 else float(sys.argv[6])
+topn = 10 if len(sys.argv) < 6 else int(sys.argv[5])
+sample = 0 if len(sys.argv) < 7 else float(sys.argv[6])
 
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
 termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
