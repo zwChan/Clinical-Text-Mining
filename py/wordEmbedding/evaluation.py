@@ -2,10 +2,19 @@ from __future__ import division
 
 __author__ = 'Jason'
 import sys
-import csv
+import csv,logging
 import  gensim
+from gensim import utils, matutils
+logger = logging.getLogger(__name__)
 
-class Evaluate:
+class EvaluateAnalogy:
+    def __init__(self,sections,topn=10):
+        if len(sections) == 0:
+            print("No term found.")
+            return
+        self.sections = sections
+
+class EvaluateRelation:
     """
     ['term name','term_norm', 'umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling']
     """
@@ -139,7 +148,88 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
             termList.append(term)
     return termList
 
+def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True):
+    """
+    Compute accuracy of the model. `questions` is a filename where lines are
+    4-tuples of words, split into sections by ": SECTION NAME" lines.
+    See questions-words.txt in https://storage.googleapis.com/google-code-archive-source/v2/code.google.com/word2vec/source-archive.zip for an example.
 
+    The accuracy is reported (=printed to log and returned as a list) for each
+    section separately, plus there's one aggregate summary at the end.
+
+    Use `restrict_vocab` to ignore all questions containing a word not in the first `restrict_vocab`
+    words (default 30,000). This may be meaningful if you've sorted the vocabulary by descending frequency.
+    In case `case_insensitive` is True, the first `restrict_vocab` words are taken first, and then
+    case normalization is performed.
+
+    Use `case_insensitive` to convert all words in questions and vocab to their uppercase form before
+    evaluating the accuracy (default True). Useful in case of case-mismatch between training tokens
+    and question words. In case of multiple case variants of a single word, the vector for the first
+    occurrence (also the most frequent if vocabulary is sorted) is taken.
+
+    This method corresponds to the `compute-accuracy` script of the original C word2vec.
+
+    """
+    self=wv
+    ok_vocab = self.vocab
+    ok_vocab = dict((w.upper(), v) for w, v in ok_vocab.items()) if case_insensitive else ok_vocab
+    sections, section = [], None
+    for line_no, line in enumerate(utils.smart_open(questions)):
+        # TODO: use level3 BLAS (=evaluate multiple questions at once), for speed
+        line = utils.to_unicode(line).lower()
+        print(line)
+        if line.startswith(': '):
+            # a new section starts => store the old section
+            if section:
+                sections.append(section)
+                self.log_accuracy(section)
+            section = {'section': line.lstrip(': ').strip(), 'correct': [], 'incorrect': []}
+        else:
+            if not section:
+                raise ValueError("missing section header before line #%i in %s" % (line_no, questions))
+            try:
+                if case_insensitive:
+                    a, b, c, expected = [word.upper() for word in line.split()]
+                else:
+                    a, b, c, expected = [word for word in line.split()]
+            except:
+                logger.info("skipping invalid line #%i in %s" % (line_no, questions))
+                continue
+            if a not in ok_vocab or b not in ok_vocab or c not in ok_vocab or expected not in ok_vocab:
+                logger.debug("skipping line #%i with OOV words: %s" % (line_no, line.strip()))
+                continue
+
+            original_vocab = self.vocab
+            self.vocab = ok_vocab
+            ignore = set([a, b, c])  # input words to be ignored
+            predicted = None
+            # find the most likely prediction, ignoring OOV words and input words
+            sims = most_similar(self, positive=[b, c], negative=[a], topn=topn, restrict_vocab=None)
+            self.vocab = original_vocab
+            for word, dist in sims:
+                predicted = word.upper() if case_insensitive else word
+                if predicted in ok_vocab and predicted not in ignore:
+                    if predicted == expected:
+                        break  # found.
+            if predicted == expected:
+                section['correct'].append((a, b, c, expected))
+            else:
+                section['incorrect'].append((a, b, c, expected))
+    if section:
+        # store the last section, too
+        sections.append(section)
+        self.log_accuracy(section)
+
+    total = {
+        'section': 'total',
+        'correct': sum((s['correct'] for s in sections), []),
+        'incorrect': sum((s['incorrect'] for s in sections), []),
+    }
+    self.log_accuracy(total)
+    sections.append(total)
+    return sections
+
+# --------------------------------------------------------------------------------
 if len(sys.argv) < 4:
     print("Usage: [model-file] [vocab-file] [input-file]")
     exit(1)
@@ -147,19 +237,22 @@ model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
 vocFile=sys.argv[2]
 # vocFile = r'C:\fsu\class\thesis\token.txt.voc'
-qfile = sys.argv[3]
+analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
+relfile = sys.argv[4]
+
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True,encoding='ascii', unicode_errors='ignore')
 # wv.most_similar_cosmul(['king','women'],['man'])
 # wv.accuracy(qfile)
 topn = 10
-termList = accuracy_rel(wv,qfile,gensim.models.KeyedVectors.most_similar,topn=topn)
-evaluation = Evaluate(termList,topn=topn)
-print("### result start: ###")
-evaluation.PrintHitList()
-print("#### evaluation result ###")
-evaluation.evaluate()
-print(evaluation)
+#termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn)
+# evaluation = EvaluateRelation(termList,topn=topn)
+# print("### result start: ###")
+# evaluation.PrintHitList()
+# print("#### evaluation result ###")
+# evaluation.evaluate()
+# print(evaluation)
 
-
+analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn)
+print(analogyList)
 
