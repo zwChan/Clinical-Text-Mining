@@ -262,10 +262,10 @@ vocFile=sys.argv[2]
 analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 relfile = sys.argv[4]
-sample = 0 if len(sys.argv) >=5 else float(sys.argv[4])
+topn = 10 if len(sys.argv) >=5 else int(sys.argv[5])
+sample = 0 if len(sys.argv) >=6 else float(sys.argv[6])
 
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
-topn = 10
 termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
 evaluation_rel = EvaluateRelation(termList,topn=topn)
 # print("### result start: ###")
