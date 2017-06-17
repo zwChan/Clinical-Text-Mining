@@ -1,8 +1,9 @@
-from __future__ import division
-
+from __future__ import division,print_function
 __author__ = 'Jason'
 import sys
-import csv,logging
+import random
+import csv
+import logging
 import  gensim
 from gensim import utils, matutils
 logger = logging.getLogger(__name__)
@@ -13,6 +14,17 @@ class EvaluateAnalogy:
             print("No term found.")
             return
         self.sections = sections
+
+    def __str__(self):
+        ret = "section\taccuracy\tcorrect\incorrect"
+        for section in self.sections:
+            if len(section['correct'])+len(section['incorrect']) > 0:
+                ret += "%s\t%0.2f%%\t%d\t%d" \
+                       % (section['section'],100.0*len(section['correct'])/(len(section['correct'])+len(section['incorrect'])), len(section['correct']), len(section['incorrect']))
+        correct = sum(len(s['correct']) for s in analogyList)
+        incorrect = sum(len(s['incorrect']) for s in analogyList)
+        ret += "%s\t%0.2f%%\t%d\t%d" \
+            % ('total',100.0*correct/(correct+incorrect), correct, incorrect)
 
 class EvaluateRelation:
     """
@@ -115,7 +127,7 @@ def term_similar(w2v, term,  most_similar_f, topn,restrict_vocab=30000):
     try:
         term.similar = most_similar_f(w2v,term_norm,topn=topn,restrict_vocab=restrict_vocab)
     except KeyError as e:
-        print("No such word: %s" % (term_norm))
+        print("No such word: %s" % (term_norm), file=sys.stderr)
     simMap = term.similarMap()
 
     for rels in term.relValue:
@@ -125,7 +137,10 @@ def term_similar(w2v, term,  most_similar_f, topn,restrict_vocab=30000):
                 hitTerms.append(rel)
         term.relHit.append(hitTerms)
 
-def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case_insensitive=True):
+'''
+    sample: use part of the evaluation data, for test only
+'''
+def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case_insensitive=True, sample=0):
     termList = []
     with open(csvfile, 'rb') as csvfile:
         csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
@@ -136,6 +151,7 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
                 first = False
                 Term.relName += row
                 continue
+            if sample > 0 and random.random() > sample: continue  # sample question, for test only
             term = Term(row[0])
             for i,rel in enumerate(row):
                 term.relValue.append([])
@@ -148,7 +164,7 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
             termList.append(term)
     return termList
 
-def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True):
+def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True, sample=0):
     """
     Compute accuracy of the model. `questions` is a filename where lines are
     4-tuples of words, split into sections by ": SECTION NAME" lines.
@@ -167,6 +183,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
     and question words. In case of multiple case variants of a single word, the vector for the first
     occurrence (also the most frequent if vocabulary is sorted) is taken.
 
+    sample: use part of the evaluation data, for test only
     This method corresponds to the `compute-accuracy` script of the original C word2vec.
 
     """
@@ -177,14 +194,15 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
     for line_no, line in enumerate(utils.smart_open(questions)):
         # TODO: use level3 BLAS (=evaluate multiple questions at once), for speed
         line = utils.to_unicode(line).lower()
-        print(line)
         if line.startswith(': '):
             # a new section starts => store the old section
             if section:
                 sections.append(section)
                 self.log_accuracy(section)
+                print("")
             section = {'section': line.lstrip(': ').strip(), 'correct': [], 'incorrect': []}
         else:
+            if sample > 0 and random.random() > sample: continue  # sample question, for test only
             if not section:
                 raise ValueError("missing section header before line #%i in %s" % (line_no, questions))
             try:
@@ -215,23 +233,27 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
                 section['correct'].append((a, b, c, expected))
             else:
                 section['incorrect'].append((a, b, c, expected))
+            print("\r%s: %0.2f%% correct %d, incorrect %d" %\
+                  (section['section'],100.0*len(section['correct'])/(len(section['correct'])+len(section['incorrect'])), len(section['correct']), len(section['incorrect'])),\
+                  end='', file=sys.stderr)
+
     if section:
         # store the last section, too
         sections.append(section)
         self.log_accuracy(section)
 
-    total = {
-        'section': 'total',
-        'correct': sum((s['correct'] for s in sections), []),
-        'incorrect': sum((s['incorrect'] for s in sections), []),
-    }
-    self.log_accuracy(total)
-    sections.append(total)
+    # total = {
+    #     'section': 'total',
+    #     'correct': sum((s['correct'] for s in sections), []),
+    #     'incorrect': sum((s['incorrect'] for s in sections), []),
+    # }
+    # self.log_accuracy(total)
+    # sections.append(total)
     return sections
 
 # --------------------------------------------------------------------------------
-if len(sys.argv) < 4:
-    print("Usage: [model-file] [vocab-file] [input-file]")
+if len(sys.argv) < 5:
+    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file]",file=sys.stderr)
     exit(1)
 model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
@@ -240,19 +262,22 @@ vocFile=sys.argv[2]
 analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 relfile = sys.argv[4]
+sample = 0 if len(sys.argv) >=5 else float(sys.argv[4])
 
-wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True,encoding='ascii', unicode_errors='ignore')
-# wv.most_similar_cosmul(['king','women'],['man'])
-# wv.accuracy(qfile)
+wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
 topn = 10
-#termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn)
-# evaluation = EvaluateRelation(termList,topn=topn)
+termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
+evaluation_rel = EvaluateRelation(termList,topn=topn)
 # print("### result start: ###")
 # evaluation.PrintHitList()
 # print("#### evaluation result ###")
-# evaluation.evaluate()
-# print(evaluation)
+evaluation_rel.evaluate()
+print(evaluation_rel)
 
-analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn)
-print(analogyList)
+analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn, sample=sample)
+evaluation_analogy = EvaluateAnalogy(analogyList,topn=topn)
+print(evaluation_analogy)
+
+
+
 
