@@ -117,13 +117,14 @@ with open(input_file, 'rb') as csvfile:
             word_norm = rSpecial4name.sub('',word).strip().replace(' ','_')
             isValidTerm = False  # whether this is term is found in wordnet or umls
             # word_set.add(word_norm)
-            cui = '' if len(row) < 2 else  row[1]
+            cui = '' if len(row) < 2 else  row[1].strip()
+            if len(cui) > 0: isValidTerm = True
             synUmls = [] if len(row) < 3 else  row[2].split(r'|')
             synUmlsSet = set()
             for s in synUmls:
                 s2 = '_'.join(lemma(rSpecial4umls.sub('',s.replace(r'\N','')).lower().strip())) # \N is null in mysql
+                if len(s2) == 0: continue
                 synUmlsSet.add(s2)
-                isValidTerm = True
             print synUmlsSet
             synWnSet = get_synonyms(word_norm)
             word_set |= synWnSet
