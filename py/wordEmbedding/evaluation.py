@@ -19,11 +19,11 @@ class EvaluateAnalogy:
         ret = "section\taccuracy\tcorrect\tincorrect\n"
         for section in self.sections:
             if len(section['correct'])+len(section['incorrect']) > 0:
-                ret += "%s\t%0.2f%%\t%d\t%d\n" \
+                ret += "%s\t%0.2f\t%d\t%d\n" \
                        % (section['section'],100.0*len(section['correct'])/(len(section['correct'])+len(section['incorrect'])), len(section['correct']), len(section['incorrect']))
         correct = sum(len(s['correct']) for s in analogyList)
         incorrect = sum(len(s['incorrect']) for s in analogyList)
-        ret += "%s\t%0.2f%%\t%d\t%d\n" \
+        ret += "%s\t%0.2f\t%d\t%d\n" \
             % ('total',100.0*correct/(correct+incorrect), correct, incorrect)
         return ret
 
