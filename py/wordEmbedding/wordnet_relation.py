@@ -156,8 +156,9 @@ with open(input_file, 'rb') as csvfile:
             print(pertain)
             if isValidTerm:  word_set.add(word_norm)
 
-            writer.writerow([word,word_norm,'|'.join(synUmlsSet),'|'.join(synWnSet),'|'.join(antonyms),'|'.join(hypernym),\
-                             '|'.join(hyponym),'|'.join(holonym),'|'.join(meronym),'|'.join(siblings),'|'.join(derivation),'|'.join(pertain)])
+            sep = ','
+            writer.writerow([word,word_norm,sep.join(synUmlsSet),sep.join(synWnSet),sep.join(antonyms),sep.join(hypernym),\
+                             sep.join(hyponym),sep.join(holonym),sep.join(meronym),sep.join(siblings),sep.join(derivation),sep.join(pertain)])
 
         with open(wordset_file, 'w+') as wf:
             for w in word_set:

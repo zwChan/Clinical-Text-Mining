@@ -5,11 +5,12 @@ from stanfordcorenlp import StanfordCoreNLP
 
 print(sys.argv)
 if len(sys.argv) < 4:
-    print("Usage: [input_file.csv] [stanfordNlp3.7_path] [output_file]")
+    print("Usage: [input_file.csv] [stanfordNlp3.7_path] [output_file] [file_type, analogy or relation]")
     exit(1)
 input_file = sys.argv[1]
 output_file = sys.argv[3]
 stanfordNlpPath = sys.argv[2]
+file_type = sys.argv[4] if len(sys.argv) > 4 else 'analogy'
 nlp = StanfordCoreNLP(stanfordNlpPath)
 
 def pos_transform(pos):
@@ -63,7 +64,7 @@ def pos_lemma(text):
             pos_lemma.append("%s|%s" % (pos_transform(token['pos'].strip()),token['lemma']))
     return pos_lemma
 
-def tag_word_file(infile, outfile):
+def tag_word_analogy(infile, outfile):
     with open(outfile,'w+') as of:
         with open(infile) as f:
             for line in f.readlines():
@@ -77,4 +78,31 @@ def tag_word_file(infile, outfile):
                     ret.append('_'.join(pos_w))
                 print(' '.join(ret),file=of)
 
-tag_word_file(input_file, output_file)
+def tag_word_relation(infile, outfile):
+    with open(outfile,'w+') as of:
+        with open(infile) as f:
+            first_line = True
+            for line in f.readlines():
+                if first_line:
+                    print(line.strip(),file=of)
+                    first_line = False
+                    continue
+                ret = []
+                columns = line.split('\t')
+                first_column = True
+                for col in columns:
+                    if first_column:
+                        ret.append(col)
+                        first_column = False
+                    else:
+                        sep = ','
+                        words_ret = []
+                        for w in col.split(sep):
+                            pos_w = pos_lemma(w.replace('_',' '))
+                            words_ret.append('_'.join(pos_w))
+                        ret.append(sep.join(words_ret))
+                print('\t'.join(ret),file=of)
+if file_type == 'relation':
+    tag_word_relation(input_file, output_file)
+else:
+    tag_word_analogy(input_file, output_file)
