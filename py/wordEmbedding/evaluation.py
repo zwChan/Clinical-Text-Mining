@@ -6,7 +6,7 @@ import csv
 import logging
 import  gensim
 from gensim import utils, matutils
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 class EvaluateAnalogy:
     def __init__(self,sections,topn=10):
@@ -65,7 +65,7 @@ class EvaluateRelation:
                     self.cnt_term[i] += 1
                     self.hit_cnt_weighted[i] += 1.0*len(term.relHit[i])/min([len(rels),self.topn])
                 self.cnt[i] += len(rels)
-                if len(term.relHit[i]):
+                if len(term.relHit[i]) > 0:
                     self.hit_term[i] += 1
                 self.hit_cnt[i] += len(term.relHit[i])
 
@@ -216,11 +216,13 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
                 else:
                     a, b, c, expected = [word for word in line.split()]
             except:
-                logger.info("skipping invalid line #%i in %s" % (line_no, questions))
+                print("skipping invalid line in %s, %s" % (section['section'], line.strip()), file=sys.stderr)
                 continue
             if a not in ok_vocab or b not in ok_vocab or c not in ok_vocab or expected not in ok_vocab:
-                logger.debug("skipping line #%i with OOV words: %s" % (line_no, line.strip()))
+                print("skipping line in %s with OOV words: %s" % (section['section'], line.strip()), file=sys.stderr)
                 continue
+
+            print("%s found words: %s\n" % (section['section'], line.strip()), file=sys.stderr)
 
             original_vocab = self.vocab
             self.vocab = ok_vocab
@@ -271,13 +273,13 @@ topn = 10 if len(sys.argv) < 6 else int(sys.argv[5])
 sample = 0 if len(sys.argv) < 7 else float(sys.argv[6])
 
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
-termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
-evaluation_rel = EvaluateRelation(termList,topn=topn)
-# print("### result start: ###")
-# evaluation.PrintHitList()
-# print("#### evaluation result ###")
-evaluation_rel.evaluate()
-print(evaluation_rel)
+# termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
+# evaluation_rel = EvaluateRelation(termList,topn=topn)
+# # print("### result start: ###")
+# # evaluation.PrintHitList()
+# # print("#### evaluation result ###")
+# evaluation_rel.evaluate()
+# print(evaluation_rel)
 
 analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn, sample=sample)
 evaluation_analogy = EvaluateAnalogy(analogyList,topn=topn)

@@ -30,7 +30,7 @@ def lemma(text):
             lemma.append(token['lemma'])
     return lemma
 
-def get_synonyms(term,pos='n'):
+def get_synonyms(term,pos='asn'):
     synonym = set()
     for ss in wn.synsets(term.strip(),pos=pos):
         #print(ss.name(), ss.lemma_names())
@@ -40,48 +40,62 @@ def get_synonyms(term,pos='n'):
     # for s in synonym:
     #     print(s)
     return synonym
-def get_antonyms(term,pos='n'):
+def get_antonyms(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
         for lemma in ss.lemmas():
             for anto in lemma.antonyms():
                 retSet.add(anto.name().lower())
     return retSet
-def get_hyperyms(term,pos='n'):
+def get_hyperyms(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
-        for hyper in ss.hypernyms():
+        for hyper in ss.hypernyms() + ss.instance_hypernyms():
             for lemma in hyper.lemma_names():
                 retSet.add(lemma.lower())
     return retSet
-def get_hyponyms(term,pos='n'):
+def get_hyponyms(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
-        for rel in ss.hyponyms():
+        for rel in ss.hyponyms() + ss.instance_hyponyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
     return retSet
-def get_holonyms(term,pos='n'):
+def get_holonyms(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
         for rel in ss.part_holonyms() + ss.member_holonyms() + ss.substance_holonyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
     return retSet
-def get_meronyms(term,pos='n'):
+def get_meronyms(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
         for rel in ss.part_meronyms() + ss.member_meronyms() + ss.substance_meronyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
     return retSet
-def get_siblings(term,pos='n'):
+def get_siblings(term,pos='asn'):
     retSet = set()
     for ss in wn.synsets(term.strip(),pos=pos):
         for hyper in ss.hypernyms():
             for hypo in hyper.hyponyms():
                 for lemma in hypo.lemma_names():
                     retSet.add(lemma.lower())
+    return retSet
+def get_derivationally_related_forms(term,pos='asn'):
+    retSet = set()
+    for ss in wn.synsets(term.strip(),pos=pos):
+        for lemma in ss.lemmas():
+            for rel in lemma.derivationally_related_forms():
+                retSet.add(rel.name().lower())
+    return retSet
+def get_pertainyms(term,pos='asn'):
+    retSet = set()
+    for ss in wn.synsets(term.strip(),pos=pos):
+        for lemma in ss.lemmas():
+            for rel in lemma.pertainyms():
+                retSet.add(rel.name().lower())
     return retSet
 
 # all the words involved
@@ -95,22 +109,25 @@ with open(input_file, 'rb') as csvfile:
     with open(output_file, 'w+') as of:
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
         writer = csv.writer(of,delimiter='\t',quotechar='"',lineterminator="\n")
-        writer.writerow(['word','word_norm','umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling'])
+        writer.writerow(['word','word_norm','umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling','derivation','pertain'])
         for row in reader:
             if len(row) < 1: continue
             word = row[0]
             print("\n### word: %s" % word)
             word_norm = rSpecial4name.sub('',word).strip().replace(' ','_')
-            word_set.add(word_norm)
+            isValidTerm = False  # whether this is term is found in wordnet or umls
+            # word_set.add(word_norm)
             cui = '' if len(row) < 2 else  row[1]
             synUmls = [] if len(row) < 3 else  row[2].split(r'|')
             synUmlsSet = set()
             for s in synUmls:
                 s2 = '_'.join(lemma(rSpecial4umls.sub('',s.replace(r'\N','')).lower().strip())) # \N is null in mysql
                 synUmlsSet.add(s2)
+                isValidTerm = True
             print synUmlsSet
             synWnSet = get_synonyms(word_norm)
             word_set |= synWnSet
+            if len(synWnSet) > 0: isValidTerm = True
             print(synWnSet)
             antonyms = get_antonyms(word_norm)
             word_set |= antonyms
@@ -130,9 +147,16 @@ with open(input_file, 'rb') as csvfile:
             siblings = get_siblings(word_norm)
             word_set |= siblings
             print(siblings)
+            derivation = get_derivationally_related_forms(word_norm)
+            word_set |= derivation
+            print(derivation)
+            pertain = get_pertainyms(word_norm)
+            word_set |= pertain
+            print(pertain)
+            if isValidTerm:  word_set.add(word_norm)
 
             writer.writerow([word,word_norm,'|'.join(synUmlsSet),'|'.join(synWnSet),'|'.join(antonyms),'|'.join(hypernym),\
-                             '|'.join(hyponym),'|'.join(holonym),'|'.join(meronym),'|'.join(siblings)])
+                             '|'.join(hyponym),'|'.join(holonym),'|'.join(meronym),'|'.join(siblings),'|'.join(derivation),'|'.join(pertain)])
 
         with open(wordset_file, 'w+') as wf:
             for w in word_set:
