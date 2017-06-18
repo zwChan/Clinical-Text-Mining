@@ -560,9 +560,9 @@ object Nlp {
       "A" // adjective
     else if (pos == "IN")
       "P" // preposition or a conjunction that introduces a subordinate clause, e.g., although, because.
-    else if (pos == "RB"|pos == "RBR"|pos == "RBS"| pos=="WRB")
+    else if (pos == "RB"|| pos == "RBR"|| pos == "RBS"|| pos=="WRB")
       "R" // Adverb
-    else if (pos == "VB"|pos == "VBD"| pos=="VBP"|pos=="VBZ")
+    else if (pos == "VB"||pos == "VBD"|| pos=="VBP"|| pos=="VBZ")
       "V" // verb
     else if (pos == "VBG")
       "G"
@@ -570,7 +570,7 @@ object Nlp {
       "B"
     else if (pos == "TO")
       "T" // to
-    else if ("DT" ==pos|"PDT"==pos|"WDT"==pos)
+    else if ("DT" ==pos||"PDT"==pos||"WDT"==pos)
       "D" // determiner
     else if (pos == "EX")
       "E" // existential
@@ -578,7 +578,7 @@ object Nlp {
       "F" // foreign word
     else if (pos == "CD")
       "M" // cardinal number
-    else if (pos == "RPR"|pos == "RPR$"|pos == "WP"|pos == "WP$")
+    else if (pos == "RPR"||pos == "RPR$"||pos == "WP"||pos == "WP$")
       "U" // pronoun
     else if (pos == "CC")
       "C" // a conjunction placed between words, phrases, clauses, or sentences of equal rank, e.g., and, but, or.

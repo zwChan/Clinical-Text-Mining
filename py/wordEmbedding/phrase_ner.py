@@ -8,7 +8,7 @@ def create_vocab(vcfile):
     with open(vcfile) as f:
         for line in f.readlines():
             if line.count('_') == 0: continue
-            vocab.add(line.split()[0].strip())
+            vocab.add(line.split()[0].lower().strip())
     return vocab
 
 def connect_phrass_line(line,vocab, ngram=4):
@@ -19,7 +19,7 @@ def connect_phrass_line(line,vocab, ngram=4):
         tokens_tmp = []
         while j < len(tokens) - i + 1:
             phrase = '_'.join(tokens[j:j+i])
-            if phrase in vocab:
+            if phrase.lower() in vocab:
                 tokens_tmp.append(phrase)
                 j += i
             else:
