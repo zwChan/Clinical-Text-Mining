@@ -130,6 +130,10 @@ with open(input_file, 'rb') as csvfile:
             word_set |= synWnSet
             if len(synWnSet) > 0: isValidTerm = True
             print(synWnSet)
+            if not isValidTerm:
+                # if no synomym term in umls and wordnet, it is not considered to be a 'valid term'.
+                continue
+
             antonyms = get_antonyms(word_norm)
             word_set |= antonyms
             print antonyms
@@ -154,7 +158,7 @@ with open(input_file, 'rb') as csvfile:
             pertain = get_pertainyms(word_norm)
             word_set |= pertain
             print(pertain)
-            if isValidTerm:  word_set.add(word_norm)
+            word_set.add(word_norm)
 
             sep = ','
             writer.writerow([word,word_norm,sep.join(synUmlsSet),sep.join(synWnSet),sep.join(antonyms),sep.join(hypernym),\

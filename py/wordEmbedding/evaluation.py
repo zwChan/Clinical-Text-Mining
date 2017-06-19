@@ -161,7 +161,7 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
             for i,rel in enumerate(row):
                 term.relValue.append([])
                 # if len(rel)==0: continue
-                rel_term = rel.split('|')
+                rel_term = rel.split(',')
                 for t in rel_term:
                     if len(t) == 0: continue
                     term.relValue[i].append(t)
@@ -221,8 +221,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
             if a not in ok_vocab or b not in ok_vocab or c not in ok_vocab or expected not in ok_vocab:
                 print("skipping line in %s with OOV words: %s" % (section['section'], line.strip()), file=sys.stderr)
                 continue
-
-            print("%s found words: %s\n" % (section['section'], line.strip()), file=sys.stderr)
+            #print("%s found words: %s\n" % (section['section'], line.strip()), file=sys.stderr)
 
             original_vocab = self.vocab
             self.vocab = ok_vocab
@@ -273,13 +272,13 @@ topn = 10 if len(sys.argv) < 6 else int(sys.argv[5])
 sample = 0 if len(sys.argv) < 7 else float(sys.argv[6])
 
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
-# termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
-# evaluation_rel = EvaluateRelation(termList,topn=topn)
-# # print("### result start: ###")
-# # evaluation.PrintHitList()
-# # print("#### evaluation result ###")
-# evaluation_rel.evaluate()
-# print(evaluation_rel)
+termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
+evaluation_rel = EvaluateRelation(termList,topn=topn)
+# print("### result start: ###")
+# evaluation.PrintHitList()
+# print("#### evaluation result ###")
+evaluation_rel.evaluate()
+print(evaluation_rel)
 
 analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn, sample=sample)
 evaluation_analogy = EvaluateAnalogy(analogyList,topn=topn)

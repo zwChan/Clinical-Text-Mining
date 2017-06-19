@@ -8,8 +8,8 @@ if len(sys.argv) < 4:
     print("Usage: [input_file.csv] [stanfordNlp3.7_path] [output_file] [file_type, analogy or relation]")
     exit(1)
 input_file = sys.argv[1]
-output_file = sys.argv[3]
 stanfordNlpPath = sys.argv[2]
+output_file = sys.argv[3]
 file_type = sys.argv[4] if len(sys.argv) > 4 else 'analogy'
 nlp = StanfordCoreNLP(stanfordNlpPath)
 
