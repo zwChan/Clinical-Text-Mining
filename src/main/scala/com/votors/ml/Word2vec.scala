@@ -8,6 +8,7 @@ import java.util.regex.{Matcher, Pattern}
 import com.votors.common.{Conf, MyCache}
 import com.votors.common.Utils.Trace
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -97,6 +98,29 @@ class Word2vec(@transient sc: SparkContext, val dir: String) extends Serializabl
       println(s" ${System.currentTimeMillis()/1000%100000}\t${System.currentTimeMillis()-startTime}\t${text.lines.next}")
     ret
   }
+
+  def getDepContextRdd(textRdd: RDD[String], vocab: Broadcast[mutable.HashSet[String]]) = {
+    textRdd.flatMap(text=>getDepContext(text,vocab.value))
+  }
+  def getDepContext(text: String, vocab: mutable.HashSet[String]) = {
+    val startTime = System.currentTimeMillis()
+    val edges = StanfordNLP.getDependencyContext(text)
+    val ret = edges.filter(edge => {
+      val sWord = edge._1
+      val tWord = edge._2
+      val rel = edge._3
+      if (rel.contains("punct") || rel.contains("adpmod"))
+        false
+      else if (vocab!= null && vocab.size > 0 && (!vocab.contains(sWord) || !vocab.contains(tWord))){
+        false
+      }else{
+        true
+      }
+    })
+    if (text.lines.hasNext)
+      println(s" ${System.currentTimeMillis()/1000%100000}\t${System.currentTimeMillis()-startTime}\t${text.lines.next}")
+    ret
+  }
 }
 
 object Word2vec {
@@ -108,7 +132,7 @@ object Word2vec {
   def main(args:Array[String]): Unit = {
     println(args.mkString("\t"))
     if (args.size < 5) {
-      println(s"Input parameters: [spark|no] [path of input file] [path of output token file] [output norm file")
+      println(s"Input parameters: [context|token] [path of input file] [path of output file] [input vocab file or norm file] [stat file]")
       sys.exit(1)
     }
     val startTime = new Date()
@@ -116,15 +140,15 @@ object Word2vec {
     // printf more debug info of the gram that match the filter
     Trace.filter = Conf.debugFilterNgram
 
-    if (args(0).toLowerCase == "spark"){
-      mainSpark(args)
+    if (args(0).toLowerCase == "context"){
+      mainContext(args)
     }else{
-      mainSingle(args)
+      mainToken(args)
     }
     MyCache.close()
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())/1000+" ###")
   }
-  def mainSingle(args: Array[String]): Unit = {
+/*  def mainSingle(args: Array[String]): Unit = {
     val word2vec = new Word2vec(null, dir=args(1))
     val tokenFile = new FileWriter(args(2))
     val normFile = new FileWriter(args(3))
@@ -144,12 +168,12 @@ object Word2vec {
 
     tokenFile.close()
     normFile.close()
-  }
-  def mainSpark(args: Array[String]): Unit = {
+  }*/
+  def mainToken(args: Array[String]): Unit = {
     //System.setProperty("hadoop.home.dir", "C:\\fsu\\ra\\UmlsTagger\\libs")
     // init spark
     val conf = new SparkConf()
-      .setAppName("Word2vec")
+      .setAppName("TokenAndLemma")
     if (Conf.sparkMaster.length > 3)
       conf.setMaster(Conf.sparkMaster)
     val sc = new SparkContext(conf)
@@ -168,24 +192,24 @@ object Word2vec {
     val tokenRdd = word2vec.getPosLemmaRdd(docRdd).persist(StorageLevel.DISK_ONLY)
     docRdd.unpersist()
     val tokenCnt = tokenRdd.count()
-    val cntPos = mutable.HashMap[Char,Int]()
+    val cntPos = mutable.HashMap[String,Int]()
     val cntToken = mutable.HashMap[String,Int]()
     val cntLemma = mutable.HashMap[String,Int]()
     tokenRdd.toLocalIterator.foreach(t=>{
       val temp = t._2.split("\\|")
 
-      val pos,lemma = if (temp.size > 1) (temp(0),temp(1)) else ("X",t._1)
-      if (pos == 'N' || pos == "A")
+      val (pos,lemma) = if (temp.size > 1) (temp(0),temp(1)) else ("X",t._1)
+      if (pos == "N" || pos == "A")
         tokenFile.append(lemma + " ") // for adjactive and noun, use lemma
       else
         tokenFile.append(t._1 + " ")
       normFile.append(t._2 + " ")
-      if (t._1.length > 2) {
-        val key = t._2.charAt(0)
-        cntPos.update(key, cntPos.getOrElse(key, 0) + 1)
-        cntToken.update(t._1, cntToken.getOrElse(t._1, 0) + 1)
-        cntLemma.update(t._2, cntLemma.getOrElse(t._2, 0) + 1)
-      }
+      val poskey   = if (t._1 == "\n") "</s>" else if (t._2.size == 0) "</d>" else t._2.trim.substring(0,1)
+      val token = if (t._1 == "\n") "</s>" else if (t._1.size == 0) "</d>" else t._1.trim
+      val norm  = if (t._2 == "\n") "</s>" else if (t._2.size == 0) "</d>" else t._2.trim
+      cntPos.update(poskey, cntPos.getOrElse(poskey, 0) + 1)
+      cntToken.update(token, cntToken.getOrElse(token, 0) + 1)
+      cntLemma.update(norm, cntLemma.getOrElse(norm, 0) + 1)
     })
     outFile.append(s"token number is ${tokenCnt}\n")
     outFile.append(s"doc number is ${docNum}\n")
@@ -209,4 +233,60 @@ object Word2vec {
     sc.stop()
   }
 
+  def mainContext(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+      .setAppName("Context")
+    if (Conf.sparkMaster.length > 3)
+      conf.setMaster(Conf.sparkMaster)
+    val sc = new SparkContext(conf)
+    val rootLogger = Logger.getRootLogger()
+    rootLogger.setLevel(Level.WARN)
+
+    val word2vec = new Word2vec(sc, dir=args(1))
+    val tokenFile = new FileWriter(args(2))
+    val vocabFile = args(3)
+    val outFile = new FileWriter(args(4))
+    val thrshhold = if (args.size > 5) Integer.parseInt(args(5)) else 0
+
+    val vocab = new mutable.HashSet[String]()
+    if (vocabFile.toLowerCase != "null") {
+      Source.fromFile(vocabFile).getLines.foreach(line=>{
+        val words = line.trim.split("\\s")
+        if (words.size >0) {
+          val word = words(0)
+          val freq = if (words.size > 1 ) try {Integer.parseInt(words(1))} catch {case _:Throwable => 0 }else 0
+          if (freq >= thrshhold) vocab.add(word)
+        }
+      })
+    }
+
+    val docRdd = word2vec.getTextRdd().persist(StorageLevel.DISK_ONLY)
+    val docNum = docRdd.count()
+    println(s"### doc number is $docNum, partition number is ${docRdd.getNumPartitions} ###")
+
+    val vocab_bc = sc.broadcast(vocab)
+    val depRdd = word2vec.getDepContextRdd(docRdd,vocab_bc).persist(StorageLevel.DISK_ONLY)
+    docRdd.unpersist()
+    val tokenCnt = depRdd.count()
+    val cntRel = mutable.HashMap[String,Int]()
+    depRdd.toLocalIterator.foreach(t=>{
+      val sWord = t._1
+      val tWord = t._2
+      val rel = t._3
+      tokenFile.append(s"${sWord} ${tWord}@${rel}\n")
+      tokenFile.append(s"${tWord} ${sWord}@${rel}I\n")
+      cntRel.update(rel, cntRel.getOrElse(rel, 0) + 1)
+    })
+    outFile.append(s"context number is ${tokenCnt}\n")
+    outFile.append(s"vocab number is ${vocab.size}\n")
+    outFile.append(s"doc number is ${docNum}\n")
+    outFile.append("# stat of relation:\n")
+    cntRel.toArray.sortBy(_._2 * -1).foreach(kv=>{
+      outFile.append(s"${kv._1}\t${kv._2}\n")
+    })
+    tokenFile.append("\n")
+    tokenFile.close()
+    outFile.close()
+    sc.stop()
+  }
 }

@@ -15,7 +15,7 @@ import edu.stanford.nlp.parser.lexparser.LexicalizedParser
 import edu.stanford.nlp.pipeline.{Annotation, StanfordCoreNLP}
 import edu.stanford.nlp.process.PTBTokenizer.PTBTokenizerFactory
 import edu.stanford.nlp.semgraph.SemanticGraph
-import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.CollapsedCCProcessedDependenciesAnnotation
+import edu.stanford.nlp.semgraph.SemanticGraphCoreAnnotations.{CollapsedCCProcessedDependenciesAnnotation, EnhancedPlusPlusDependenciesAnnotation}
 import edu.stanford.nlp.tagger.maxent.{MaxentTagger, TaggerConfig}
 import edu.stanford.nlp.time.TimeAnnotations.TimexAnnotation
 import edu.stanford.nlp.trees.Tree
@@ -62,15 +62,10 @@ object StanfordNLP {
 
   def isNoun(pos: String) = pos.startsWith("N")
 
-  def init(isLemmaOnly:Boolean=false) = {
+  def init() = {
     // creates a StanfordCoreNLP object, with POS tagging, lemmatization, NER, parsing, and coreference resolution
     val props:Properties = new Properties()
-    if (isLemmaOnly) {
-      props.setProperty("annotators", "tokenize, ssplit, pos, lemma")
-    } else {
-      props.setProperty("annotators", "tokenize, ssplit" /*Conf.stanfordAnnotators*/)
-    }
-
+    props.setProperty("annotators", Conf.stanfordAnnotators)
     //    props.setProperty("annotators", "tokenize, ssplit, pos, lemma, ner, regexner, parse, depparse");
     props.setProperty("ner.useSUTime", "true")
     props.setProperty("ner.applyNumericClassifiers", "true")
@@ -89,7 +84,7 @@ object StanfordNLP {
   var pipelineLemma:StanfordCoreNLP = null
 
   def findPattern(text: String) = {
-    if (pipeline == null) pipeline =init(false)
+    if (pipeline == null) pipeline =init()
     val retList = new ArrayBuffer[(CoreMap,Seq[CTPattern],Seq[MMResult])]()
     // we split using semicolon first, because stanfordNlp doesnot treat semicolon as a delimiter.
     text.split(";").filter(_.trim.length>0).foreach(sent=>{
@@ -122,14 +117,14 @@ object StanfordNLP {
     * @param str input string
     *  return: (text, pos, lemma)
     */
-  def getPosLemmaRaw(str: String) = {
-    if (pipelineLemma == null) pipelineLemma =init(isLemmaOnly = true)
+  def getDocument(str: String) = {
+    if (pipelineLemma == null) pipelineLemma =init()
     val document: Annotation = new Annotation(str)
     pipelineLemma.annotate(document)
     document
   }
   def getPosLemma(str: String) = {
-    val document = getPosLemmaRaw(str)
+    val document = getDocument(str)
     val tokens = document.get(classOf[TokensAnnotation])
     val lemmas = tokens.iterator().map(t=>{
       val lemma = t.get(classOf[LemmaAnnotation])
@@ -149,7 +144,7 @@ object StanfordNLP {
     * @return
     */
   def getPosLemmaBySentence(str: String) = {
-    val document = getPosLemmaRaw(str)
+    val document = getDocument(str)
     val tokens = document.get(classOf[SentencesAnnotation])
     val lemmas = tokens.iterator().map(sent=>{
       val tokens = sent.get(classOf[TokensAnnotation])
@@ -163,6 +158,35 @@ object StanfordNLP {
     lemmas.toArray
   }
 
+  def getDependencyContext(str:String) = {
+    val document = getDocument(str)
+    val sents = document.get(classOf[SentencesAnnotation])
+    val contexts = sents.iterator().flatMap(sent=>{
+      val dep = sent.get(classOf[EnhancedPlusPlusDependenciesAnnotation])
+      dep.edgeIterable.iterator().map(edge=> {
+        val s = edge.getSource
+        val t = edge.getTarget
+        val r = edge.getRelation
+
+        val sPos = Nlp.posTransform(s.get(classOf[PartOfSpeechAnnotation]))
+        val tPos = Nlp.posTransform(t.get(classOf[PartOfSpeechAnnotation]))
+        // we use the lemma of noun and adjective.
+        val sWord = if (sPos == "N" || sPos == "A") {
+          s.get(classOf[LemmaAnnotation])
+        }else{
+          s.get(classOf[TextAnnotation])
+        }
+        val tWord = if (tPos == "N" || tPos == "A") {
+          t.get(classOf[LemmaAnnotation])
+        }else{
+          t.get(classOf[TextAnnotation])
+        }
+        val rName = r.getShortName
+        (sWord.toLowerCase, tWord.toLowerCase, rName)
+      })
+    })
+    contexts.toArray
+  }
 
   def compareCuiResult(metaMap:Seq[MMResult], ours: Seq[CTPattern]) = {
     for (pt <- ours) {
@@ -224,8 +248,9 @@ object StanfordNLP {
     //val text = "Patients with a history of myocardial infarction or stroke within the last 6 months will be excluded."
     val text = "A dependency parser of diabetes analyzes the grammatical structure of a sentence, establishing relationships between \"head\" words and words which modify those heads of diabetes. " + "diabetes is hard to be cued."
     // create an empty Annotation just with the given text
-    findPattern(text).foreach(_ => println(""))
+    //findPattern(text).foreach(_ => println(""))
     //println(getPosLemma(text).mkString("\n"))
+    getDependencyContext(text).foreach(println(_))
 
     MyCache.close()
     return

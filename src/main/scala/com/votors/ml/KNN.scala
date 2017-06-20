@@ -136,7 +136,8 @@ object KNN {
     val rddVector = rddGramVectorAll.filter(_._1.isTrain).persist()
     // if (!Conf.trainOnlyChv&&Conf.testSample<=0), there is no test ngram for rank.
     //val rddRankVector_all = clustering.getVectorRdd(if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddNgram4Train else {rddNgram4Train.filter(_.isTrain==false)}, Conf.useFeatures4Test).persist()
-    val rddRankVector_all = if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddGramVectorAll else {rddGramVectorAll.filter(_._1.isTrain==false)}.persist()
+    val rddRankVector_all = if (Conf.rankWithTrainData || (!Conf.trainOnlyChv&&Conf.testSample<=0)) rddGramVectorAll else {rddGramVectorAll.filter(_._1.isTrain==false)}
+    rddRankVector_all.persist()
     //rddNgram4Train.unpersist()  // don't used it again
 
     println(s"** ngramCntAll ${ngramCntAll} ngramCntUmls ${ngramCntUmls} ngramCntChv ${ngramCntChv}  ngramOther ${ngramCntAll-ngramCntUmls} **")
