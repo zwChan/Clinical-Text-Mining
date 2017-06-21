@@ -39,6 +39,7 @@ def get_synonyms(term,pos='asn'):
             synonym.add(lemma.lower())
     # for s in synonym:
     #     print(s)
+    synonym.discard(term)
     return synonym
 def get_antonyms(term,pos='asn'):
     retSet = set()
@@ -46,6 +47,7 @@ def get_antonyms(term,pos='asn'):
         for lemma in ss.lemmas():
             for anto in lemma.antonyms():
                 retSet.add(anto.name().lower())
+    retSet.discard(term)
     return retSet
 def get_hyperyms(term,pos='asn'):
     retSet = set()
@@ -53,6 +55,7 @@ def get_hyperyms(term,pos='asn'):
         for hyper in ss.hypernyms() + ss.instance_hypernyms():
             for lemma in hyper.lemma_names():
                 retSet.add(lemma.lower())
+    retSet.discard(term)
     return retSet
 def get_hyponyms(term,pos='asn'):
     retSet = set()
@@ -60,6 +63,7 @@ def get_hyponyms(term,pos='asn'):
         for rel in ss.hyponyms() + ss.instance_hyponyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
+    retSet.discard(term)
     return retSet
 def get_holonyms(term,pos='asn'):
     retSet = set()
@@ -67,6 +71,7 @@ def get_holonyms(term,pos='asn'):
         for rel in ss.part_holonyms() + ss.member_holonyms() + ss.substance_holonyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
+    retSet.discard(term)
     return retSet
 def get_meronyms(term,pos='asn'):
     retSet = set()
@@ -74,6 +79,7 @@ def get_meronyms(term,pos='asn'):
         for rel in ss.part_meronyms() + ss.member_meronyms() + ss.substance_meronyms():
             for lemma in rel.lemma_names():
                 retSet.add(lemma.lower())
+    retSet.discard(term)
     return retSet
 def get_siblings(term,pos='asn'):
     retSet = set()
@@ -82,6 +88,7 @@ def get_siblings(term,pos='asn'):
             for hypo in hyper.hyponyms():
                 for lemma in hypo.lemma_names():
                     retSet.add(lemma.lower())
+    retSet.discard(term)
     return retSet
 def get_derivationally_related_forms(term,pos='asn'):
     retSet = set()
@@ -89,6 +96,7 @@ def get_derivationally_related_forms(term,pos='asn'):
         for lemma in ss.lemmas():
             for rel in lemma.derivationally_related_forms():
                 retSet.add(rel.name().lower())
+    retSet.discard(term)
     return retSet
 def get_pertainyms(term,pos='asn'):
     retSet = set()
@@ -96,6 +104,7 @@ def get_pertainyms(term,pos='asn'):
         for lemma in ss.lemmas():
             for rel in lemma.pertainyms():
                 retSet.add(rel.name().lower())
+    retSet.discard(term)
     return retSet
 
 # all the words involved
@@ -128,6 +137,7 @@ with open(input_file, 'rb') as csvfile:
                 s2 = '_'.join(lemma(rSpecial4umls.sub('',s.replace(r'\N','')).lower().strip())) # \N is null in mysql
                 if len(s2) == 0: continue
                 synUmlsSet.add(s2)
+            synUmlsSet.discard(word_norm)
             word_set |= synUmlsSet
             print synUmlsSet
             synWnSet = get_synonyms(word_norm)
