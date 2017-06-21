@@ -109,7 +109,10 @@ with open(input_file, 'rb') as csvfile:
     with open(output_file, 'w+') as of:
         reader = csv.reader(csvfile, delimiter=',', quotechar='"')
         writer = csv.writer(of,delimiter='\t',quotechar='"',lineterminator="\n")
-        writer.writerow(['word','word_norm','umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling','derivation','pertain'])
+        headline = ['word','word_norm','umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling','derivation','pertain']
+        writer.writerow(headline)
+        stat_all = [0 for w in headline]
+        stat_phrase = [0 for w in headline]  # word => [totalCnt, phraseCnt]
         for row in reader:
             if len(row) < 1: continue
             word = row[0]
@@ -163,8 +166,22 @@ with open(input_file, 'rb') as csvfile:
             word_set.add(word_norm)
 
             sep = ','
-            writer.writerow([word,word_norm,sep.join(synUmlsSet),sep.join(synWnSet),sep.join(antonyms),sep.join(hypernym),\
-                             sep.join(hyponym),sep.join(holonym),sep.join(meronym),sep.join(siblings),sep.join(derivation),sep.join(pertain)])
+            row = [word,word_norm,sep.join(synUmlsSet),sep.join(synWnSet),sep.join(antonyms),sep.join(hypernym),\
+                             sep.join(hyponym),sep.join(holonym),sep.join(meronym),sep.join(siblings),sep.join(derivation),sep.join(pertain)]
+            writer.writerow(row)
+
+            # get statistics info about evaluation data set
+            for i,col in enumerate(row):
+                rels = col.split(sep)
+                for r in rels:
+                    if len(r.strip()) == 0: continue
+                    stat_all[i] += 1
+                    if '_' in r:
+                        stat_phrase[i] += 1
+        print("statistic info of count: all: %d, phrase %d" % (sum(stat_all), sum(stat_phrase)))
+        print('\t'.join(["Head"] + headline + ["Total"]))
+        print('\t'.join(["All terms"] + [str(i) for i in stat_all + [sum(stat_all)]]))
+        print('\t'.join(["Phrase"] + [str(i) for i in stat_phrase + [sum(stat_phrase)]]))
 
         with open(wordset_file, 'w+') as wf:
             for w in word_set:
