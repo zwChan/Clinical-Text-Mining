@@ -119,12 +119,13 @@ with open(input_file, 'rb') as csvfile:
             # word_set.add(word_norm)
             cui = '' if len(row) < 2 else  row[1].strip()
             if len(cui) > 0: isValidTerm = True
-            synUmls = [] if len(row) < 3 else  row[2].split(r'|')
+            synUmls = [] if len(row) < 3 else  row[2].split(r'|') # it is '|' which is in database
             synUmlsSet = set()
             for s in synUmls:
                 s2 = '_'.join(lemma(rSpecial4umls.sub('',s.replace(r'\N','')).lower().strip())) # \N is null in mysql
                 if len(s2) == 0: continue
                 synUmlsSet.add(s2)
+            word_set |= synUmlsSet
             print synUmlsSet
             synWnSet = get_synonyms(word_norm)
             word_set |= synWnSet
@@ -158,6 +159,7 @@ with open(input_file, 'rb') as csvfile:
             pertain = get_pertainyms(word_norm)
             word_set |= pertain
             print(pertain)
+
             word_set.add(word_norm)
 
             sep = ','
