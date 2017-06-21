@@ -1,6 +1,6 @@
 from __future__ import division,print_function
 __author__ = 'Jason'
-import sys,re,json,yaml
+import sys,re,json,yaml,time
 from stanfordcorenlp import StanfordCoreNLP
 
 print(sys.argv)
@@ -82,6 +82,8 @@ def tag_word_relation(infile, outfile):
     with open(outfile,'w+') as of:
         with open(infile) as f:
             first_line = True
+            start_time = time.time()
+            cnt = 0
             for line in f.readlines():
                 if first_line:
                     print(line.strip(),file=of)
@@ -101,7 +103,11 @@ def tag_word_relation(infile, outfile):
                             pos_w = pos_lemma(w.replace('_',' '))
                             words_ret.append('_'.join(pos_w))
                         ret.append(sep.join(words_ret))
+                        cnt += 1
+                        if cnt % 1000 == 0:
+                            print("\r cnt %d, time elapsed: %d" % (cnt, int(time.time() - start_time)), file=sys.stderr)
                 print('\t'.join(ret),file=of)
+
 if file_type == 'relation':
     tag_word_relation(input_file, output_file)
 else:
