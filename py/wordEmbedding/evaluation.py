@@ -61,6 +61,7 @@ class EvaluateRelation:
         for term in self.termList:
             for i,rels in enumerate(term.relValue):
                 if i <= term.NormIndex: continue  # skip term name and term norm
+                # if len(term.relValue) > len(term.relHit):
                 if len(rels) > 0:
                     self.cnt_term[i] += 1
                     self.hit_cnt_weighted[i] += 1.0*len(term.relHit[i])/min([len(rels),self.topn])
@@ -128,9 +129,9 @@ class Term:
 
 def term_similar(w2v, term,  most_similar_f, topn,restrict_vocab=30000):
     term_norm = term.relValue[term.NormIndex]
-    sim = []
     try:
-        term.similar = most_similar_f(w2v,term_norm,topn=topn,restrict_vocab=restrict_vocab)
+        if len(term_norm) > 0:
+            term.similar = most_similar_f(w2v,term_norm,topn=topn,restrict_vocab=restrict_vocab)
     except KeyError as e:
         print("No such word: %s" % (term_norm), file=sys.stderr)
     simMap = term.similarMap()
@@ -145,7 +146,7 @@ def term_similar(w2v, term,  most_similar_f, topn,restrict_vocab=30000):
 '''
     sample: use part of the evaluation data, for test only
 '''
-def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case_insensitive=True, sample=0):
+def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case_insensitive=True, usePhrase=True,sample=0):
     termList = []
     with open(csvfile, 'rb') as csvfile:
         csvreader = csv.reader(csvfile, delimiter='\t', quotechar='"')
@@ -156,6 +157,7 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
                 first = False
                 Term.relName += row
                 continue
+
             if sample > 0 and random.random() > sample: continue  # sample question, for test only
             term = Term(row[0])
             for i,rel in enumerate(row):
@@ -164,12 +166,15 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
                 rel_term = rel.split(',')
                 for t in rel_term:
                     if len(t) == 0: continue
+                    if usePhrase == False and "_" in t:
+                        print("%s in term(%s) is ignored record for term caused by phrase " % (t, term.name), file=sys.stderr)
+                        continue
                     term.relValue[i].append(t)
             term_similar(w2v,term,most_similar_f,topn,restrict_vocab)
             termList.append(term)
     return termList
 
-def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True, sample=0):
+def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True,usePhrase=True, sample=0):
     """
     Compute accuracy of the model. `questions` is a filename where lines are
     4-tuples of words, split into sections by ": SECTION NAME" lines.
@@ -207,6 +212,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
                 print("", file=sys.stderr)
             section = {'section': line.lstrip(': ').strip(), 'correct': [], 'incorrect': []}
         else:
+            if usePhrase == False and "_" in line: continue
             if sample > 0 and random.random() > sample: continue  # sample question, for test only
             if not section:
                 raise ValueError("missing section header before line #%i in %s" % (line_no, questions))
@@ -259,7 +265,7 @@ def accuracy_analogy(wv, questions, most_similar, topn=10, case_insensitive=True
 
 # --------------------------------------------------------------------------------
 if len(sys.argv) < 5:
-    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [sample(test)]",file=sys.stderr)
+    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [usePhrase(True|False)] [sample(test)]",file=sys.stderr)
     exit(1)
 model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
@@ -269,10 +275,11 @@ analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 relfile = sys.argv[4]
 topn = 10 if len(sys.argv) < 6 else int(sys.argv[5])
-sample = 0 if len(sys.argv) < 7 else float(sys.argv[6])
+usePhrase = True if len(sys.argv) < 7 else sys.argv[6].strip().lower()=="true"
+sample = 0 if len(sys.argv) < 8 else float(sys.argv[7])
 
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
-termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,sample=sample)
+termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,usePhrase=usePhrase,sample=sample)
 evaluation_rel = EvaluateRelation(termList,topn=topn)
 # print("### result start: ###")
 # evaluation.PrintHitList()
@@ -280,7 +287,7 @@ evaluation_rel = EvaluateRelation(termList,topn=topn)
 evaluation_rel.evaluate()
 print(evaluation_rel)
 
-analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn, sample=sample)
+analogyList = accuracy_analogy(wv,analogyfile,gensim.models.KeyedVectors.most_similar,topn=topn, usePhrase=usePhrase,sample=sample)
 evaluation_analogy = EvaluateAnalogy(analogyList,topn=topn)
 print(evaluation_analogy)
 

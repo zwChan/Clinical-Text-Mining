@@ -786,7 +786,7 @@ object Clustering {
     // init spark
     val startTime = new Date()
     val conf = new SparkConf()
-      .setAppName("NLP")
+      .setAppName("Ngram")
     if (Conf.sparkMaster.length>3)
       conf .setMaster(Conf.sparkMaster)
     val sc = new SparkContext(conf)
