@@ -358,7 +358,7 @@ analogyfile = sys.argv[3]
 # qfile = r'C:\fsu\ra\data\201706\synonym_ret.csv'
 relfile = sys.argv[4]
 topn = 10 if len(sys.argv) < 6 else int(sys.argv[5])
-usePhrase = True if len(sys.argv) < 7 else sys.argv[6].strip().lower()=="true"
+usePhrase = True if len(sys.argv) < 7 else sys.argv[6].strip().lower()!='false'  # True unless specify false
 otherVocab = "" if len(sys.argv) < 8 else sys.argv[7].strip()
 isIntersectVacab = False if len(sys.argv) < 9 else sys.argv[8].strip().lower()=="intersection"
 sample = 0 if len(sys.argv) < 10 else float(sys.argv[9])
