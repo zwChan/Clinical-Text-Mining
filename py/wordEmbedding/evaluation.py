@@ -128,11 +128,13 @@ class Term:
         return simMap
 
 def phrase2word(w2v,phrase,strict_match=True):
+    global evalVocab
     term_norm_estimate = []
     miss = False
     for t in phrase.split('_'):
-        if len(t.strip()) > 0:
-            if t.strip() in wv.vocab:
+        t2 = t.strip()
+        if len(t2) > 0:
+            if t2 in wv.vocab and t2 in evalVocab:
                 term_norm_estimate.append(t)
             else:
                 miss |= True
@@ -348,7 +350,7 @@ def get_evaluation_vocab(vocFile,otherVocab,isIntersectVacab=False):
 
 # --------------------------------------------------------------------------------
 if len(sys.argv) < 5:
-    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [usePhrase(True|False)] [otherVocab(from the model to compare] [sample(test)]",file=sys.stderr)
+    print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [usePhrase(True|False)] [otherVocab(from the model to compare] [union|intersection] [sample(test)]",file=sys.stderr)
     exit(1)
 model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
