@@ -7,10 +7,11 @@ synonym text
 );
 
 create table wiki_ngram like chv.cancer_ngram;
+create table wiki_ngram_tf5 like wiki_ngram;
 
 rename table socialqa.wiki_ngram to synonym.wiki_ngram;
 
-load data local infile '/data/ra/wikidata/wiki.ngram.words' into table wiki_ngram fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
+load data local infile '/tmp/wiki.tf5.ngram.novector' into table wiki_ngram_tf5 fields terminated by '\t' enclosed by '"' lines terminated by '\r\n' ignore 1 lines;
 
 
 set group_concat_max_len=10240;
@@ -30,4 +31,6 @@ select * from test_term_umls
 	into outfile '/tmp/freq_term.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
 
 select distinct sab from umls.mrconso;
+select ngram from wiki_ngram_tf5 where n>1
+	into outfile '/tmp/wiki_ngram_tf5.txt';
 

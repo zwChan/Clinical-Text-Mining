@@ -215,7 +215,7 @@ def accuracy_rel(w2v, csvfile,most_similar_f, topn=10, restrict_vocab=30000,case
                 rel_term = rel.split(',')
                 for t in rel_term:
                     if len(t.strip()) == 0: continue
-                    if t not in evalVocab:
+                    if t.lower() not in evalVocab:
                         if i == Term.NormIndex :print("%s in term(%s) is ignored record for term caused by not-in-evalVocab " % (t, term.name), file=sys.stderr)
                         continue
                     if usePhrase == False and "_" in t:
@@ -352,6 +352,7 @@ def get_evaluation_vocab(vocFile,otherVocab,isIntersectVacab=False):
 if len(sys.argv) < 5:
     print("Usage: [model-file] [vocab-file] [analogy-file] [relation-file] [top-n] [usePhrase(True|False)] [otherVocab(from the model to compare] [union|intersection] [sample(test)]",file=sys.stderr)
     exit(1)
+print(sys.argv)
 model = sys.argv[1]
 # model = r'C:\fsu\class\thesis\token.txt.bin'
 vocFile=sys.argv[2]

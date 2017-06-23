@@ -1,3 +1,4 @@
+from __future__ import division,print_function
 __author__ = 'Jason'
 import csv,sys,re,json,yaml
 from stanfordcorenlp import StanfordCoreNLP
@@ -120,12 +121,13 @@ with open(input_file, 'rb') as csvfile:
         writer = csv.writer(of,delimiter='\t',quotechar='"',lineterminator="\n")
         headline = ['word','word_norm','umls_syn','wn_syn','wn_ant','wn_hyper','wn_hypo','wn_holo','wn_mero','wn_sibling','derivation','pertain']
         writer.writerow(headline)
-        stat_all = [0 for w in headline]
+        stat_unigram = [0 for w in headline]
+        stat_term = [0 for w in headline]
         stat_phrase = [0 for w in headline]  # word => [totalCnt, phraseCnt]
         for row in reader:
             if len(row) < 1: continue
             word = row[0]
-            print("\n### word: %s" % word)
+            print("\n### word: %s" % word, file=sys.stderr)
             word_norm = rSpecial4name.sub('',word).strip().replace(' ','_')
             isValidTerm = False  # whether this is term is found in wordnet or umls
             # word_set.add(word_norm)
@@ -139,39 +141,39 @@ with open(input_file, 'rb') as csvfile:
                 synUmlsSet.add(s2)
             synUmlsSet.discard(word_norm)
             word_set |= synUmlsSet
-            print synUmlsSet
+            print( synUmlsSet, file=sys.stderr)
             synWnSet = get_synonyms(word_norm)
             word_set |= synWnSet
             if len(synWnSet) > 0: isValidTerm = True
-            print(synWnSet)
+            print(synWnSet, file=sys.stderr)
             if not isValidTerm:
                 # if no synomym term in umls and wordnet, it is not considered to be a 'valid term'.
                 continue
 
             antonyms = get_antonyms(word_norm)
             word_set |= antonyms
-            print antonyms
+            print (antonyms, file=sys.stderr)
             hypernym = get_hyperyms(word_norm)
             word_set |= hypernym
-            print(hypernym)
+            print(hypernym, file=sys.stderr)
             hyponym = get_hyponyms(word_norm)
             word_set |=hyponym
-            print(hyponym)
+            print(hyponym, file=sys.stderr)
             holonym = get_holonyms(word_norm)
             word_set |= holonym
-            print(holonym)
+            print(holonym, file=sys.stderr)
             meronym = get_meronyms(word_norm)
             word_set |= meronym
-            print(meronym)
+            print(meronym, file=sys.stderr)
             siblings = get_siblings(word_norm)
             word_set |= siblings
-            print(siblings)
+            print(siblings, file=sys.stderr)
             derivation = get_derivationally_related_forms(word_norm)
             word_set |= derivation
-            print(derivation)
+            print(derivation, file=sys.stderr)
             pertain = get_pertainyms(word_norm)
             word_set |= pertain
-            print(pertain)
+            print(pertain, file=sys.stderr)
 
             word_set.add(word_norm)
 
@@ -182,16 +184,21 @@ with open(input_file, 'rb') as csvfile:
 
             # get statistics info about evaluation data set
             for i,col in enumerate(row):
+                if len(col.strip()) > 0:
+                    stat_term[i] += 1
                 rels = col.split(sep)
                 for r in rels:
                     if len(r.strip()) == 0: continue
-                    stat_all[i] += 1
                     if '_' in r:
                         stat_phrase[i] += 1
-        print("statistic info of count: all: %d, phrase %d" % (sum(stat_all), sum(stat_phrase)))
+                    else:
+                        stat_unigram[i] += 1
+
+        print("statistic info of count: all: %d, phrase %d" % (sum(stat_unigram), sum(stat_phrase)))
         print('\t'.join(["Head"] + headline + ["Total"]))
-        print('\t'.join(["All terms"] + [str(i) for i in stat_all + [sum(stat_all)]]))
+        print('\t'.join(["unigram"] + [str(i) for i in stat_unigram + [sum(stat_unigram)]]))
         print('\t'.join(["Phrase"] + [str(i) for i in stat_phrase + [sum(stat_phrase)]]))
+        print('\t'.join(["Term"] + [str(i) for i in stat_term + [sum(stat_term)]]))
 
         with open(wordset_file, 'w+') as wf:
             for w in word_set:
