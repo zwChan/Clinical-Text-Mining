@@ -366,9 +366,11 @@ otherVocab = "" if len(sys.argv) < 8 else sys.argv[7].strip()
 isIntersectVacab = False if len(sys.argv) < 9 else sys.argv[8].strip().lower()=="intersection"
 sample = 0 if len(sys.argv) < 10 else float(sys.argv[9])
 
+isBin = model.strip().endswith('bin')
+
 evalVocab = get_evaluation_vocab(vocFile,otherVocab,isIntersectVacab)
 print("evalVocab isIntersectVacab=%s, vocab number is %d" % (str(isIntersectVacab), len(evalVocab)))
-wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
+wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=isBin)
 termList = accuracy_rel(wv,relfile,gensim.models.KeyedVectors.most_similar,topn=topn,usePhrase=usePhrase,sample=sample)
 evaluation_rel = EvaluateRelation(termList,topn=topn)
 # print("### result start: ###")
