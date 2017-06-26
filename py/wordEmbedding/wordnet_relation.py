@@ -194,11 +194,11 @@ with open(input_file, 'rb') as csvfile:
                     else:
                         stat_unigram[i] += 1
 
-        print("statistic info of count: all: %d, phrase %d" % (sum(stat_unigram), sum(stat_phrase)))
-        print('\t'.join(["Head"] + headline + ["Total"]))
-        print('\t'.join(["unigram"] + [str(i) for i in stat_unigram + [sum(stat_unigram)]]))
-        print('\t'.join(["Phrase"] + [str(i) for i in stat_phrase + [sum(stat_phrase)]]))
-        print('\t'.join(["Term"] + [str(i) for i in stat_term + [sum(stat_term)]]))
+        print("statistic info of count: all: %d, phrase %d" % (sum(stat_unigram) + sum(stat_phrase), sum(stat_phrase)))
+        print('\t'.join(["Head"] + headline))
+        print('\t'.join(["unigram"] + [str(i) for i in stat_unigram]))
+        print('\t'.join(["Phrase"] + [str(i) for i in stat_phrase]))
+        print('\t'.join(["Term"] + [str(i) for i in stat_term]))
 
         with open(wordset_file, 'w+') as wf:
             for w in word_set:
