@@ -20,7 +20,7 @@ def get_evaluation_vocab(vocFile,tfTh=0):
 
 
 if len(sys.argv) <= 3:
-    print("Usage: [model-file] [vocab-file] [top-k] ",file=sys.stderr)
+    print("Usage: [model-file] [vocab-file] [vector-out-file] [top-k] ",file=sys.stderr)
     exit(1)
 print('\t'.join(sys.argv))
 model = sys.argv[1]
@@ -28,12 +28,12 @@ vocFile=sys.argv[2]
 outFile=sys.argv[3]
 tfTh = 100 if len(sys.argv) <= 4 else int(sys.argv[4])
 print("Loading model...")
-evalVocab = get_evaluation_vocab(vocFile,1000)
+evalVocab = get_evaluation_vocab(vocFile,tfTh)
 wv = gensim.models.KeyedVectors.load_word2vec_format(model,fvocab=vocFile,binary=True)
 print("model loaded.")
 topn = len(evalVocab)
 print("TSNE...")
-tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=1000)
+tsne = TSNE(n_components=2, verbose=1, perplexity=40, n_iter=5000)
 tsne_ret = tsne.fit_transform(wv.syn0[:topn])
 print("TSNE done.")
 np.savetxt(outFile,tsne_ret)
