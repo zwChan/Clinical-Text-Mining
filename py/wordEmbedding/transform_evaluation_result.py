@@ -124,14 +124,32 @@ isRelation = sys.argv[2].lower()=='relation'
 rr = get_relation_data(input_file, isRelation)
 print(rr)
 
+'''
+Return a new array that its elements are unique and keep their order.
+'''
+def unique(arr):
+    s = set()
+    newarr = []
+    for i in arr:
+        if i not in s:
+            newarr.append(i)
+            s.add(i)
+    return newarr
 
-def get_row(data,tag,task,topn,col):
+'''
+data: 2-d list contains result data. the first three column are: method, task, topn; then is the result data colums
+methods: list of methods. '*' for all
+task: list of tasks. '*' for all
+topn: list of top-n. '*' for all
+col: index of the column that was retrieved
+'''
+def get_row(data,methods,task,topn,col):
     ret = []
     tag_list = []
     task_list = []
     topn_list = []
     for row in data:
-        if (tag == '*' or row[0] == tag) and (task == '*' or row[1] == task) and (topn=='*' or row[2] == topn):
+        if (methods == '*' or row[0] in methods) and (task == '*' or row[1] in task) and (topn=='*' or row[2] in topn):
             tag_list.append(row[0])
             task_list.append(row[1])
             topn_list.append(row[2])
@@ -139,7 +157,7 @@ def get_row(data,tag,task,topn,col):
                 ret.append(row[3:])
             else:
                 ret.append(row[col])
-    return (ret,tag_list,task_list,topn_list)
+    return (ret,unique(tag_list),unique(task_list),unique(topn_list))
 
 '''
 colors: https://matplotlib.org/users/colormaps.html
@@ -157,27 +175,31 @@ topN = [1,5,20,100]
 # tag = 'word2vec'
 # task = ["capital-common-countries", "capital-world", "currency", "city-in-state", "family","airlines"]
 
-def fig_method_topn(rr,method,colName,topN):
+def fig_method_topn(rr,method,colName,topN,xlabel,ylabel):
     # create plot
     f = plt.figure()
     # fig, ax = plt.subplots()
-    bar_width = 0.2
+    bar_width = (1-0.2)/len(topN)
     opacity = 0.8
-    # colors = cm.rainbow(np.linspace(0, 1, len(topN)))
-    plt.ylim([0,110])
+    colors = cm.jet(np.linspace(0, 1, len(topN)))
+    if isRelation:
+        plt.ylim([0,90])
+    else:
+        plt.ylim([0,110])
     for i,topn in enumerate(topN):
         col = rr.colName.index(colName) + 3
-        row,tag_list,task_list,topn_list = get_row(rr.value, method, '*', topn, col)
-        n_groups = len(set(task_list))
+        row,method_list,task_list,topn_list = get_row(rr.value, [method], '*', [topn], col)
+        n_groups = len(task_list)
         index = np.arange(n_groups)
         plt.bar(index + i*bar_width, row, bar_width,
                          alpha=opacity,
-                         color='lightgrey',
+                         # color='lightgrey',
+                         color = colors[i],
                          hatch=PATTERN[i],
                          label='top %d' % topn)
 
-    plt.xlabel('Relation tasks')
-    plt.ylabel('Accuracy')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     # plt.title('Analogy tasks performance of Word2vec')
     for i in range(0,len(task_list)):
         if len(task_list[i]) >= 15:
@@ -187,7 +209,55 @@ def fig_method_topn(rr,method,colName,topN):
 
     plt.tight_layout()
     # plt.show()
-    savename = "%s-analogy.jpg" % method
+    if isRelation:
+        savename = "%s-relation.jpg" % method
+    else:
+        savename = "%s-analogy.jpg" % method
+
+    f.savefig(savename, bbox_inches='tight', dpi=200)
+    plt.close()
+    print("save image %s" % savename)
+
+
+def fig_compare_methods(rr,methods,colName,topN,xlabel,ylabel):
+    # create plot
+    f = plt.figure()
+    # fig, ax = plt.subplots()
+    bar_width = (1-0.2)/len(methods)
+    opacity = 0.8
+    colors = cm.jet(np.linspace(0, 1, len(methods)))
+    if isRelation:
+        plt.ylim([0,70])
+    else:
+        plt.ylim([0,110])
+    for i,m in enumerate(methods):
+        col = rr.colName.index(colName[0]) + 3
+        row,method_list,task_list,topn_list = get_row(rr.value, [m], '*', topN, col)
+        n_groups = len(task_list)
+        index = np.arange(n_groups)
+        plt.bar(index + i*bar_width, row, bar_width,
+                         alpha=opacity,
+                         # color='lightgrey',
+                         color=colors[i],
+                         hatch=PATTERN[i],
+                         label='%s' % methods[i])
+
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    # plt.title('Analogy tasks performance of Word2vec')
+    for i in range(0,len(task_list)):
+        if len(task_list[i]) >= 15:
+            task_list[i] = str(task_list[i][:14]) + "..."
+    plt.xticks(index + 0.1, task_list, rotation=-30,ha='left')
+    plt.legend(loc='best',ncol=len(task_list), fontsize='small')
+
+    plt.tight_layout()
+    # plt.show()
+    if isRelation:
+        savename = "%s-top%d-relation.jpg" % (colName[0],topN[0])
+    else:
+        savename = "%s-top%d-analogy.jpg" % (colName[0],topN[0])
+
     f.savefig(savename, bbox_inches='tight', dpi=200)
     plt.close()
     print("save image %s" % savename)
@@ -195,8 +265,28 @@ def fig_method_topn(rr,method,colName,topN):
 
 #################################################
 value,methods,tasks,topns = get_row(rr.value,'*','*','*','*')
-methods = sorted(set(methods))
-tasks = sorted(set(tasks))
-topns = sorted(set(topns))
+methods = methods
+tasks = tasks
+topns = sorted(topns)
+
+#### method detial vs topn performance
 for m in methods:
-    fig_method_topn(rr,m,'accuracy',topns)
+    if isRelation:
+        fig_method_topn(rr,m,'hit_cnt_term_pct',topns,'Semantic relation tasks','Retrieved terms ratio (%)')
+    else:
+        fig_method_topn(rr,m,'accuracy',topns,'Analogy tasks','Accuracy (%)')
+
+#### method compaire on unigram
+for topn in topN:
+    if isRelation:
+        fig_compare_methods(rr,['word2vec','deps-word2vec','glove','phrase4word','norm'],['hit_cnt_term_pct'],[topn],'Semantic relation tasks','Retrieved terms ratio (%)')
+    else:
+        fig_compare_methods(rr,['word2vec','deps-word2vec','glove','phrase4word','norm'],['accuracy'],[topn],'Analogy tasks','Accuracy (%)')
+
+#### method compaire on phrases
+for topn in topN:
+    if isRelation:
+        fig_compare_methods(rr,['estimate-phrase','phrase','ner'],['hit_cnt_term_pct'],[topn],'Semantic relation tasks','Retrieved terms ratio (%)')
+    else:
+        fig_compare_methods(rr,['estimate-phrase','phrase','ner'],['accuracy'],[topn],'Analogy tasks','Accuracy (%)')
+
