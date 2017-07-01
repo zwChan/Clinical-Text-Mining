@@ -59,14 +59,17 @@ def load_relation(csvfile, evalVocab, testTerm,sample=1.0):
                 continue
 
             if sample > 0 and random.random() > sample: continue  # sample question, for test only
-            if row[0].lower()  not in testTerm: continue
+            #if row[0].lower()  not in testTerm: continue
             term = Term(row[0])
+            isTestTerm = True
             for i,rel in enumerate(row):
                 term.relValue.append([])
                 # if len(rel)==0: continue
                 if i == Term.NameIndex:  # add the name of the term
                     term.relValue[i].append(rel)
                     continue
+                if i == term.NormIndex and rel.lower() not in testTerm:
+                    isTestTerm = False
                 rel_term = rel.split(',')
                 for t in rel_term:
                     if len(t.strip()) == 0: continue
@@ -75,14 +78,15 @@ def load_relation(csvfile, evalVocab, testTerm,sample=1.0):
                             # print("%s in term(%s) is ignored record for term caused by not-in-evalVocab " % (t, term.name), file=sys.stderr)
                             break
                         continue
-                    if withRelation == False and i > term.NormIndex:
+                    if (withRelation == False and i > term.NormIndex) or isTestTerm == False:
                         continue
                     term.relValue[i].append(t)
                     testVocab.add(t)
             if len(term.relValue[term.NormIndex]) > 0:
                 termList[term.relValue[term.NormIndex][0]] = term
             else:
-                print("term(%s) not valid." % (term.name), file=sys.stderr)
+                # print("term(%s) not valid." % (term.name), file=sys.stderr)
+                pass
     print("loaded relation. termList %d, testvVocab %d" % (len(termList), len(testVocab)))
     return (termList,testVocab)
 
@@ -151,7 +155,7 @@ points = np.loadtxt(vecFile)
 print("vecFile loaded.")
 # load np points
 N = points.shape[0]
-testTerm = None if len(sys.argv) <= 4 else sys.argv[4].split('#')
+testTerm = None if len(sys.argv) <= 4 else re.split(r'#|\s|,',sys.argv[4])
 topn = N if len(sys.argv) <= 6 else min(N,int(sys.argv[6]))
 withRelation = True if len(sys.argv) <= 5 else sys.argv[5].lower()!='false'
 points = points[:topn]
@@ -159,7 +163,7 @@ points = points[:topn]
 vocab = get_vocab(vocFile)
 vocab = vocab[:topn]
 # load relation words
-testTerm= ['girl (N)'] if testTerm == None else [x.strip() for x in testTerm]
+testTerm= ['professor'] if testTerm == None else [x.strip() for x in testTerm]
 termList = []
 default_color = 'grey'
 default_mark = 'o'
@@ -201,7 +205,7 @@ leg = ax.get_legend()
 for h in leg.legendHandles[1:]:
     h.set_color('red')
 
-term_name = '-'.join([re.sub(r'\s*\(.+\)\s*', '', x) for x in testTerm])
+term_name = '-'.join([testTerm])
 fname = "%s-%s-top%d-%s.jpg" % (term_name, os.path.basename(vecFile), topn, withRelation)
 plt.savefig(fname,dpi=400,bbox_inches='tight')
 # plt.show()

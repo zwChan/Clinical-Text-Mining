@@ -254,9 +254,9 @@ def fig_compare_methods(rr,methods,colName,topN,xlabel,ylabel):
     plt.tight_layout()
     # plt.show()
     if isRelation:
-        savename = "%s-top%d-relation.jpg" % (colName[0],topN[0])
+        savename = "%s-%s-top%d-relation.jpg" % (''.join([x[0] for x in methods]),colName[0],topN[0])
     else:
-        savename = "%s-top%d-analogy.jpg" % (colName[0],topN[0])
+        savename = "%s-%s-top%d-analogy.jpg" % (''.join([x[0] for x in methods]),colName[0],topN[0])
 
     f.savefig(savename, bbox_inches='tight', dpi=200)
     plt.close()
