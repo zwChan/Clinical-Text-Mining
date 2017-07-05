@@ -24,7 +24,7 @@ insert into test_term_umls (term,cui) select distinct ngram, cui_umls from wiki_
 update test_term_umls t set synonym = (select GROUP_CONCAT(distinct s.str SEPARATOR  '|' ) from umls.mrconso s where s.cui=t.cui and (s.sab like 'SNOMEDCT_US%' or s.sab like 'RXNORM%' OR s.sab like 'ICD%' OR s.sab like 'NCI%' OR s.sab like 'LOINC%') and (length(str)-length(replace(str,' ', '')))<= 3);
 
 
-select * from umls._target_term_ where cui='C0439234';
+select * from umls._target_term_ ;
 select * from umls.mrconso where cui='C0439234';
 select count(*) from  wiki_ngram;
 select * from test_term_umls 
@@ -34,3 +34,7 @@ select distinct sab from umls.mrconso;
 select ngram from wiki_ngram_tf5 where n>1
 	into outfile '/tmp/wiki_ngram_tf5.txt';
 
+select cvalue, count(*) as cnt from wiki_ngram group by cvalue order by cvalue;
+select count(*) from wiki_ngram where tf>=100 and ngram like '%(A)%';
+select count(*) from wiki_ngram_tf5 where tf>=100 and ngram like '%(A)%' order by tf;
+select * from test_term_umls where term like '%mother%';

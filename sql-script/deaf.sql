@@ -97,13 +97,10 @@ CHANGE COLUMN `threadId` `userId` VARCHAR(256) NULL DEFAULT NULL ;
 rename table qa8000_metamap to qa8000_metamap_without_userid;
 rename table qa8000 to qa8000_metamap;
 
-
-
-select count(*)
-from (cancer_cui_uniq
-select D.threadID, D.tid, D.sentence, D.cui, D.org_str, D.cui_str
-	from deaf.deaf_metamap_excluding_sty_distinct_sentences D
-	where D.task='autism' and D.sab ='SNOMEDCT_US'
-		and not exists (
-			select * from deaf.deaf_metamap_excluding_sty_distinct_sentences B where B.task='autism' and B.sab ='CHV' and D.cui_str = B.cui_str)
-		) as A;
+-- select term foun in snomed but not in chv
+select * from (
+  select tid,org_str,sentence, count(*) as cnt, group_concat(distinct sab ) as gsab 
+    from autism_metamap_excluding_sty_distinct_sentences_user 
+	group by tid,org_str,sentence ) temp_table
+  where gsab not like '%CHV%'
+  order by cnt desc;
