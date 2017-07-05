@@ -8,6 +8,7 @@ import random
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
+from adjustText import adjust_text
 
 class Term:
     """
@@ -106,12 +107,12 @@ def mark_term(termList, vocab,testVocab):
         marks.append(-1)
         areas.append(-1)
         labels.append(-1)
-        AREA = np.pi * 10**2
+        AREA = np.pi * 8**2
         # each term to evaluate
         if v in testVocab:
             for j,key in enumerate(termList):
                 if v == key:
-                    print("find term %s" % (v))
+                    print("find target term %s" % (v))
                     colors[i] = COLOR[j % len(COLOR)]
                     marks[i] = '*'
                     areas[i] = AREA
@@ -127,6 +128,7 @@ def mark_term(termList, vocab,testVocab):
                             if marks[i] == -1: marks[i] = MARK[idx % len(MARK)]
                             if areas[i] == -1: areas[i] = AREA / 3.0
                             if labels[i] == -1: labels[i] = Term.relName[k]
+                            print("%s 's %s: %s" % (key,Term.relName[k],v))
     return (colors,marks,areas,labels)
 
 
@@ -155,9 +157,9 @@ points = np.loadtxt(vecFile)
 print("vecFile loaded.")
 # load np points
 N = points.shape[0]
-testTerm = None if len(sys.argv) <= 4 else re.split(r'#|\s|,',sys.argv[4])
+testTerm = None if len(sys.argv) <= 4 else re.split(r'#|\s|,',sys.argv[4].strip())
 topn = N if len(sys.argv) <= 6 else min(N,int(sys.argv[6]))
-withRelation = True if len(sys.argv) <= 5 else sys.argv[5].lower()!='false'
+withRelation = True if len(sys.argv) <= 5 else sys.argv[5].strip().lower()!='false'
 points = points[:topn]
 # load vocabulary
 vocab = get_vocab(vocFile)
@@ -168,6 +170,7 @@ termList = []
 default_color = 'grey'
 default_mark = 'o'
 default_label = 'others'
+default_area = np.pi * 5**2
 if len(relFile) > 2:
     termList, testVocab = load_relation(relFile,set([x[0] for x in vocab]),testTerm)
     rel_colors, rel_marks, rel_areas ,rel_labels= mark_term(termList,vocab,testVocab)
@@ -186,11 +189,13 @@ colors = [default_color if c == -1 else c for c in rel_colors]
 marks = [default_mark if m == -1 else m for m in rel_marks]
 labels = [default_label if l == -1 else l for l in rel_labels]
 label_set = set(labels)
+texts=[]
 for (key,p,v,a,c,m,l) in sorted(zip(rel_areas,points,vocab,areas,colors,marks,labels), key=lambda x: x[0]):
     alpha = 1 if v[0] in testVocab else 0.2
     lb = None
     if l in label_set:
         lb = l
+        if lb == default_label: a = default_area
         label_set.remove(l)
     if lb is None:
         plt.scatter(p[0], p[1], s=a, c=c,marker=m, alpha=alpha, edgecolors='r',linewidths=0.3)
@@ -198,15 +203,16 @@ for (key,p,v,a,c,m,l) in sorted(zip(rel_areas,points,vocab,areas,colors,marks,la
         plt.scatter(p[0], p[1], s=a, c=c,marker=m, alpha=alpha, edgecolors='r',linewidths=0.3, label=lb)
 
     if v[0] in testVocab:
-        plt.annotate(v[0],xy=(p[0],p[1]))
+        texts.append(plt.text(p[0],p[1],v[0],size=8))
 plt.legend(loc='lower right', scatterpoints=1, ncol=1, fontsize=8)
+adjust_text(texts, arrowprops=dict(arrowstyle="->", color='b', lw=0.5))
 ax = plt.gca()
 leg = ax.get_legend()
 for h in leg.legendHandles[1:]:
     h.set_color('red')
 
-term_name = '-'.join([testTerm])
-fname = "%s-%s-top%d-%s.jpg" % (term_name, os.path.basename(vecFile), topn, withRelation)
+term_name = '-'.join(testTerm)
+fname = "%s-%s-top%d-%s.jpg" % (term_name, os.path.basename(vecFile).split('.')[0], topn, withRelation)
 plt.savefig(fname,dpi=400,bbox_inches='tight')
 # plt.show()
 plt.close()
