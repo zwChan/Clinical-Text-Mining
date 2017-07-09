@@ -59,6 +59,13 @@ def transpose(value):
         for i in range(0,row_n):
             new_val[j].append(value[i][j])
     return new_val
+def addAverageRow(value,rowName):
+    rowName.append('Average')
+    avgRow = [0 for _ in range(0,len(value[0]))]
+    for j in range(0,len(value[0])):
+        for i in range(0,len(value)):
+            avgRow[j] += value[i][j] * 1.0 / len(value)
+    value.append(avgRow)
 
 def get_relation_data_file(retFile, startString):
     value = []
@@ -103,6 +110,7 @@ def get_relation_data(retFile,isRelation=False):
             (value,colname,rowname) = get_relation_data_file(fn,'Evaluation:')
             rowname,colname = colname,rowname
             value = transpose(value)
+            addAverageRow(value,rowname)
         else:
             (value,colname,rowname) = get_relation_data_file(fn,'section\t')
         rr.colName = colname
