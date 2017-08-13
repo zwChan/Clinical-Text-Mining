@@ -40,3 +40,5 @@ for line in f.readlines():
     except:
         print("%s\t%s" % (index, "Error"))
 
+class aaa(object):
+    pass

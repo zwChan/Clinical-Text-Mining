@@ -325,41 +325,41 @@ class CTPattern (val name:String, val matched: MatchedExpression, val sentence:C
     /**
      * General get cui by a string and filter.
      */
-  def getCui(str: String, reduceBySty:Boolean=true): Array[Suggestion] = {
+  def getCui(str: String, reduceBySty:Boolean=Conf.reduceMatchedTermBySty): Array[Suggestion] = {
       var suggustions = UmlsTagger2.tagger.select(str,true,false)
         .filter(s=>{
         var flag = s.score >= Conf.umlsLikehoodLimit  && !Nlp.checkStopword(s.orgStr,true)
         val tmpStys = s.stys.filter(tui=> Conf.semanticType.indexOf(tui) >=0 )
           s.stys.clear()
           s.stys.appendAll(tmpStys)
-        flag && (s.stys.size > 0)
+        flag && (!Conf.useSemanticeType || s.stys.size > 0)
       })
-      if (reduceBySty) suggustions = suggustions.flatMap(s=>{
-        // map to (tui,suggestion)
-        s.stys.map(sty=>{
-          val cuiCopy = s.copy()
-          cuiCopy.stys.clear()
-          (sty,cuiCopy)
-        })
-      }).groupBy(_._1).map(kv=>{
-        // choose the highest score and smallest cui for key (cui,tui)
-        val tmp = kv._2.sortBy(v=>f"${Int.MaxValue - v._2.score4sort.toInt}%10d${v._2.cui}")
-        val firstKv = tmp(0)
-        val s = firstKv._2
-        if (s.stys.indexOf(firstKv._1)<0)s.stys.append(firstKv._1)
-/*        val suggs = new ArrayBuffer[Suggestion]
-        suggs.append(s)
-        // add all cui with the highest score to return list
-        for ((sty,cui) <- tmp if cui.score >= s.score) {
-          if (s.stys.indexOf(firstKv._1)<0)s.stys.append(sty)  // collect all sty to the first cui, and then dispatch to all cui
-          suggs.append(cui)
-        }
-        for (sty <- s.stys; cui <- suggs) if (cui.stys.indexOf(sty) < 0) cui.stys.append(sty)
-        suggs*/
-        s
-      }).toArray
 
-      if (Conf.analyzNonUmlsTerm && suggustions.size <= 0 && !Nlp.checkStopword(str,true) && !str.matches(Conf.cuiStringFilterRegex)) {
+    if (reduceBySty && Conf.useSemanticeType) suggustions = suggustions.flatMap(s=>{
+      // map to (tui,suggestion)
+      s.stys.map(sty=>{
+        val cuiCopy = s.copy()
+        cuiCopy.stys.clear()
+        (sty,cuiCopy)
+      })
+    }).groupBy(_._1).map(kv=>{
+      // choose the highest score and smallest cui for key (cui,tui)
+      val tmp = kv._2.sortBy(v=>f"${Int.MaxValue - v._2.score4sort.toInt}%10d${v._2.cui}")
+      val firstKv = tmp(0)
+      val s = firstKv._2
+      if (s.stys.indexOf(firstKv._1)<0)s.stys.append(firstKv._1)
+      /*        val suggs = new ArrayBuffer[Suggestion]
+              suggs.append(s)
+              // add all cui with the highest score to return list
+              for ((sty,cui) <- tmp if cui.score >= s.score) {
+                if (s.stys.indexOf(firstKv._1)<0)s.stys.append(sty)  // collect all sty to the first cui, and then dispatch to all cui
+                suggs.append(cui)
+              }
+              for (sty <- s.stys; cui <- suggs) if (cui.stys.indexOf(sty) < 0) cui.stys.append(sty)
+              suggs*/
+      s
+    }).toArray
+    if (Conf.analyzNonUmlsTerm && suggustions.size <= 0 && !Nlp.checkStopword(str,true) && !str.matches(Conf.cuiStringFilterRegex)) {
         val term = AnalyzeCT.termFreqency.getOrElseUpdate(str.toLowerCase(),AnalyzeCT.NonUmlsTerm(str,0))
         term.freq += 1L
       }
@@ -958,6 +958,7 @@ case class CTRow(val tid: String, val criteriaType:String, var sentence:String, 
           val cui = vi._1
           val index = vi._2
           hasCui = true
+          if (cui.stys.size == 0) cui.stys.append("unknown")
           cui.stys.zipWithIndex.foreach{case (sty,idx)=> {
             val typeSimple = if (criteriaType.toUpperCase.contains("EXCLUSION")) "EXCLUSION" else "INCLUSION"
             val str = f"${AnalyzeCT.taskName}\t${tid.trim}\t${this.threadId}\t${typeSimple}\t${criteriaType}\t${criteriaId}\t${splitType}\t${pattern.sentId}\t${pattern.name}\t${dur._1}\t${dur._2}\t${toMonth(dur._1)}\t${toMonth(dur._2)}\t${durStr}\t${pattern.negation}\t${pattern.negAheadKey}\t${g.name}\t${cui.termId}\t${cui.skipNum}\t${cui.cui}\t${sty}\t${cui.styIgnored(idx)}\t${cui.orgStr.count(_==' ')+1}\t${PTBTokenizer.ptb2Text(cui.orgStr)}\t${cui.descr}\t${cui.preferStr}\t${cui.method}\t${cui.nested}\t${cui.tags}\t${cui.score.toInt}\t${cui.matchType}%.2f\t${cui.matchDesc}\t${if (Conf.showGroupDesc)pattern.groupsString.replaceAll("\t",";") else ""}\t${pattern.getSentence().count(_ == ' ')+1}\t${pattern.getSentence()}"
@@ -1712,14 +1713,14 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
    */
   def getPattern():ArrayBuffer[CTPattern] = {
     val retList = new ArrayBuffer[CTPattern]()
-    if (Conf.MMonly){
+    if (Conf.MMenable && Conf.MMonly){
       return retList
     }
     val matched:java.util.List[_ <:MatchedExpression] = ParseSentence.extractor.extractExpressions(sentence)
 
     // this is the parse tree of the current sentence
     val tree: Tree = sentence.get(classOf[TreeAnnotation])
-    tree.pennPrint()
+    if (Trace.currLevel == DEBUG)  tree.pennPrint()
     // this is the Stanford dependency graph of the current sentence
     //val dependencies: SemanticGraph = sentence.get(classOf[BasicDependenciesAnnotation])
     //println("### basic dependencies 1\n" + dependencies)
@@ -1729,7 +1730,7 @@ case class ParseSentence(val sentence: CoreMap, sentId:Int) {
     //println("### ++ dependencies 3\n" + dependencies3)
 
     val tokens = sentence.get(classOf[TokensAnnotation])
-    println("### tokens:" + tokens)
+    Trace.trace(DEBUG,"### tokens:" + tokens)
 //    for (t <- tokens.iterator()) {
 //      val ner = t.get(classOf[NamedEntityTagAnnotation])
 //      print(s"${t}:${ner}\n")

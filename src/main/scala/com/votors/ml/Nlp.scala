@@ -352,6 +352,53 @@ object Nlp {
     })
   }
 
+  def generateNgramSeq(sentence: Seq[Sentence], gramId: AtomicInteger, grams: ListBuffer[(Sentence,Ngram)], maxN: Int = Ngram.N): Unit = {
+    sentence.foreach(sent => {
+      // process ngram
+      var pos = 0
+      //val grams = new ArrayBuffer[Ngram]()
+      // for each sentence
+      while (pos < sent.tokens.length) {
+        if (sent.tokens(pos).length > 0) {
+          // the start token should not be blank
+          // for each stat position, get the ngram
+          var hitDelimiter = false  // the ngram should stop at delimiter, e.g. comma.
+          Range(0, maxN).foreach(n => {
+            if (pos + n < sent.tokens.length && !hitDelimiter) {
+              if (sent.tokenSt(pos + n) == false) {
+                val gram_text = sent.tokens.slice(pos, pos+n+1).mkString(" ").toLowerCase.trim()
+                val key = Ngram.getKey(gram_text,sent.Pos.slice(pos, pos+n+1).mkString(""))
+                if (sent.tokens(pos + n).length > 0 && Ngram.checkNgram(gram_text, sent,pos,pos+n+1)) {
+                  // check if the gram is valid. e.g. stop words
+                  val gram = new Ngram(gram_text)
+                  grams.append((sent,gram))
+                  // some info have to update when the gram created
+                  if (gram.id < 0) {
+                    gram.id = gramId.getAndAdd(1)
+                    gram.n = n + 1
+                    gram.updateOnCreated(sent, pos, pos + n + 1)
+                  }
+//                  gram.updateAfterReduce(1,true)
+                  // on create or found it again.
+/*                  gram.updateOnHit(sent,pos,pos+n+1)
+                  if (gram.tfAll == 1) {
+                    traceFilter(INFO, gram.text, s"Creating gram ${gram}, sent:${sent}")
+                  } else {
+                    traceFilter(INFO, gram.text, s"Updating gram ${gram}, sent:${sent}")
+                  }*/
+                }
+              } else {
+                hitDelimiter = true
+              }
+            }
+          })
+
+        }
+        pos += 1
+      }
+    })
+  }
+
   /**
     * The order should be unique and definitive. So we use the tf and string to combine a string key for sorting
     * @param hPreNgram

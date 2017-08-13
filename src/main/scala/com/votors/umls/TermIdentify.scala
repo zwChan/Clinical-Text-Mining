@@ -6,14 +6,15 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import com.votors.common.Utils.Trace
 import com.votors.common.{Conf, Utils}
-import com.votors.ml.{Ngram, Nlp}
+import com.votors.ml.{Ngram, Nlp, Sentence}
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
+
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConversions.asScalaIterator
 import scala.collection.immutable.{List, Range}
 import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.io.Source
 import scala.io.Codec
 /**
@@ -54,7 +55,7 @@ object TermIdentify {
 
     records.tail.foreach(rec =>{
       cnt += 1
-      if (true || cnt <20) {
+      if (true) {
         println(rec.toString)
         val hNgrams = mutable.LinkedHashMap[String,Ngram]()
         val sents = Nlp.generateSentence(cnt, rec.get(head("display_name")), null)
@@ -79,6 +80,64 @@ object TermIdentify {
       }
     })
 
+    System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
+  }
+
+}
+
+
+/**
+  *  input : a csv file, but only identify the text in one clumn.
+  */
+object TermIdentifySeq{
+
+  def main(avgs: Array[String]): Unit = {
+    println("the input args are:\n" + avgs.mkString("\n"))
+    if (avgs.size < 2) {
+      println(s"invalid inputs, should be: input_file  output-file")
+      sys.exit(1)
+    }
+    val inFile = avgs(0)
+    val outFile = avgs(1)
+    // init spark
+    val startTime = new Date()
+
+
+    val records = Utils.readCsvFile(avgs(0)).toSeq
+    val headSorted = Range(0,records.head.size()).map(index=>records.head.get(index)).zipWithIndex
+    var cnt = 0
+    val tagger = new UmlsTagger2()
+
+    var writer = new PrintWriter(new FileWriter(outFile))
+    writer.println("qaID\ttermID\tterm\tcui\taui\tscore\tcuiStr\tsentLen\tsentence")
+
+    records.foreach(rec =>{
+      cnt += 1
+      if (true) {
+//        println(rec.toString)
+        val hNgrams = new ListBuffer[(Sentence,Ngram)]()
+        val qaid = rec.get(0)
+        val sents = Nlp.generateSentence(cnt, rec.get(1), null)
+        val gramId = new AtomicInteger()
+        Nlp.generateNgramSeq(sents.toSeq, gramId, hNgrams)
+        var termId = 0
+        hNgrams.foreach(kv=>{
+          val sent = kv._1
+          val gram = kv._2
+          val key = gram.key
+          termId += 1
+//          println(key)
+          val (umlsBestScore, stys) = tagger.getUmlsScore(gram.text)
+          if (umlsBestScore != null && umlsBestScore._3 != null && umlsBestScore._3.score > Conf.umlsLikehoodLimit) {
+            val sugg = umlsBestScore._3
+            val outStr = f"${qaid}\t${termId}\t${gram.textOrg}\t${sugg.cui}\t${sugg.aui}\t${sugg.score}%.0f\t${sugg.descr}\t${sent.sentId}\t${sent.words.mkString(" ")}"
+            println(outStr)
+            writer.println(outStr)
+          }
+        })
+      }
+    })
+    writer.close()
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
   }
 

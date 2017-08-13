@@ -212,7 +212,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
 
     var writer = new PrintWriter(new FileWriter(outputFile))
     writer.println("[")
-    var i = 0
+    var i = 1
     var cntByte = 0
     var cntFile = 1
     var newFile = true
@@ -267,7 +267,62 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     writer.flush()
     writer.close()
   }
+  def buildIndexPlainText(inputFile: String,
+                     outputFile: String): Unit = {
 
+    implicit val codec = Codec("UTF-8")
+    codec.onMalformedInput(CodingErrorAction.REPLACE)
+    codec.onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+    var writer = new PrintWriter(new FileWriter(outputFile))
+    var i = 1
+    var cntByte = 0
+    var cntFile = 1
+    var newFile = true
+    Source.fromFile(inputFile)
+      .getLines()
+      .foreach(line => {
+        val terms = line
+        .replace("\",\"", "\t")
+        .replaceAll("\"", "")
+        .replaceAll("\\\\", "")
+        .split("\t")
+        if (terms.size >= 5){
+          val Array(cui, aui, sab, str,preferStr) =terms
+          // the string in a Glossary is always considered as a sentence. No sentence detecting step.
+          val (strNorm,strStemmed,strSorted) = deCompose(str)
+          //val strPos = getPos(strNorm.split("")).sorted.mkString("+")
+          //      val strStemmed = stemWords(strNorm)
+          //      val strSorted = sortWords(strStemmed)
+          val obuf = new StringBuilder()
+          obuf.append(i).append('\t')
+            .append(cui).append('\t')
+            .append(aui).append('\t')
+            .append(sab).append('\t')
+            .append(str).append('\t')
+            .append(strNorm).append('\t')
+            .append(strStemmed).append('\t')
+            .append(strSorted).append('\t')
+            .append(preferStr)
+          writer.println(obuf.toString)
+          i += 1
+          cntByte += obuf.toString().length
+
+          //Avoid the file is too big. it will fail to import to solr if the file bigger than 2.5G
+          if (cntByte > 1*1024*1024*1024) {
+            // close the old writer
+            println(cntByte)
+            writer.flush()
+            writer.close()
+            // create a new writer
+            cntByte = 0
+            cntFile += 1
+            writer = new PrintWriter(new FileWriter(outputFile + s"($cntFile)"))
+          }
+      }})
+    writer.flush()
+    writer.close()
+  }
   /*def buildIndexCsv(inputFile: File,
                      outputFile: File): Unit = {
 
@@ -446,7 +501,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
     if (isGetSty) ret.foreach(suggestion => {
       //get all tui from mrsty table.
       val mrsty = getMrsty(suggestion.cui)
-      while (mrsty.next) {
+      while (mrsty!=null && mrsty.next) {
         //for each TUI, get their semantic type
         val tui = mrsty.getString("TUI")
         if (suggestion.stys.indexOf(tui)<0)suggestion.stys.append(tui)
@@ -677,7 +732,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
                     val tagIndex = tagList.indexOf(normalizeAll(wordSuggestions._1)) + 1
                     //get all tui from mrsty table.
                     val mrsty = getMrsty(suggestion.cui)
-                    while (mrsty.next) {
+                    while (mrsty!=null &&mrsty.next) {
                       //for each TUI, get their semantic type from SemGroups.txt
                       val tui = mrsty.getString("TUI")
                       val styname = mrsty.getString("STY")
@@ -799,7 +854,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
             //get all tui from mrsty table.
             hitSemanticType = false
             val mrsty = getMrsty(suggestion.cui)
-            while (mrsty.next) {
+            while (mrsty!=null &&mrsty.next) {
               //for each TUI, get their semantic type
               val tui = mrsty.getString("TUI")
               val index = Conf.semanticType.indexOf(tui)
@@ -861,7 +916,7 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
                   //get all tui from mrsty table.
                   println(suggestion)
                   val mrsty = getMrsty(suggestion.cui)
-                  while (mrsty.next) {
+                  while (mrsty!=null && mrsty.next) {
                     //for each TUI, get their semantic type from SemGroups.txt
                     val tui = mrsty.getString("TUI")
                     val styname = mrsty.getString("STY")
@@ -934,7 +989,11 @@ class UmlsTagger2(val solrServerUrl: String=Conf.solrServerUrl, rootDir:String=C
    * @return
    */
   def getMrsty(cui: String): ResultSet = {
-    execQuery(s"select * from mrsty where CUI='${cui}';")
+    if (Conf.useSemanticeType) {
+      execQuery(s"select * from mrsty where CUI='${cui}';")
+    }else{
+      null
+    }
   }
 
   /**
@@ -1031,7 +1090,7 @@ object BuildTargetJson4solr {
   }
 }
 
-object IdentfyTargetTerm {
+object IdentifyTargetTerm {
 
   def main(args: Array[String]) = {
     println(s"The input is: ${args.mkString(",")}")

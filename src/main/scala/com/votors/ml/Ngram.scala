@@ -244,6 +244,9 @@ class Ngram (val text: String) extends java.io.Serializable{
     traceFilter(INFO, this.text, s"${this.key} 's Pos string for pattern match is NN=${isPosNN},AN=${isPosAN},PN=${isPosPN},ANPN=${isPosANPN},")
   }
 
+  def updateAfterReduce( docNum: Long, isStage2:Boolean=true): Unit = {
+    Ngram.updateAfterReduce((this::Nil).toIterator, docNum, isStage2)
+  }
 
   def procTfdf(docNum: Long): Ngram = {
     if (Conf.tfdfLessLog) {

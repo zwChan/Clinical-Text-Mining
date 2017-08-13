@@ -269,6 +269,8 @@ object Conf extends java.io.Serializable{
   val showOrgNgramOfTextRegex=prop.getOrDefault("showOrgNgramOfTextRegex", propDef.get("showOrgNgramOfTextRegex")).toString.trim
   val trainedNgramFilterPosRegex=prop.getOrDefault("trainedNgramFilterPosRegex", propDef.get("trainedNgramFilterPosRegex")).toString.trim
   val prefixSuffixUseWindow=prop.getOrDefault("prefixSuffixUseWindow", propDef.get("prefixSuffixUseWindow")).toString.toBoolean
+  val reduceMatchedTermBySty=prop.getOrDefault("reduceMatchedTermBySty", propDef.get("reduceMatchedTermBySty")).toString.toBoolean
+  val useSemanticeType=prop.getOrDefault("useSemanticeType", propDef.get("useSemanticeType")).toString.toBoolean
   val bagsOfWord=prop.getOrDefault("bagsOfWord", propDef.get("bagsOfWord")).toString.toBoolean
   val bowOutputMatrix=prop.getOrDefault("bowOutputMatrix", propDef.get("bowOutputMatrix")).toString.toBoolean
   val bowUmlsOnly=prop.getOrDefault("bowUmlsOnly", propDef.get("bowUmlsOnly")).toString.toBoolean

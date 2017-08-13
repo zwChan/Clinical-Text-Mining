@@ -23,9 +23,16 @@ class UmlsTagger2Test   {
     def testBuildIndexJson(): Unit = {
       val tagger = new UmlsTagger2("",rootDir)
       tagger.buildIndexJson(
-        "C:\\fsu\\target.terms.csv",
-        "C:\\fsu\\target.terms.txt")
+        "C:\\fsu\\ra\\data\\201708\\Copy of Botanical_with_dsld_cat_termlist.csv",
+        "C:\\fsu\\ra\\data\\201708\\Copy of Botanical_with_dsld_cat_termlist.txt")
     }
+  @Test
+  def testBuildIndexPlainText(): Unit = {
+    val tagger = new UmlsTagger2("",rootDir)
+    tagger.buildIndexPlainText(
+      "C:\\fsu\\ra\\data\\201708\\Copy of Botanical_with_dsld_cat_termlist.csv",
+      "C:\\fsu\\ra\\data\\201708\\Copy of Botanical_with_dsld_cat_termlist.txt")
+  }
 /*
   @Test
   def testBuildIndexXml(): Unit = {
