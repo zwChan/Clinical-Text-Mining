@@ -45,5 +45,7 @@ select  id, replace(concat(subject, ' ', content,' ',chosenanswer),'\r','') from
     where id > 3822256/4*3 and id <= 3822256/4*4 + 4
 	into outfile '/tmp/socialqa_dataset4.csv' fields terminated by ',' enclosed by '"' lines terminated by '\n';
     
-    
-    
+select  count(*) from socialqa.qdataH;
+rename table umls._target_term_ to umls._target_term_botanical_;
+select * from umls._target_term_botanical_;
+

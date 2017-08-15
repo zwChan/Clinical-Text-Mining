@@ -5,7 +5,7 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.votors.common.Utils.Trace
-import com.votors.common.{Conf, Utils}
+import com.votors.common.{Conf, MyCache, Utils}
 import com.votors.ml.{Ngram, Nlp, Sentence}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -117,6 +117,7 @@ object TermIdentifySeq{
 //        println(rec.toString)
         val hNgrams = new ListBuffer[(Sentence,Ngram)]()
         val qaid = rec.get(0)
+        print(s"${cnt}\t${qaid}\r")
         val sents = Nlp.generateSentence(cnt, rec.get(1), null)
         val gramId = new AtomicInteger()
         Nlp.generateNgramSeq(sents.toSeq, gramId, hNgrams)
@@ -125,19 +126,21 @@ object TermIdentifySeq{
           val sent = kv._1
           val gram = kv._2
           val key = gram.key
-          termId += 1
 //          println(key)
           val (umlsBestScore, stys) = tagger.getUmlsScore(gram.text)
           if (umlsBestScore != null && umlsBestScore._3 != null && umlsBestScore._3.score > Conf.umlsLikehoodLimit) {
+            termId += 1
             val sugg = umlsBestScore._3
             val outStr = f"${qaid}\t${termId}\t${gram.textOrg}\t${sugg.cui}\t${sugg.aui}\t${sugg.score}%.0f\t${sugg.descr}\t${sent.sentId}\t${sent.words.mkString(" ")}"
             println(outStr)
             writer.println(outStr)
           }
         })
+        if (cnt%100 == 0) writer.flush()
       }
     })
     writer.close()
+    MyCache.close()
     System.out.println("### used time: "+(new Date().getTime()-startTime.getTime())+" ###")
   }
 

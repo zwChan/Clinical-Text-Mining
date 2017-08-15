@@ -26,7 +26,7 @@ with open(r'C:\fsu\ra\data\201708\Copy of Botanical_with_dsld_cat_termlist.csv',
             terms_list = terms.split(', ')
             for term in terms_list:
                 term = term.strip()
-                term = term.strip('.,?!"\'')
+                term = term.strip('.,?!"\'\r')
                 # extract (*)
                 match = re.match(r'(.+?)\((.+?)\)(.*?)',term)
                 if match == None:

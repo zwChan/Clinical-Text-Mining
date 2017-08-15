@@ -7,7 +7,7 @@ import java.util.{Date, Properties, Random}
 
 import edu.stanford.nlp.util
 import edu.stanford.nlp.util.IntPair
-import net.spy.memcached.MemcachedClient
+import net.spy.memcached.{MemcachedClient, MemcachedClientIF}
 import org.apache.commons.csv.{CSVFormat, CSVRecord}
 import org.apache.commons.lang3.StringUtils
 import org.ehcache.{Cache, CacheManager}
@@ -409,18 +409,36 @@ object MyCache {
     }
   }
   def get(key: String):Option[AnyRef] = {
-    val v = if (isMemcached) {
-      memcacheClient.get(key.replace(" ","_"))
-    }else {
-      ehCache.get(key)
+    val v = try {
+      if (isMemcached) {
+        if (key.size >= MemcachedClientIF.MAX_KEY_LENGTH)
+          null
+        else
+          memcacheClient.get(key.replace(" ", "_"))
+      } else {
+        ehCache.get(key)
+      }
+    }catch {
+      case e: Exception => {
+        println(s"Warning: MyCache.get exception: ${e.toString}")
+        null
+      }
     }
-    Option(v)
+      Option(v)
   }
   def put(key: String, value: AnyRef, expire: Int=Conf.defaultExpireTime):Unit = {
-    if (isMemcached) {
-      memcacheClient.add(key.replace(" ","_"),expire,value)
-    }else{
-      ehCache.put(key, value)
+    try {
+      if (isMemcached) {
+        if (key.size >= MemcachedClientIF.MAX_KEY_LENGTH)
+          return
+        memcacheClient.add(key.replace(" ","_"),expire,value)
+      }else{
+        ehCache.put(key, value)
+      }
+    }catch {
+      case e: Exception =>{
+        println(s"Warning: MyCache.set exception: ${e.toString}")
+      }
     }
   }
   def close() = {
